@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 33% 98%;
+    --foreground: 222 32% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 32% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 32% 12%;
+    --primary: 224 72% 56%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 24% 95%;
+    --secondary-foreground: 222 32% 12%;
+    --muted: 220 24% 95%;
+    --muted-foreground: 220 10% 44%;
+    --accent: 191 95% 40%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 20% 90%;
+    --input: 220 20% 92%;
+    --ring: 224 72% 56%;
+    --radius: 1rem;
+
+    --glass-bg: 0 0% 100% / 0.65;
+    --glass-border: 224 40% 86% / 0.6;
+  }
+
+  .dark {
+    --background: 222 45% 8%;
+    --foreground: 0 0% 98%;
+    --card: 222 45% 10%;
+    --card-foreground: 0 0% 98%;
+    --popover: 222 45% 10%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 222 82% 64%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 30% 16%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 222 30% 16%;
+    --muted-foreground: 220 10% 70%;
+    --accent: 190 95% 45%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 35%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 222 28% 20%;
+    --input: 222 28% 20%;
+    --ring: 222 82% 64%;
+
+    --glass-bg: 222 45% 14% / 0.55;
+    --glass-border: 222 35% 28% / 0.5;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background-image:
+      radial-gradient(circle at top, rgba(99, 102, 241, 0.08), transparent 55%),
+      radial-gradient(circle at 20% 20%, rgba(34, 197, 94, 0.06), transparent 45%),
+      radial-gradient(circle at 80% 0%, rgba(14, 165, 233, 0.08), transparent 45%);
+    background-attachment: fixed;
+  }
+}
+
+@layer utilities {
+  .apple-shadow {
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  }
+
+  .apple-shadow-lg {
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+  }
+
+  .glass {
+    @apply backdrop-blur-2xl border border-white/20;
+    background: hsl(var(--glass-bg));
+  }
+
+  .glass-card {
+    @apply glass rounded-2xl;
+  }
+
+  .bento-grid {
+    @apply grid gap-4;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .bento-item {
+    @apply col-span-12;
+  }
+}
+
+@media (min-width: 768px) {
+  .bento-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.3);
+}

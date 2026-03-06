@@ -1,0 +1,169 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { DashboardLayout } from '@/components/dashboard-layout'
+import { GlassCard } from '@/components/ui/glass-card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { useAuthStore } from '@/store/auth-store'
+import { useForm } from 'react-hook-form'
+import { z } from 'zod'
+import { zodResolver } from '@hookform/resolvers/zod'
+
+const schema = z.object({
+  reportType: z.enum(['weekly', 'monthly']),
+  periodStart: z.string().min(1),
+  periodEnd: z.string().min(1),
+  title: z.string().min(2),
+  workDone: z.string().min(2),
+  achievements: z.string().optional(),
+  problems: z.string().optional(),
+  nextWeekPlan: z.string().optional(),
+})
+
+type FormValues = z.infer<typeof schema>
+
+export default function NewReport() {
+  const { user } = useAuthStore()
+  const router = useRouter()
+  const [submitting, setSubmitting] = useState(false)
+  const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      reportType: 'weekly',
+    },
+  })
+
+  const onSubmit = async (values: FormValues) => {
+    if (!accessToken) return
+    setSubmitting(true)
+
+    const payload = {
+      reportType: values.reportType,
+      periodStart: values.periodStart,
+      periodEnd: values.periodEnd,
+      title: values.title,
+      content: {
+        workDone: values.workDone,
+        achievements: values.achievements,
+        problems: values.problems,
+        nextWeekPlan: values.nextWeekPlan,
+      },
+    }
+
+    const resp = await fetch('/api/v1/reports', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+
+    setSubmitting(false)
+
+    if (!resp.ok) {
+      return
+    }
+
+    router.push('/dashboard/reports')
+  }
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold font-display">Створити чернетку звіту</h1>
+          <p className="text-slate-500 mt-1">{user?.department?.nameUk}</p>
+        </div>
+
+        <GlassCard>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="reportType">Тип звіту</Label>
+                <select
+                  id="reportType"
+                  className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm"
+                  {...register('reportType')}
+                >
+                  <option value="weekly">Тижневий</option>
+                  <option value="monthly">Місячний</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="title">Назва</Label>
+                <Input id="title" {...register('title')} placeholder="Напр. Звіт по інтеграції AI" />
+                {errors.title && <p className="text-xs text-red-500">{errors.title.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="periodStart">Початок періоду</Label>
+                <Input id="periodStart" type="date" {...register('periodStart')} />
+                {errors.periodStart && <p className="text-xs text-red-500">{errors.periodStart.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="periodEnd">Кінець періоду</Label>
+                <Input id="periodEnd" type="date" {...register('periodEnd')} />
+                {errors.periodEnd && <p className="text-xs text-red-500">{errors.periodEnd.message}</p>}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="workDone">Виконана робота</Label>
+              <textarea
+                id="workDone"
+                rows={4}
+                className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                {...register('workDone')}
+              />
+              {errors.workDone && <p className="text-xs text-red-500">{errors.workDone.message}</p>}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="achievements">Досягнення</Label>
+                <textarea
+                  id="achievements"
+                  rows={3}
+                  className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                  {...register('achievements')}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="problems">Проблеми</Label>
+                <textarea
+                  id="problems"
+                  rows={3}
+                  className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                  {...register('problems')}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="nextWeekPlan">План на наступний період</Label>
+              <textarea
+                id="nextWeekPlan"
+                rows={3}
+                className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                {...register('nextWeekPlan')}
+              />
+            </div>
+
+            <Button type="submit" disabled={submitting}>
+              {submitting ? 'Збереження...' : 'Зберегти чернетку'}
+            </Button>
+          </form>
+        </GlassCard>
+      </div>
+    </DashboardLayout>
+  )
+}

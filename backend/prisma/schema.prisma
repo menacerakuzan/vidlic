@@ -1,0 +1,507 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  specialist
+  manager
+  director
+  admin
+}
+
+enum ReportType {
+  weekly
+  monthly
+}
+
+enum ReportStatus {
+  draft
+  pending_manager
+  pending_director
+  approved
+  rejected
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  done
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  critical
+}
+
+enum NotificationType {
+  report_submitted
+  report_approved
+  report_rejected
+  task_assigned
+  task_overdue
+  task_completed
+  reminder
+  system
+}
+
+enum ExportFormat {
+  pdf
+  docx
+}
+
+enum ExportStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+enum AuditAction {
+  create
+  read
+  update
+  delete
+  login
+  logout
+  export
+  approve
+  reject
+}
+
+enum ApprovalEntityType {
+  report
+  task
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+}
+
+enum ApprovalActionType {
+  submit
+  approve
+  reject
+}
+
+enum AttachmentEntityType {
+  report
+  task
+}
+
+enum DigestFrequency {
+  daily
+  weekly
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  employeeId   String   @unique
+  firstName    String
+  lastName     String
+  patronymic   String?
+  passwordHash String
+  role         UserRole @default(specialist)
+  isActive     Boolean  @default(true)
+  departmentId String?
+  positionId   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department   Department? @relation(fields: [departmentId], references: [id])
+  position     Position?   @relation(fields: [positionId], references: [id])
+
+  reports      Report[]
+  tasks        Task[]      @relation("TaskAssignee")
+  createdTasks Task[]      @relation("TaskReporter")
+  sessions     Session[]
+  notifications Notification[]
+  auditLogs    AuditLog[]
+  
+  managedDepartments   Department[] @relation("DepartmentManager")
+  directedDepartments  Department[] @relation("DepartmentDirector")
+  approvedReports     Report[]    @relation("ReportApprover")
+  reportVersions      ReportVersion[]
+  reportStatusHistories ReportStatusHistory[]
+  taskComments       TaskComment[]
+  exportJobs         ExportJob[]
+  approvalInstances  ApprovalInstance[]
+  approvalActions    ApprovalAction[]
+  uploadedAttachments Attachment[]      @relation("AttachmentUploader")
+  reportTemplates     DepartmentReportTemplate[] @relation("TemplateEditor")
+  digestSubscriptions DigestSubscription[]
+  slaEscalations      SlaEscalationEvent[] @relation("SlaActor")
+
+  @@map("users")
+}
+
+model Department {
+  id        String   @id @default(uuid())
+  name      String
+  nameUk    String
+  code      String   @unique
+  parentId  String?
+  managerId String?
+  directorId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent    Department? @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children  Department[] @relation("DepartmentHierarchy")
+  manager   User?        @relation("DepartmentManager", fields: [managerId], references: [id])
+  director  User?        @relation("DepartmentDirector", fields: [directorId], references: [id])
+
+  users     User[]
+  positions Position[]
+  reports   Report[]
+  tasks     Task[]
+  reportTemplate DepartmentReportTemplate?
+
+  @@map("departments")
+}
+
+model Position {
+  id           String   @id @default(uuid())
+  title        String
+  titleUk      String
+  departmentId String?
+  level        Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department   Department? @relation(fields: [departmentId], references: [id])
+  users        User[]
+
+  @@map("positions")
+}
+
+model Report {
+  id               String       @id @default(uuid())
+  reportType       ReportType
+  periodStart      DateTime
+  periodEnd        DateTime
+  title            String?
+  content          Json         @default("{}")
+  status           ReportStatus @default(draft)
+  authorId         String
+  departmentId     String
+  currentApproverId String?
+  version          Int          @default(1)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  submittedAt      DateTime?
+  approvedAt       DateTime?
+
+  author           User         @relation(fields: [authorId], references: [id])
+  department       Department   @relation(fields: [departmentId], references: [id])
+  currentApprover  User?        @relation("ReportApprover", fields: [currentApproverId], references: [id])
+  
+  versions         ReportVersion[]
+  statusHistory    ReportStatusHistory[]
+  tasks            Task[]
+  exportJobs       ExportJob[]
+  attachments      Attachment[]
+  slaEscalations   SlaEscalationEvent[]
+
+  @@index([authorId])
+  @@index([departmentId])
+  @@index([status])
+  @@index([periodStart, periodEnd])
+  @@map("reports")
+}
+
+model ReportVersion {
+  id            String   @id @default(uuid())
+  reportId      String
+  version       Int
+  content       Json
+  changedById   String?
+  changeReason  String?
+  createdAt     DateTime @default(now())
+
+  report        Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  changedBy     User?    @relation(fields: [changedById], references: [id])
+
+  @@unique([reportId, version])
+  @@map("report_versions")
+}
+
+model ReportStatusHistory {
+  id          String        @id @default(uuid())
+  reportId    String
+  fromStatus  ReportStatus?
+  toStatus    ReportStatus
+  changedById String?
+  comment     String?
+  createdAt   DateTime      @default(now())
+
+  report      Report        @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  changedBy   User?         @relation(fields: [changedById], references: [id])
+
+  @@index([reportId])
+  @@map("report_status_history")
+}
+
+model Task {
+  id           String       @id @default(uuid())
+  title        String
+  description  String?
+  status       TaskStatus   @default(todo)
+  priority     TaskPriority @default(medium)
+  departmentId String?
+  assigneeId   String?
+  reporterId   String
+  reportId     String?
+  dueDate      DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  completedAt  DateTime?
+
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  assignee     User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  reporter     User         @relation("TaskReporter", fields: [reporterId], references: [id])
+  report       Report?      @relation(fields: [reportId], references: [id])
+  comments     TaskComment[]
+  attachments  Attachment[]
+
+  @@index([assigneeId])
+  @@index([departmentId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("tasks")
+}
+
+model Attachment {
+  id          String               @id @default(uuid())
+  entityType  AttachmentEntityType
+  reportId    String?
+  taskId      String?
+  uploaderId  String
+  fileName    String
+  mimeType    String
+  filePath    String
+  fileSize    Int
+  createdAt   DateTime             @default(now())
+
+  report      Report?              @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  task        Task?                @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploader    User                 @relation("AttachmentUploader", fields: [uploaderId], references: [id])
+
+  @@index([entityType, reportId, taskId])
+  @@index([uploaderId, createdAt])
+  @@map("attachments")
+}
+
+model TaskComment {
+  id        String   @id @default(uuid())
+  taskId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([taskId])
+  @@map("task_comments")
+}
+
+model Notification {
+  id             String           @id @default(uuid())
+  userId         String
+  type           NotificationType
+  title          String
+  message        String
+  referenceType  String?
+  referenceId    String?
+  isRead         Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+
+  user           User             @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead, createdAt])
+  @@map("notifications")
+}
+
+model Session {
+  id          String   @id @default(uuid())
+  userId      String
+  tokenJti    String   @unique
+  expiresAt   DateTime
+  deviceInfo  String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model AuditLog {
+  id          String     @id @default(uuid())
+  userId      String?
+  action      AuditAction
+  entityType  String
+  entityId    String?
+  oldValue    Json?
+  newValue    Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime   @default(now())
+
+  user        User?      @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+model ExportJob {
+  id           String        @id @default(uuid())
+  userId       String
+  entityType   String
+  entityId     String
+  format       ExportFormat
+  status       ExportStatus  @default(pending)
+  filePath     String?
+  errorMessage String?
+  createdAt    DateTime      @default(now())
+  completedAt  DateTime?
+
+  user         User          @relation(fields: [userId], references: [id])
+  report       Report?       @relation(fields: [entityId], references: [id])
+
+  @@index([userId])
+  @@map("export_jobs")
+}
+
+model ApprovalFlow {
+  id         String              @id @default(uuid())
+  name       String
+  entityType ApprovalEntityType
+  isActive   Boolean             @default(true)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  steps      ApprovalStep[]
+  instances  ApprovalInstance[]
+
+  @@index([entityType, isActive])
+  @@map("approval_flows")
+}
+
+model ApprovalStep {
+  id         String        @id @default(uuid())
+  flowId     String
+  stepOrder  Int
+  role       UserRole
+  required   Boolean       @default(true)
+  createdAt  DateTime      @default(now())
+
+  flow       ApprovalFlow  @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  actions    ApprovalAction[]
+
+  @@unique([flowId, stepOrder])
+  @@map("approval_steps")
+}
+
+model ApprovalInstance {
+  id                String             @id @default(uuid())
+  flowId            String
+  entityType        ApprovalEntityType
+  entityId          String
+  status            ApprovalStatus     @default(pending)
+  currentStepOrder  Int                @default(1)
+  currentApproverId String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  flow              ApprovalFlow       @relation(fields: [flowId], references: [id])
+  currentApprover   User?              @relation(fields: [currentApproverId], references: [id])
+  actions           ApprovalAction[]
+
+  @@index([entityType, entityId])
+  @@unique([entityType, entityId])
+  @@map("approval_instances")
+}
+
+model ApprovalAction {
+  id           String            @id @default(uuid())
+  instanceId   String
+  stepId       String?
+  stepOrder    Int
+  action       ApprovalActionType
+  userId       String
+  comment      String?
+  createdAt    DateTime          @default(now())
+
+  instance     ApprovalInstance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  user         User              @relation(fields: [userId], references: [id])
+  step         ApprovalStep?     @relation(fields: [stepId], references: [id])
+
+  @@index([instanceId])
+  @@map("approval_actions")
+}
+
+model DepartmentReportTemplate {
+  id             String    @id @default(uuid())
+  departmentId   String    @unique
+  titlePattern   String?
+  headerPattern  String?
+  sectionSchema  Json      @default("[]")
+  aiPrompt       String?
+  updatedById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  department     Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  updatedBy      User?      @relation("TemplateEditor", fields: [updatedById], references: [id])
+
+  @@map("department_report_templates")
+}
+
+model DigestSubscription {
+  id           String          @id @default(uuid())
+  userId       String
+  frequency    DigestFrequency @default(daily)
+  hour         Int             @default(9)
+  minute       Int             @default(0)
+  weekdays     String          @default("1,2,3,4,5")
+  isActive     Boolean         @default(true)
+  lastSentAt   DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, frequency])
+  @@index([isActive, frequency, hour, minute])
+  @@map("digest_subscriptions")
+}
+
+model SlaEscalationEvent {
+  id            String      @id @default(uuid())
+  reportId      String
+  stage         ReportStatus
+  escalatedToId String
+  reason        String
+  createdAt     DateTime    @default(now())
+
+  report        Report      @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  escalatedTo   User        @relation("SlaActor", fields: [escalatedToId], references: [id])
+
+  @@index([reportId, stage, createdAt])
+  @@index([escalatedToId, createdAt])
+  @@map("sla_escalation_events")
+}
