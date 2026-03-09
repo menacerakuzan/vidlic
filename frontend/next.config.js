@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const apiBaseUrl = process.env.NEXT_INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3000'
+
 const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
@@ -13,7 +15,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://127.0.0.1:3000/api/:path*',
+        destination: `${apiBaseUrl}/api/:path*`,
       },
     ];
   },
