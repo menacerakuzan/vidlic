@@ -92,7 +92,25 @@ export class DepartmentsService {
     };
   }
 
-  async create(dto: CreateDepartmentDto, adminId: string, ipAddress?: string) {
+  async create(dto: CreateDepartmentDto, actor: any, ipAddress?: string) {
+    const isAdmin = actor?.role === 'admin';
+    const isDirector = actor?.role === 'director';
+    if (!isAdmin && !isDirector) {
+      throw new ForbiddenException('Недостатньо прав для створення підрозділу');
+    }
+
+    if (isDirector) {
+      if (!actor.departmentId) {
+        throw new ForbiddenException('Для директора не визначено базовий підрозділ');
+      }
+      if (dto.parentId !== actor.departmentId) {
+        throw new ForbiddenException('Директор може створювати відділи лише у своєму департаменті');
+      }
+      if (dto.directorId && dto.directorId !== actor.id) {
+        throw new ForbiddenException('Директор не може призначити іншого директора для свого відділу');
+      }
+    }
+
     const existing = await this.prisma.department.findUnique({
       where: { code: dto.code },
     });
@@ -108,12 +126,12 @@ export class DepartmentsService {
         code: dto.code,
         parentId: dto.parentId,
         managerId: dto.managerId,
-        directorId: dto.directorId,
+        directorId: isDirector ? actor.id : dto.directorId,
       },
     });
 
     await this.auditService.log({
-      userId: adminId,
+      userId: actor.id,
       action: AuditAction.create,
       entityType: 'department',
       entityId: department.id,

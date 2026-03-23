@@ -139,14 +139,15 @@ export default function DepartmentsPage() {
   const canEditTemplate = isAdmin || isDirector || user?.role === 'manager'
 
   const createDepartment = async () => {
-    if (!isAdmin || !accessToken || !newDepartmentName.trim() || !newDepartmentCode.trim()) return
+    if ((!isAdmin && !isDirector) || !accessToken || !newDepartmentName.trim() || !newDepartmentCode.trim()) return
     setActionError('')
     setActionSuccess('')
     const payload = {
       name: newDepartmentName.trim(),
       nameUk: newDepartmentName.trim(),
       code: newDepartmentCode.trim().toUpperCase(),
-      directorId: newDepartmentDirectorId || undefined,
+      parentId: isDirector ? (user?.department?.id || undefined) : undefined,
+      directorId: isDirector ? user?.id : (newDepartmentDirectorId || undefined),
       managerId: newDepartmentManagerId || undefined,
     }
     const resp = await fetch('/api/v1/departments', {
@@ -163,7 +164,7 @@ export default function DepartmentsPage() {
       setNewDepartmentDirectorId('')
       setNewDepartmentManagerId('')
       await loadDepartments()
-      setActionSuccess('Підрозділ створено')
+      setActionSuccess(isDirector ? 'Відділ створено у межах департаменту' : 'Підрозділ створено')
       return
     }
     const err = await resp.json().catch(() => null)
@@ -308,23 +309,29 @@ export default function DepartmentsPage() {
           <p className="text-slate-500 mt-1">Керування підрозділами та співробітниками</p>
         </div>
 
-        {isAdmin && (
+        {(isAdmin || isDirector) && (
           <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-5 gap-3">
-            <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Назва підрозділу" value={newDepartmentName} onChange={(e) => setNewDepartmentName(e.target.value)} />
+            <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder={isDirector ? 'Назва відділу' : 'Назва підрозділу'} value={newDepartmentName} onChange={(e) => setNewDepartmentName(e.target.value)} />
             <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Код (напр. IT)" value={newDepartmentCode} onChange={(e) => setNewDepartmentCode(e.target.value)} />
-            <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm" value={newDepartmentDirectorId} onChange={(e) => setNewDepartmentDirectorId(e.target.value)}>
-              <option value="">Директор (опційно)</option>
-              {directors.map((d) => (
-                <option key={d.id} value={d.id}>{d.firstName} {d.lastName}</option>
-              ))}
-            </select>
+            {isAdmin ? (
+              <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm" value={newDepartmentDirectorId} onChange={(e) => setNewDepartmentDirectorId(e.target.value)}>
+                <option value="">Директор (опційно)</option>
+                {directors.map((d) => (
+                  <option key={d.id} value={d.id}>{d.firstName} {d.lastName}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 flex items-center">
+                Директор відділу: {user?.firstName} {user?.lastName}
+              </div>
+            )}
             <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm" value={newDepartmentManagerId} onChange={(e) => setNewDepartmentManagerId(e.target.value)}>
               <option value="">Керівник (опційно)</option>
               {managers.map((m) => (
                 <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
               ))}
             </select>
-            <button onClick={createDepartment} className="h-10 rounded-lg bg-primary text-white text-sm font-medium">Створити підрозділ</button>
+            <button onClick={createDepartment} className="h-10 rounded-lg bg-primary text-white text-sm font-medium">{isDirector ? 'Створити відділ' : 'Створити підрозділ'}</button>
           </div>
         )}
 

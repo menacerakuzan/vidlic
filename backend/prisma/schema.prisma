@@ -258,6 +258,8 @@ model Task {
   description  String?
   status       TaskStatus   @default(todo)
   priority     TaskPriority @default(medium)
+  executionHours Int?
+  isPrivate    Boolean      @default(false)
   departmentId String?
   assigneeId   String?
   reporterId   String
@@ -278,6 +280,7 @@ model Task {
   @@index([departmentId])
   @@index([status])
   @@index([dueDate])
+  @@index([isPrivate])
   @@map("tasks")
 }
 

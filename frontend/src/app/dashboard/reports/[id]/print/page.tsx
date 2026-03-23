@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuthStore } from '@/store/auth-store'
 
 type ReportSubmission = {
@@ -28,14 +28,39 @@ export default function ReportPrintPage() {
 
   const [draftTitle, setDraftTitle] = useState('ЗВІТ')
   const [draftHeader, setDraftHeader] = useState('')
-  const [draftBody, setDraftBody] = useState('')
+  const [draftBodyHtml, setDraftBodyHtml] = useState('')
+  const [fontFamily, setFontFamily] = useState('Times New Roman')
+  const [fontSize, setFontSize] = useState(14)
+  const bodyRef = useRef<HTMLDivElement | null>(null)
 
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
+
+  const plainToHtml = (value: string) => {
+    const escaped = value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+    return escaped
+      .split('\n')
+      .map((line) => `<p>${line.trim() || '&nbsp;'}</p>`)
+      .join('')
+  }
+
+  const htmlToPlain = (value: string) => value
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\n{2,}/g, '\n')
+    .trim()
 
   const applySubmissionToDraft = useCallback((submission: ReportSubmission | null) => {
     setDraftTitle(submission?.documentTitle || 'ЗВІТ')
     setDraftHeader(Array.isArray(submission?.headerLines) ? submission!.headerLines!.join('\n') : '')
-    setDraftBody(submission?.bodyText || '')
+    const bodyText = submission?.bodyText || ''
+    const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(bodyText)
+    setDraftBodyHtml(looksLikeHtml ? bodyText : plainToHtml(bodyText))
+    setFontFamily(submission?.style?.fontFamily || 'Times New Roman')
+    setFontSize(Number(submission?.style?.fontSize) || 14)
     setIsDirty(false)
   }, [])
 
@@ -69,7 +94,10 @@ export default function ReportPrintPage() {
   const renderedHeaderLines = (editMode
     ? draftHeader.split('\n').map((line) => line.trim()).filter(Boolean)
     : (submission?.headerLines || [])).slice(0, 6)
-  const renderedBody = editMode ? draftBody : (submission?.bodyText || '')
+  const renderedBodyHtml = editMode ? draftBodyHtml : (() => {
+    const body = submission?.bodyText || ''
+    return /<\/?[a-z][\s\S]*>/i.test(body) ? body : plainToHtml(body)
+  })()
 
   const canEdit = useMemo(() => {
     if (!user || !report) return false
@@ -77,12 +105,21 @@ export default function ReportPrintPage() {
     return report.status === 'draft' && report.author?.id === user.id
   }, [report, user])
 
+  const runEditorCommand = (command: string, value?: string) => {
+    if (!editMode) return
+    bodyRef.current?.focus()
+    document.execCommand(command, false, value)
+    setDraftBodyHtml(bodyRef.current?.innerHTML || draftBodyHtml)
+    setIsDirty(true)
+  }
+
   const saveDraft = async () => {
     if (!accessToken || !report?.id) return
     setSaving(true)
     setError('')
     setSuccess('')
 
+    const safeBodyHtml = bodyRef.current?.innerHTML || draftBodyHtml
     const existingContent = report.content || {}
     const payload = {
       title: report.title,
@@ -94,10 +131,11 @@ export default function ReportPrintPage() {
           ...(existingContent.managerSubmission || {}),
           documentTitle: (draftTitle || 'ЗВІТ').trim() || 'ЗВІТ',
           headerLines: draftHeader.split('\n').map((line: string) => line.trim()).filter(Boolean),
-          bodyText: draftBody,
+          bodyText: safeBodyHtml,
+          bodyTextPlain: htmlToPlain(safeBodyHtml),
           style: {
-            fontFamily: 'Times New Roman',
-            fontSize: 14,
+            fontFamily,
+            fontSize,
           },
           editedByPrintView: true,
           editedAt: new Date().toISOString(),
@@ -172,6 +210,39 @@ export default function ReportPrintPage() {
         )}
         {canEdit && editMode && (
           <>
+            <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-2 py-1">
+              <select
+                value={fontFamily}
+                onChange={(e) => {
+                  setFontFamily(e.target.value)
+                  setIsDirty(true)
+                }}
+                className="h-8 rounded border border-slate-300 px-2 text-xs"
+              >
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Georgia">Georgia</option>
+                <option value="Arial">Arial</option>
+              </select>
+              <input
+                type="number"
+                min={12}
+                max={18}
+                value={fontSize}
+                onChange={(e) => {
+                  const next = Math.max(12, Math.min(18, Number(e.target.value || 14)))
+                  setFontSize(next)
+                  setIsDirty(true)
+                }}
+                className="h-8 w-16 rounded border border-slate-300 px-2 text-xs"
+              />
+              <button onClick={() => runEditorCommand('bold')} className="h-8 rounded border border-slate-300 px-2 text-xs font-bold">B</button>
+              <button onClick={() => runEditorCommand('italic')} className="h-8 rounded border border-slate-300 px-2 text-xs italic">I</button>
+              <button onClick={() => runEditorCommand('underline')} className="h-8 rounded border border-slate-300 px-2 text-xs underline">U</button>
+              <button onClick={() => runEditorCommand('justifyLeft')} className="h-8 rounded border border-slate-300 px-2 text-xs">L</button>
+              <button onClick={() => runEditorCommand('justifyCenter')} className="h-8 rounded border border-slate-300 px-2 text-xs">C</button>
+              <button onClick={() => runEditorCommand('justifyFull')} className="h-8 rounded border border-slate-300 px-2 text-xs">J</button>
+              <button onClick={() => runEditorCommand('insertUnorderedList')} className="h-8 rounded border border-slate-300 px-2 text-xs">• List</button>
+            </div>
             <button
               onClick={saveDraft}
               disabled={saving}
@@ -211,10 +282,10 @@ export default function ReportPrintPage() {
                 setIsDirty(true)
               }}
               className="mb-2 w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1 text-center font-semibold focus:border-slate-500 focus:outline-none"
-              style={{ fontFamily: 'Times New Roman', fontSize: 20 }}
+              style={{ fontFamily, fontSize: Math.max(20, fontSize + 6) }}
             />
           ) : (
-            <h1 className="mb-2 text-center font-semibold uppercase tracking-[0.03em]" style={{ fontFamily: 'Times New Roman', fontSize: 20 }}>
+            <h1 className="mb-2 text-center font-semibold uppercase tracking-[0.03em]" style={{ fontFamily, fontSize: Math.max(20, fontSize + 6) }}>
               {renderedTitle}
             </h1>
           )}
@@ -228,10 +299,10 @@ export default function ReportPrintPage() {
               }}
               rows={Math.max(2, draftHeader.split('\n').length)}
               className="w-full resize-y border-0 border-b border-slate-300 bg-transparent px-1 py-1 text-center focus:border-slate-500 focus:outline-none"
-              style={{ fontFamily: 'Times New Roman', fontSize: 14, lineHeight: 1.5 }}
+              style={{ fontFamily, fontSize, lineHeight: 1.5 }}
             />
           ) : (
-            <div className="mb-5 space-y-0.5 text-center" style={{ fontFamily: 'Times New Roman', fontSize: 14, lineHeight: 1.5 }}>
+            <div className="mb-5 space-y-0.5 text-center" style={{ fontFamily, fontSize, lineHeight: 1.5 }}>
               {renderedHeaderLines.map((line, idx) => (
                 <p key={`header-${idx}`}>{line}</p>
               ))}
@@ -240,24 +311,24 @@ export default function ReportPrintPage() {
 
           <div className={editMode ? 'mt-4' : 'mt-6'}>
             {editMode ? (
-              <textarea
-              value={draftBody}
-              onChange={(e) => {
-                setDraftBody(e.target.value)
-                setIsDirty(true)
-              }}
-                rows={34}
-                className="w-full resize-y rounded-sm border border-slate-300 bg-white px-3 py-3 focus:border-slate-500 focus:outline-none"
-                style={{ fontFamily: 'Times New Roman', fontSize: 14, lineHeight: 1.6 }}
+              <div
+                ref={bodyRef}
+                contentEditable
+                suppressContentEditableWarning
+                onInput={(e) => {
+                  setDraftBodyHtml((e.target as HTMLDivElement).innerHTML)
+                  setIsDirty(true)
+                }}
+                className="doc-editor min-h-[62vh] rounded-sm border border-slate-300 bg-white px-3 py-3 focus:outline-none"
+                style={{ fontFamily, fontSize, lineHeight: 1.6 }}
+                dangerouslySetInnerHTML={{ __html: renderedBodyHtml }}
               />
-            ) : renderedBody.trim().length > 0 ? (
-              <div style={{ fontFamily: 'Times New Roman', fontSize: 14, lineHeight: 1.6 }}>
-                {renderedBody.split('\n').map((line, idx) => (
-                  <p key={`line-${idx}`} className="text-justify first-line:indent-8">
-                    {line.trim() || '\u00A0'}
-                  </p>
-                ))}
-              </div>
+            ) : htmlToPlain(renderedBodyHtml).length > 0 ? (
+              <div
+                className="doc-render"
+                style={{ fontFamily, fontSize, lineHeight: 1.6 }}
+                dangerouslySetInnerHTML={{ __html: renderedBodyHtml }}
+              />
             ) : (
               <p className="text-sm text-slate-500">Немає підготовленого тексту для друку.</p>
             )}
@@ -266,6 +337,17 @@ export default function ReportPrintPage() {
       </article>
 
       <style jsx global>{`
+        .doc-editor p,
+        .doc-render p {
+          margin: 0 0 8px 0;
+          text-align: justify;
+          text-indent: 2em;
+        }
+        .doc-editor ul,
+        .doc-render ul {
+          margin: 0 0 8px 0;
+          padding-left: 24px;
+        }
         @page {
           size: A4;
           margin: 14mm;
@@ -277,6 +359,11 @@ export default function ReportPrintPage() {
           }
           .page-sheet {
             width: auto !important;
+            min-height: auto !important;
+          }
+          .doc-editor {
+            border: none !important;
+            padding: 0 !important;
             min-height: auto !important;
           }
         }

@@ -29,6 +29,14 @@ export class TasksController {
     return this.tasksService.getKanban(departmentId, req.user);
   }
 
+  @Get('transparency')
+  @Permissions('tasks:read')
+  @ApiOperation({ summary: 'Порівняльна прозорість задач між підрозділами' })
+  @ApiResponse({ status: 200, description: 'Агреговані показники по підрозділах' })
+  getTransparency() {
+    return this.tasksService.getDepartmentTransparency();
+  }
+
   @Get(':id')
   @Permissions('tasks:read')
   @ApiOperation({ summary: 'Отримати задачу за ID' })

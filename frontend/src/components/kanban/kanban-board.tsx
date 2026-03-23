@@ -10,6 +10,11 @@ export interface KanbanTask {
   id: string
   title: string
   status: 'todo' | 'in_progress' | 'done'
+  priority?: string
+  dueDate?: string
+  executionHours?: number | null
+  isPrivate?: boolean
+  reporter?: { firstName: string; lastName: string }
   assignee?: { firstName: string; lastName: string }
 }
 
@@ -106,6 +111,17 @@ function KanbanCard({ task }: { task: KanbanTask }) {
       <p className="font-medium">{task.title}</p>
       <p className="text-xs text-slate-500 mt-1">
         {task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : 'Без виконавця'}
+      </p>
+      <p className="text-xs text-slate-500">
+        Автор: {task.reporter ? `${task.reporter.firstName} ${task.reporter.lastName}` : '—'}
+      </p>
+      <p className="text-xs text-slate-500">
+        Пріоритет: {task.priority || 'medium'}
+        {task.executionHours ? ` · ${task.executionHours} год` : ''}
+      </p>
+      <p className="text-xs text-slate-500">
+        Термін: {task.dueDate ? new Date(task.dueDate).toLocaleDateString('uk-UA') : 'не вказано'}
+        {task.isPrivate ? ' · Приватна' : ''}
       </p>
     </div>
   )

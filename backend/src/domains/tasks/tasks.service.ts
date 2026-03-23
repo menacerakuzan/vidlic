@@ -24,6 +24,10 @@ export class TasksService {
       ];
     } else if (user.role === 'manager') {
       where.departmentId = user.departmentId;
+      where.isPrivate = false;
+    } else if (user.role === 'director') {
+      where.departmentId = user.departmentId;
+      where.isPrivate = false;
     }
 
     if (status) where.status = status;
@@ -75,6 +79,10 @@ export class TasksService {
       ];
     } else if (user.role === 'manager') {
       where.departmentId = user.departmentId;
+      where.isPrivate = false;
+    } else if (user.role === 'director') {
+      where.departmentId = user.departmentId;
+      where.isPrivate = false;
     } else if (departmentId) {
       where.departmentId = departmentId;
     }
@@ -146,12 +154,19 @@ export class TasksService {
       }
     }
 
+    const isPrivateSpecialistTask =
+      user.role === 'specialist' &&
+      !dto.reportId &&
+      (!dto.assigneeId || dto.assigneeId === user.id);
+
     const task = await this.prisma.task.create({
       data: {
         title: dto.title,
         description: dto.description,
         priority: dto.priority || 'medium',
         status: 'todo',
+        executionHours: dto.executionHours,
+        isPrivate: isPrivateSpecialistTask,
         departmentId: targetDepartmentId,
         assigneeId: dto.assigneeId,
         reporterId: user.id,
@@ -194,6 +209,7 @@ export class TasksService {
         title: dto.title ?? task.title,
         description: dto.description ?? task.description,
         priority: dto.priority ?? task.priority,
+        executionHours: dto.executionHours ?? task.executionHours,
         departmentId: dto.departmentId ?? task.departmentId,
         assigneeId: dto.assigneeId ?? task.assigneeId,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : (dto.dueDate === null ? null : task.dueDate),
@@ -309,6 +325,8 @@ export class TasksService {
       description: task.description,
       status: task.status,
       priority: task.priority,
+      executionHours: task.executionHours ?? null,
+      isPrivate: Boolean(task.isPrivate),
       dueDate: task.dueDate,
       assignee: task.assignee ? {
         id: task.assignee.id,
@@ -361,6 +379,7 @@ export class TasksService {
 
   private canManageTask(task: any, user: any) {
     if (user.role === 'admin') return true;
+    if (task.isPrivate && task.reporterId !== user.id && (user.role === 'director' || user.role === 'manager')) return false;
     if ((user.role === 'director' || user.role === 'manager') && task.departmentId === user.departmentId) return true;
     if (user.role === 'specialist' && task.reporterId === user.id) return true;
     return false;
@@ -368,6 +387,7 @@ export class TasksService {
 
   private canMoveTaskStatus(task: any, user: any) {
     if (user.role === 'admin') return true;
+    if (task.isPrivate && task.reporterId !== user.id && (user.role === 'director' || user.role === 'manager')) return false;
     if ((user.role === 'director' || user.role === 'manager') && task.departmentId === user.departmentId) return true;
     if (user.role === 'specialist' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
     return false;
@@ -375,8 +395,51 @@ export class TasksService {
 
   private canViewTask(task: any, user: any) {
     if (user.role === 'admin') return true;
+    if (task.isPrivate && task.reporterId !== user.id && (user.role === 'director' || user.role === 'manager')) return false;
     if ((user.role === 'director' || user.role === 'manager') && task.departmentId === user.departmentId) return true;
     if (user.role === 'specialist' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
     return false;
+  }
+
+  async getDepartmentTransparency() {
+    const tasks = await this.prisma.task.findMany({
+      where: { isPrivate: false },
+      select: {
+        id: true,
+        status: true,
+        priority: true,
+        departmentId: true,
+        department: { select: { id: true, nameUk: true, code: true } },
+      },
+    });
+
+    const summary = new Map<string, any>();
+    for (const task of tasks) {
+      const key = task.departmentId || 'none';
+      const current = summary.get(key) || {
+        departmentId: task.departmentId,
+        departmentName: task.department?.nameUk || 'Без підрозділу',
+        departmentCode: task.department?.code || '-',
+        total: 0,
+        todo: 0,
+        inProgress: 0,
+        done: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        critical: 0,
+      };
+      current.total += 1;
+      if (task.status === 'todo') current.todo += 1;
+      if (task.status === 'in_progress') current.inProgress += 1;
+      if (task.status === 'done') current.done += 1;
+      if (task.priority === 'critical') current.critical += 1;
+      if (task.priority === 'high') current.high += 1;
+      if (task.priority === 'medium') current.medium += 1;
+      if (task.priority === 'low') current.low += 1;
+      summary.set(key, current);
+    }
+
+    return Array.from(summary.values()).sort((a, b) => b.total - a.total);
   }
 }

@@ -53,12 +53,12 @@ export class DepartmentsController {
   }
 
   @Post()
-  @Roles('admin')
+  @Roles('admin', 'director')
   @Permissions('departments:write')
   @ApiOperation({ summary: 'Створити підрозділ (Admin)' })
   @ApiResponse({ status: 201, description: 'Підрозділ створений' })
   create(@Body() dto: CreateDepartmentDto, @Req() req: any) {
-    return this.departmentsService.create(dto, req.user.id, req.ip);
+    return this.departmentsService.create(dto, req.user, req.ip);
   }
 
   @Put(':id')

@@ -12,6 +12,8 @@ type Task = {
   status: 'todo' | 'in_progress' | 'done'
   priority: string
   dueDate?: string
+  executionHours?: number | null
+  isPrivate?: boolean
   assignee?: { id: string; firstName: string; lastName: string }
   reporter?: { id: string; firstName: string; lastName: string }
 }
@@ -33,11 +35,14 @@ export default function TasksPage() {
   const [title, setTitle] = useState('')
   const [priority, setPriority] = useState('medium')
   const [assigneeId, setAssigneeId] = useState('')
+  const [dueDate, setDueDate] = useState('')
+  const [executionHours, setExecutionHours] = useState('')
   const [selectedTaskId, setSelectedTaskId] = useState('')
   const [taskAttachments, setTaskAttachments] = useState<any[]>([])
   const [attachmentsLoading, setAttachmentsLoading] = useState(false)
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
   const [deletingTaskId, setDeletingTaskId] = useState('')
+  const [transparency, setTransparency] = useState<any[]>([])
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const loadAll = async () => {
@@ -52,7 +57,8 @@ export default function TasksPage() {
       ? fetch(`/api/v1/departments/${user.department.id}/team`, { headers: { Authorization: `Bearer ${accessToken}` } })
       : Promise.resolve(null as any)
 
-    const [tasksResp, teamResp] = await Promise.all([tasksReq, teamReq])
+    const transparencyReq = fetch('/api/v1/tasks/transparency', { headers: { Authorization: `Bearer ${accessToken}` } })
+    const [tasksResp, teamResp, transparencyResp] = await Promise.all([tasksReq, teamReq, transparencyReq])
 
     if (tasksResp.ok) {
       const tasksData = await tasksResp.json()
@@ -62,6 +68,11 @@ export default function TasksPage() {
     if (teamResp && teamResp.ok) {
       const teamData = await teamResp.json()
       setTeam(teamData || [])
+    }
+
+    if (transparencyResp.ok) {
+      const data = await transparencyResp.json()
+      setTransparency(Array.isArray(data) ? data : [])
     }
 
     setLoading(false)
@@ -108,6 +119,8 @@ export default function TasksPage() {
     if (canAssign && assigneeId) {
       payload.assigneeId = assigneeId
     }
+    if (dueDate) payload.dueDate = dueDate
+    if (executionHours) payload.executionHours = Number(executionHours)
 
     const resp = await fetch('/api/v1/tasks', {
       method: 'POST',
@@ -123,6 +136,8 @@ export default function TasksPage() {
     if (resp.ok) {
       setTitle('')
       setAssigneeId('')
+      setDueDate('')
+      setExecutionHours('')
       await loadAll()
     }
   }
@@ -236,6 +251,11 @@ export default function TasksPage() {
     id: task.id,
     title: task.title,
     status: task.status,
+    priority: task.priority,
+    dueDate: task.dueDate,
+    executionHours: task.executionHours ?? null,
+    isPrivate: Boolean(task.isPrivate),
+    reporter: task.reporter,
     assignee: task.assignee,
   }))
 
@@ -291,9 +311,40 @@ export default function TasksPage() {
           ) : (
             <div className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 flex items-center">Призначення: через керівника/директора</div>
           )}
+          <input
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+          />
+          <input
+            type="number"
+            min={1}
+            max={999}
+            value={executionHours}
+            onChange={(e) => setExecutionHours(e.target.value)}
+            className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+            placeholder="Час (год)"
+          />
           <button disabled={creating} onClick={createTask} className="md:col-span-4 h-10 rounded-lg bg-primary text-white text-sm font-medium disabled:opacity-60">
             {creating ? 'Створення...' : 'Створити задачу'}
           </button>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <h2 className="text-lg font-semibold mb-3">Прозорість між підрозділами</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {transparency.map((row) => (
+              <div key={row.departmentId || row.departmentCode} className="rounded-lg border border-slate-200 p-3">
+                <p className="text-sm font-semibold">{row.departmentName}</p>
+                <p className="text-xs text-slate-500 mt-1">{row.departmentCode}</p>
+                <p className="text-sm mt-2">Всього: <b>{row.total}</b></p>
+                <p className="text-xs text-slate-600">Todo: {row.todo} · In Progress: {row.inProgress} · Done: {row.done}</p>
+                <p className="text-xs text-slate-600">Critical: {row.critical} · High: {row.high} · Medium: {row.medium} · Low: {row.low}</p>
+              </div>
+            ))}
+            {transparency.length === 0 && <p className="text-sm text-slate-500">Дані поки відсутні.</p>}
+          </div>
         </div>
 
         {loading ? (

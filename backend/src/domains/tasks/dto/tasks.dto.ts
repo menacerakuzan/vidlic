@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsDateString, IsUUID, IsObject } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsDateString, IsUUID, IsInt, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TaskStatus, TaskPriority } from '@prisma/client';
 
@@ -36,6 +36,12 @@ export class CreateTaskDto {
   @IsOptional()
   @IsDateString()
   dueDate?: string;
+
+  @ApiPropertyOptional({ example: 8, description: 'Орієнтовний час виконання (години)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  executionHours?: number;
 }
 
 export class UpdateTaskDto {
@@ -73,6 +79,12 @@ export class UpdateTaskDto {
   @IsOptional()
   @IsString()
   dueDateClear?: boolean;
+
+  @ApiPropertyOptional({ example: 6, description: 'Орієнтовний час виконання (години)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  executionHours?: number;
 }
 
 export class TaskQueryDto {

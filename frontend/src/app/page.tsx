@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
+import { BrandLogo } from '@/components/brand-logo'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -47,6 +48,11 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4">
       <div className="w-full max-w-md animate-fade-in">
         <div className="text-center mb-8">
+          <div className="mb-3 flex justify-center">
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-white shadow-sm">
+              <BrandLogo className="h-6 w-6 text-white" />
+            </span>
+          </div>
           <h1 className="text-3xl font-semibold text-slate-900 dark:text-white mb-2">
             Відлік
           </h1>

@@ -15,11 +15,14 @@ import {
   Bell,
   LogOut,
   Menu,
-  X
+  X,
+  Moon,
+  Sun
 } from 'lucide-react'
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect } from 'react'
+import { BrandLogo } from '@/components/brand-logo'
 
 const navigation = [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
@@ -47,6 +50,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     users: [],
   })
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [isDark, setIsDark] = useState(false)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   useEffect(() => {
@@ -133,6 +137,11 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user?.id])
 
+  useEffect(() => {
+    const isDarkNow = document.documentElement.classList.contains('dark')
+    setIsDark(isDarkNow)
+  }, [])
+
   const filteredNav = navigation.filter(item => {
     if (!item.roles) return true
     return user && item.roles.includes(user.role)
@@ -159,6 +168,14 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       ? 'Керівник'
       : 'Спеціаліст'
 
+  const toggleTheme = () => {
+    const root = document.documentElement
+    const next = !root.classList.contains('dark')
+    root.classList.toggle('dark', next)
+    localStorage.setItem('vidlik-theme', next ? 'dark' : 'light')
+    setIsDark(next)
+  }
+
   return (
     <div className="min-h-screen">
       {/* Mobile sidebar */}
@@ -169,7 +186,9 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             <div className="fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-800 shadow-xl">
               <div className="flex items-center justify-between p-4 border-b">
                 <span className="inline-flex items-center gap-2 text-xl font-semibold">
-                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-sm font-bold text-white">В</span>
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-white">
+                    <BrandLogo className="h-4 w-4 text-white" />
+                  </span>
                   Відлік
                 </span>
                 <button onClick={() => setSidebarOpen(false)}>
@@ -204,7 +223,9 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col flex-1 min-h-0 bg-white/80 dark:bg-slate-900/70 backdrop-blur-xl border-r border-white/10">
           <div className="flex items-center h-16 px-6 border-b border-white/10">
             <span className="inline-flex items-center gap-2 text-xl font-semibold font-display">
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-sm font-bold text-white">В</span>
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-white">
+                <BrandLogo className="h-4 w-4 text-white" />
+              </span>
               Відлік
             </span>
           </div>
@@ -312,6 +333,9 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={toggleTheme} title="Перемкнути тему">
+              {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </Button>
             <Link href="/dashboard/notifications">
               <Button variant="ghost" size="icon" className="relative">
                 <Bell className="w-5 h-5" />
