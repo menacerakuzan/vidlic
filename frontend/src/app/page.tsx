@@ -25,15 +25,12 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      console.log('Attempting login with:', email)
-      
       const response = await api.post<{
         accessToken: string
         refreshToken: string
         user: any
       }>('/auth/login', { email, password })
 
-      console.log('Login successful:', response)
       setAuth(response.user, response.accessToken, response.refreshToken)
       router.push('/dashboard')
     } catch (err: any) {

@@ -447,34 +447,34 @@ export default function ReportDetailsPage() {
   return (
     <DashboardLayout>
       <div className="max-w-5xl mx-auto space-y-6">
-        {loading && <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">Завантаження...</div>}
-        {!loading && error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+        {loading && <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Завантаження...</div>}
+        {!loading && error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300">{error}</div>}
 
         {!loading && report && (
           <>
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4 dark:border-slate-700 dark:bg-slate-900">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <h1 className="text-2xl font-semibold font-display">{report.title || 'Звіт без назви'}</h1>
-                  <p className="text-slate-500 mt-1">{report.author?.firstName} {report.author?.lastName}</p>
+                  <p className="text-slate-500 dark:text-slate-400 mt-1">{report.author?.firstName} {report.author?.lastName}</p>
                 </div>
                 <ReportStatusBadge status={report.status} />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-slate-500">Період</p>
+                  <p className="text-slate-500 dark:text-slate-400">Період</p>
                   <p className="font-medium">{new Date(report.periodStart).toLocaleDateString('uk-UA')} - {new Date(report.periodEnd).toLocaleDateString('uk-UA')}</p>
                 </div>
                 <div>
-                  <p className="text-slate-500">Поточний погоджувач</p>
+                  <p className="text-slate-500 dark:text-slate-400">Поточний погоджувач</p>
                   <p className="font-medium">{report.currentApprover ? `${report.currentApprover.firstName} ${report.currentApprover.lastName}` : '-'}</p>
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
                 {report?.id && (
-                  <Link href={`/dashboard/reports/${report.id}/print`} className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                  <Link href={`/dashboard/reports/${report.id}/print`} className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
                     Друк-версія
                   </Link>
                 )}
@@ -493,17 +493,17 @@ export default function ReportDetailsPage() {
                   <button disabled={actionLoading} onClick={() => doAction('reject')} className="rounded-lg bg-rose-600 px-4 py-2 text-sm text-white disabled:opacity-60">Відхилити</button>
                 )}
                 {canDelete && (
-                  <button disabled={actionLoading} onClick={deleteReport} className="rounded-lg border border-rose-300 px-4 py-2 text-sm text-rose-700 hover:bg-rose-50 disabled:opacity-60">
+                  <button disabled={actionLoading} onClick={deleteReport} className="rounded-lg border border-rose-300 px-4 py-2 text-sm text-rose-700 hover:bg-rose-50 disabled:opacity-60 dark:border-rose-700 dark:text-rose-300 dark:hover:bg-rose-950/30">
                     Видалити звіт
                   </button>
                 )}
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-3 dark:border-slate-700 dark:bg-slate-900">
               {canEditSubmission && (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm font-semibold text-slate-900 mb-2">Чек-лист перед відправкою</p>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">Чек-лист перед відправкою</p>
                   <div className="space-y-1">
                     {checklist.map((item) => (
                       <p key={item.key} className={`text-sm ${item.ok ? 'text-emerald-700' : 'text-amber-700'}`}>
@@ -516,7 +516,7 @@ export default function ReportDetailsPage() {
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold">Текст для погодження</h2>
                 {managerDraftSource && (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Джерело: {managerDraftSource === 'ai' ? 'AI' : 'Шаблон'}
                   </p>
                 )}
@@ -524,7 +524,7 @@ export default function ReportDetailsPage() {
 
               {managerDraftText ? (
                 <div className="space-y-3">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
                     <p className="text-center font-semibold" style={{ fontFamily: 'Times New Roman', fontSize: 14 }}>
                       {managerDraftTitle || 'ЗВІТ'}
                     </p>
@@ -544,47 +544,47 @@ export default function ReportDetailsPage() {
                           setIsDirty(true)
                         }}
                         rows={16}
-                        className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                        className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
                         style={{ fontFamily: 'Times New Roman', fontSize: 14 }}
                       />
                       <button
                         disabled={savingDraft}
                         onClick={() => saveManagerDraft()}
-                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                       >
                         {savingDraft ? 'Збереження...' : 'Зберегти текст для погодження'}
                       </button>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
                         {autoSaving ? 'Автозбереження...' : isDirty ? 'Є незбережені зміни' : `Збережено: ${new Date(lastSavedAt || Date.now()).toLocaleTimeString('uk-UA')}`}
                       </p>
                     </div>
                   ) : (
-                    <div className="rounded-lg border border-slate-200 bg-white p-4 whitespace-pre-wrap text-slate-800" style={{ fontFamily: 'Times New Roman', fontSize: 14 }}>
+                    <div className="rounded-lg border border-slate-200 bg-white p-4 whitespace-pre-wrap text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" style={{ fontFamily: 'Times New Roman', fontSize: 14 }}>
                       {managerDraftText}
                     </div>
                   )}
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   Спочатку сформуйте AI-чернетку, перевірте текст і лише потім відправляйте на погодження.
                 </p>
               )}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-3 dark:border-slate-700 dark:bg-slate-900">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold">AI summary</h2>
                 <button
                   disabled={summaryLoading}
                   onClick={refreshAiSummary}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   {summaryLoading ? 'Генерація...' : 'Оновити AI'}
                 </button>
               </div>
               {aiSummary ? (
                 <>
-                  <p className="text-sm text-slate-700">{aiSummary.summary}</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-200">{aiSummary.summary}</p>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                     <Block title="Highlights" items={aiSummary.highlights || []} />
                     <Block title="Risks" items={aiSummary.risks || []} />
@@ -592,25 +592,25 @@ export default function ReportDetailsPage() {
                   </div>
                 </>
               ) : (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   AI summary недоступний, але звіт можна погоджувати без нього.
                 </p>
               )}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4 dark:border-slate-700 dark:bg-slate-900">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold">Коментарі по секціях</h2>
-                {commentsLoading && <p className="text-xs text-slate-500">Оновлення...</p>}
+                {commentsLoading && <p className="text-xs text-slate-500 dark:text-slate-400">Оновлення...</p>}
               </div>
 
               {canComment && (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2 dark:border-slate-700 dark:bg-slate-800/60">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     <select
                       value={commentSection}
                       onChange={(e) => setCommentSection(e.target.value)}
-                      className="rounded-md border border-input bg-white px-2 py-2 text-sm"
+                      className="rounded-md border border-input bg-white px-2 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
                     >
                       <option value="workDone">Виконана робота</option>
                       <option value="achievements">Досягнення</option>
@@ -622,28 +622,28 @@ export default function ReportDetailsPage() {
                       value={commentText}
                       onChange={(e) => setCommentText(e.target.value)}
                       rows={2}
-                      className="md:col-span-2 rounded-md border border-input bg-white px-3 py-2 text-sm"
+                      className="md:col-span-2 rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
                       placeholder="Зауваження до конкретної секції..."
                     />
                   </div>
                   <button
                     onClick={addComment}
                     disabled={commentSubmitting}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                   >
                     {commentSubmitting ? 'Додавання...' : 'Додати коментар'}
                   </button>
                 </div>
               )}
 
-              {comments.length === 0 && <p className="text-sm text-slate-500">Коментарів поки немає.</p>}
+              {comments.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">Коментарів поки немає.</p>}
               {comments.map((item) => (
-                <div key={item.id} className={`rounded-lg border p-3 ${item.status === 'resolved' ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200 bg-white'}`}>
+                <div key={item.id} className={`rounded-lg border p-3 ${item.status === 'resolved' ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-800 dark:bg-emerald-950/20' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800/70'}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-medium text-slate-900">{item.sectionLabel || item.sectionKey}</p>
-                      <p className="text-sm text-slate-700 mt-1">{item.text}</p>
-                      <p className="text-xs text-slate-500 mt-2">
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{item.sectionLabel || item.sectionKey}</p>
+                      <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">{item.text}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
                         {item.createdByName} · {new Date(item.createdAt).toLocaleString('uk-UA')}
                       </p>
                     </div>
@@ -657,12 +657,12 @@ export default function ReportDetailsPage() {
               ))}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4 dark:border-slate-700 dark:bg-slate-900">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-lg font-semibold">Зміни між версіями</h2>
                 <button
                   onClick={() => loadVersionDiff(fromVersion, toVersion)}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   Оновити
                 </button>
@@ -676,7 +676,7 @@ export default function ReportDetailsPage() {
                   max={Math.max(1, report.version || 1)}
                   value={fromVersion}
                   onChange={(e) => setFromVersion(Number(e.target.value) || 1)}
-                  className="w-24 rounded-md border border-input px-2 py-1"
+                  className="w-24 rounded-md border border-input px-2 py-1 bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100"
                 />
                 <label>До</label>
                 <input
@@ -685,32 +685,32 @@ export default function ReportDetailsPage() {
                   max={Math.max(1, report.version || 1)}
                   value={toVersion}
                   onChange={(e) => setToVersion(Number(e.target.value) || 1)}
-                  className="w-24 rounded-md border border-input px-2 py-1"
+                  className="w-24 rounded-md border border-input px-2 py-1 bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100"
                 />
-                {versionDiffLoading && <span className="text-xs text-slate-500">Порівняння...</span>}
+                {versionDiffLoading && <span className="text-xs text-slate-500 dark:text-slate-400">Порівняння...</span>}
               </div>
 
               {versionDiff?.changedFields?.length ? (
                 <div className="space-y-3">
                   {versionDiff.changedFields.slice(0, 8).map((change: any) => (
-                    <div key={change.key} className="rounded-lg border border-slate-200 p-3">
+                    <div key={change.key} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700 dark:bg-slate-800/70">
                       <p className="text-sm font-medium">{change.key}</p>
-                      <p className="mt-1 text-xs text-slate-500">Було:</p>
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{change.from || '—'}</p>
-                      <p className="mt-2 text-xs text-slate-500">Стало:</p>
-                      <p className="text-sm text-slate-900 whitespace-pre-wrap">{change.to || '—'}</p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Було:</p>
+                      <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{change.from || '—'}</p>
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Стало:</p>
+                      <p className="text-sm text-slate-900 dark:text-slate-100 whitespace-pre-wrap">{change.to || '—'}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">Суттєвих змін між вибраними версіями не знайдено.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Суттєвих змін між вибраними версіями не знайдено.</p>
               )}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-3 dark:border-slate-700 dark:bg-slate-900">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold">Вкладення до звіту</h2>
-                <label className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer">
+                <label className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
                   {uploadingAttachment ? 'Завантаження...' : 'Додати файл'}
                   <input
                     type="file"
@@ -723,18 +723,18 @@ export default function ReportDetailsPage() {
                   />
                 </label>
               </div>
-              {attachmentsLoading && <p className="text-sm text-slate-500">Завантаження...</p>}
-              {!attachmentsLoading && attachments.length === 0 && <p className="text-sm text-slate-500">Файлів поки немає.</p>}
+              {attachmentsLoading && <p className="text-sm text-slate-500 dark:text-slate-400">Завантаження...</p>}
+              {!attachmentsLoading && attachments.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">Файлів поки немає.</p>}
               {attachments.map((item) => (
-                <div key={item.id} className="rounded-lg border border-slate-200 p-3 flex items-center justify-between gap-3">
+                <div key={item.id} className="rounded-lg border border-slate-200 p-3 flex items-center justify-between gap-3 dark:border-slate-700 dark:bg-slate-800/70">
                   <div>
                     <p className="text-sm font-medium">{item.fileName}</p>
-                    <p className="text-xs text-slate-500">{Math.round((item.fileSize || 0) / 1024)} KB · {new Date(item.createdAt).toLocaleString('uk-UA')}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{Math.round((item.fileSize || 0) / 1024)} KB · {new Date(item.createdAt).toLocaleString('uk-UA')}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => downloadAttachment(item.id, item.fileName)}
-                      className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700"
+                      className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:text-slate-200"
                     >
                       Завантажити
                     </button>

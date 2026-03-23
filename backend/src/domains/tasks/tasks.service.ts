@@ -14,6 +14,7 @@ export class TasksService {
   async findAll(query: TaskQueryDto, user: any) {
     const { page = 1, limit = 50, status, priority, departmentId, assigneeId, reporterId, dueDateFrom, dueDateTo } = query;
     const skip = (page - 1) * limit;
+    const isLeadership = user.role === 'manager' || user.role === 'director';
 
     const where: any = {};
 
@@ -67,8 +68,7 @@ export class TasksService {
 
     const tasks = await this.prisma.task.findMany({
       where,
-      skip,
-      take: limit,
+      ...(isLeadership ? {} : { skip, take: limit }),
       include: {
         assignee: { select: { id: true, firstName: true, lastName: true, email: true } },
         reporter: { select: { id: true, firstName: true, lastName: true, role: true } },
@@ -82,11 +82,13 @@ export class TasksService {
       ],
     });
 
-    const visibleTasks = tasks.filter((task) => !this.shouldHideFromLeadership(task, user));
+    const visibleTasks = isLeadership ? tasks.filter((task) => !this.shouldHideFromLeadership(task, user)) : tasks;
+    const total = isLeadership ? visibleTasks.length : await this.prisma.task.count({ where });
+    const pageData = isLeadership ? visibleTasks.slice(skip, skip + limit) : visibleTasks;
 
     return {
-      data: visibleTasks.map(t => this.mapTask(t)),
-      meta: { page, limit, total: visibleTasks.length, totalPages: Math.ceil(visibleTasks.length / limit) },
+      data: pageData.map(t => this.mapTask(t)),
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
 

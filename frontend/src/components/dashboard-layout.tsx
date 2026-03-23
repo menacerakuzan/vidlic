@@ -272,21 +272,21 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setSearchOpen(true)}
                 placeholder="Пошук: звіти, задачі, співробітники..."
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-400"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               />
               {searchOpen && (searchQuery.trim().length >= 2 || searching) && (
-                <div className="absolute mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
-                  {searching && <p className="text-xs text-slate-500">Пошук...</p>}
+                <div className="absolute mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                  {searching && <p className="text-xs text-slate-500 dark:text-slate-400">Пошук...</p>}
                   {!searching && (
                     <div className="space-y-2 text-sm">
                       {searchData.reports.length > 0 && (
                         <div>
-                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Звіти</p>
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Звіти</p>
                           {searchData.reports.slice(0, 4).map((item) => (
                             <Link
                               key={`report-${item.id}`}
                               href={`/dashboard/reports/${item.id}`}
-                              className="block rounded px-2 py-1 hover:bg-slate-50"
+                              className="block rounded px-2 py-1 hover:bg-slate-50 dark:hover:bg-slate-800"
                               onClick={() => setSearchOpen(false)}
                             >
                               {item.title}
@@ -296,12 +296,12 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                       )}
                       {searchData.tasks.length > 0 && (
                         <div>
-                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Задачі</p>
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Задачі</p>
                           {searchData.tasks.slice(0, 4).map((item) => (
                             <Link
                               key={`task-${item.id}`}
                               href="/dashboard/tasks"
-                              className="block rounded px-2 py-1 hover:bg-slate-50"
+                              className="block rounded px-2 py-1 hover:bg-slate-50 dark:hover:bg-slate-800"
                               onClick={() => setSearchOpen(false)}
                             >
                               {item.title}
@@ -311,16 +311,16 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                       )}
                       {searchData.users.length > 0 && (
                         <div>
-                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Співробітники</p>
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Співробітники</p>
                           {searchData.users.slice(0, 4).map((item) => (
-                            <p key={`user-${item.id}`} className="rounded px-2 py-1 text-slate-700">
+                            <p key={`user-${item.id}`} className="rounded px-2 py-1 text-slate-700 dark:text-slate-200">
                               {item.fullName} · {item.departmentName}
                             </p>
                           ))}
                         </div>
                       )}
                       {!searchData.reports.length && !searchData.tasks.length && !searchData.users.length && (
-                        <p className="text-xs text-slate-500">Нічого не знайдено</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Нічого не знайдено</p>
                       )}
                     </div>
                   )}
@@ -371,10 +371,10 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
       {showOnboarding && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900">
             <h2 className="text-xl font-semibold">Короткий старт</h2>
-            <p className="mt-1 text-sm text-slate-600">Роль: {roleTitle}</p>
-            <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-slate-700">
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Роль: {roleTitle}</p>
+            <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-slate-700 dark:text-slate-200">
               {user?.role === 'specialist' && (
                 <>
                   <li>Створюйте чернетку звіту, генеруйте AI-текст, перевіряйте чек-лист та відправляйте на погодження.</li>

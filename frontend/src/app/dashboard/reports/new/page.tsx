@@ -92,7 +92,7 @@ export default function NewReport() {
                 <Label htmlFor="reportType">Тип звіту</Label>
                 <select
                   id="reportType"
-                  className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm"
+                  className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
                   {...register('reportType')}
                 >
                   <option value="weekly">Тижневий</option>
@@ -121,7 +121,7 @@ export default function NewReport() {
               <textarea
                 id="workDone"
                 rows={4}
-                className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
                 {...register('workDone')}
               />
               {errors.workDone && <p className="text-xs text-red-500">{errors.workDone.message}</p>}
@@ -133,7 +133,7 @@ export default function NewReport() {
                 <textarea
                   id="achievements"
                   rows={3}
-                  className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
                   {...register('achievements')}
                 />
               </div>
@@ -142,7 +142,7 @@ export default function NewReport() {
                 <textarea
                   id="problems"
                   rows={3}
-                  className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
                   {...register('problems')}
                 />
               </div>
@@ -153,7 +153,7 @@ export default function NewReport() {
               <textarea
                 id="nextWeekPlan"
                 rows={3}
-                className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
                 {...register('nextWeekPlan')}
               />
             </div>

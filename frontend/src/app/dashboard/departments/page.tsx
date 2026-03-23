@@ -302,30 +302,30 @@ export default function DepartmentsPage() {
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto space-y-6">
-        {actionError && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{actionError}</div>}
-        {actionSuccess && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{actionSuccess}</div>}
+        {actionError && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300">{actionError}</div>}
+        {actionSuccess && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">{actionSuccess}</div>}
         <div>
           <h1 className="text-2xl font-semibold font-display">Підрозділи</h1>
           <p className="text-slate-500 mt-1">Керування підрозділами та співробітниками</p>
         </div>
 
         {(isAdmin || isDirector) && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-5 gap-3">
-            <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder={isDirector ? 'Назва відділу' : 'Назва підрозділу'} value={newDepartmentName} onChange={(e) => setNewDepartmentName(e.target.value)} />
-            <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Код (напр. IT)" value={newDepartmentCode} onChange={(e) => setNewDepartmentCode(e.target.value)} />
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-5 gap-3 dark:border-slate-700 dark:bg-slate-900">
+            <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder={isDirector ? 'Назва відділу' : 'Назва підрозділу'} value={newDepartmentName} onChange={(e) => setNewDepartmentName(e.target.value)} />
+            <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="Код (напр. IT)" value={newDepartmentCode} onChange={(e) => setNewDepartmentCode(e.target.value)} />
             {isAdmin ? (
-              <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm" value={newDepartmentDirectorId} onChange={(e) => setNewDepartmentDirectorId(e.target.value)}>
+              <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={newDepartmentDirectorId} onChange={(e) => setNewDepartmentDirectorId(e.target.value)}>
                 <option value="">Директор (опційно)</option>
                 {directors.map((d) => (
                   <option key={d.id} value={d.id}>{d.firstName} {d.lastName}</option>
                 ))}
               </select>
             ) : (
-              <div className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 flex items-center">
+              <div className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 flex items-center dark:border-slate-700 dark:text-slate-400">
                 Директор відділу: {user?.firstName} {user?.lastName}
               </div>
             )}
-            <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm" value={newDepartmentManagerId} onChange={(e) => setNewDepartmentManagerId(e.target.value)}>
+            <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={newDepartmentManagerId} onChange={(e) => setNewDepartmentManagerId(e.target.value)}>
               <option value="">Керівник (опційно)</option>
               {managers.map((m) => (
                 <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
@@ -335,54 +335,54 @@ export default function DepartmentsPage() {
           </div>
         )}
 
-        {loading ? <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">Завантаження...</div> : (
+        {loading ? <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Завантаження...</div> : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold">Підрозділи</div>
+            <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden dark:border-slate-700 dark:bg-slate-900">
+              <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold dark:border-slate-700">Підрозділи</div>
               {(isDirector ? departments.filter((d) => d.id === user?.department?.id) : departments).map((department) => (
                 <button
                   key={department.id}
                   onClick={() => setSelectedDepartmentId(department.id)}
-                  className={`w-full text-left px-4 py-3 border-b border-slate-100 text-sm ${selectedDepartmentId === department.id ? 'bg-slate-50 font-medium' : ''}`}
+                  className={`w-full text-left px-4 py-3 border-b border-slate-100 text-sm dark:border-slate-700 ${selectedDepartmentId === department.id ? 'bg-slate-50 dark:bg-slate-800 font-medium' : ''}`}
                 >
                   <div>{department.nameUk || department.name}</div>
-                  <div className="text-xs text-slate-500 mt-1">{department.code} • {department.usersCount} осіб</div>
-                  <div className="text-xs text-slate-400 mt-1">
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{department.code} • {department.usersCount} осіб</div>
+                  <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                     Керівник: {department.manager ? `${department.manager.firstName} ${department.manager.lastName}` : '-'} • Директор: {department.director ? `${department.director.firstName} ${department.director.lastName}` : '-'}
                   </div>
                 </button>
               ))}
             </div>
 
-            <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold">Команда {selectedDepartment ? `(${selectedDepartment.nameUk || selectedDepartment.name})` : ''}</div>
+            <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white overflow-hidden dark:border-slate-700 dark:bg-slate-900">
+              <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold dark:border-slate-700">Команда {selectedDepartment ? `(${selectedDepartment.nameUk || selectedDepartment.name})` : ''}</div>
 
               {isAdmin && selectedDepartmentId && (
-                <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 border-b border-slate-100 bg-slate-50">
-                  <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm" value={selectedDirectorId} onChange={(e) => setSelectedDirectorId(e.target.value)}>
+                <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 border-b border-slate-100 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
+                  <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedDirectorId} onChange={(e) => setSelectedDirectorId(e.target.value)}>
                     <option value="">Директор не призначений</option>
                     {directors.map((d) => (
                       <option key={d.id} value={d.id}>{d.firstName} {d.lastName}</option>
                     ))}
                   </select>
-                  <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm" value={selectedManagerId} onChange={(e) => setSelectedManagerId(e.target.value)}>
+                  <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedManagerId} onChange={(e) => setSelectedManagerId(e.target.value)}>
                     <option value="">Керівник не призначений</option>
                     {managers.map((m) => (
                       <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
                     ))}
                   </select>
-                  <button disabled={savingLeads} onClick={saveDepartmentLeads} className="h-10 rounded-lg border border-slate-300 text-sm font-medium disabled:opacity-60">
+                  <button disabled={savingLeads} onClick={saveDepartmentLeads} className="h-10 rounded-lg border border-slate-300 text-sm font-medium disabled:opacity-60 dark:border-slate-600">
                     {savingLeads ? 'Збереження...' : 'Зберегти керівництво'}
                   </button>
                 </div>
               )}
 
               {canManageEmployees && selectedDepartmentId && (
-                <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-3 border-b border-slate-100">
-                  <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} />
-                  <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Ім'я" value={newUserFirstName} onChange={(e) => setNewUserFirstName(e.target.value)} />
-                  <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Прізвище" value={newUserLastName} onChange={(e) => setNewUserLastName(e.target.value)} />
-                  <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm" value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as 'specialist' | 'manager' | 'director')}>
+                <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-3 border-b border-slate-100 dark:border-slate-700">
+                  <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="Email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} />
+                  <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="Ім'я" value={newUserFirstName} onChange={(e) => setNewUserFirstName(e.target.value)} />
+                  <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="Прізвище" value={newUserLastName} onChange={(e) => setNewUserLastName(e.target.value)} />
+                  <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as 'specialist' | 'manager' | 'director')}>
                     <option value="specialist">{getRoleLabel('specialist')}</option>
                     <option value="manager">{getRoleLabel('manager')}</option>
                     {isAdmin && <option value="director">{getRoleLabel('director')}</option>}
@@ -392,12 +392,12 @@ export default function DepartmentsPage() {
               )}
 
               <div>
-                {team.length === 0 && <div className="px-4 py-6 text-sm text-slate-500">Порожньо</div>}
+                {team.length === 0 && <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">Порожньо</div>}
                 {team.map((member) => (
-                  <div key={member.id} className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                  <div key={member.id} className="px-4 py-3 border-b border-slate-100 flex items-center justify-between dark:border-slate-700">
                     <div>
                       <p className="text-sm font-medium">{member.firstName} {member.lastName}</p>
-                      <p className="text-xs text-slate-500">{member.email} • {getRoleLabel(member.role)}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{member.email} • {getRoleLabel(member.role)}</p>
                     </div>
                     {canManageEmployees && member.role !== 'director' && member.role !== 'admin' && (
                       <button onClick={() => deleteEmployee(member.id)} className="text-sm text-rose-600 hover:underline">Видалити</button>
@@ -408,34 +408,34 @@ export default function DepartmentsPage() {
             </div>
 
             {selectedDepartmentId && canEditTemplate && (
-              <div className="lg:col-span-3 rounded-2xl border border-slate-200 bg-white overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold">
+              <div className="lg:col-span-3 rounded-2xl border border-slate-200 bg-white overflow-hidden dark:border-slate-700 dark:bg-slate-900">
+                <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold dark:border-slate-700">
                   Конструктор шаблону звіту ({selectedDepartment?.nameUk || selectedDepartment?.name || '-'})
                 </div>
                 <div className="p-4 space-y-3">
                   <input
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
+                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     value={templateTitlePattern}
                     onChange={(e) => setTemplateTitlePattern(e.target.value)}
                     placeholder="Заголовок (напр. ЗВІТ)"
                   />
                   <textarea
                     rows={2}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     value={templateHeaderPattern}
                     onChange={(e) => setTemplateHeaderPattern(e.target.value)}
                     placeholder="Шапка: можна {{departmentName}}, {{period}}, {{title}}, {{author}}"
                   />
                   <textarea
                     rows={5}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     value={templateAiPrompt}
                     onChange={(e) => setTemplateAiPrompt(e.target.value)}
                     placeholder="Додатковий AI-промпт для цього підрозділу"
                   />
                   <textarea
                     rows={8}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     value={templateSectionsRaw}
                     onChange={(e) => setTemplateSectionsRaw(e.target.value)}
                     placeholder='JSON секцій'
@@ -443,7 +443,7 @@ export default function DepartmentsPage() {
                   <button
                     onClick={saveTemplate}
                     disabled={savingTemplate}
-                    className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium disabled:opacity-60"
+                    className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium disabled:opacity-60 dark:border-slate-600"
                   >
                     {savingTemplate ? 'Збереження...' : 'Зберегти шаблон'}
                   </button>

@@ -199,7 +199,7 @@ export default function AnalyticsPage() {
                     max={23}
                     value={item.hour}
                     onChange={(e) => upsertDigest(frequency, { hour: Number(e.target.value) || 0 })}
-                    className="w-20 rounded border border-slate-300 px-2 py-1"
+                    className="w-20 rounded border border-slate-300 px-2 py-1 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   />
                   <label>Хвилина</label>
                   <input
@@ -208,7 +208,7 @@ export default function AnalyticsPage() {
                     max={59}
                     value={item.minute}
                     onChange={(e) => upsertDigest(frequency, { minute: Number(e.target.value) || 0 })}
-                    className="w-20 rounded border border-slate-300 px-2 py-1"
+                    className="w-20 rounded border border-slate-300 px-2 py-1 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   />
                   {frequency === 'weekly' && (
                     <>
@@ -216,7 +216,7 @@ export default function AnalyticsPage() {
                       <input
                         value={item.weekdays || '1,2,3,4,5'}
                         onChange={(e) => upsertDigest(frequency, { weekdays: e.target.value })}
-                        className="w-40 rounded border border-slate-300 px-2 py-1"
+                        className="w-40 rounded border border-slate-300 px-2 py-1 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                         placeholder="1,2,3,4,5"
                       />
                     </>

@@ -215,7 +215,7 @@ function WidgetRow({ widget, onSpanChange }: { widget: UiWidgetConfig; onSpanCha
             max={12}
             value={widget.span.col}
             onChange={(e) => onSpanChange(widget.id, Number(e.target.value), undefined)}
-            className="w-16 rounded-lg bg-white/70 px-2 py-1 text-xs"
+            className="w-16 rounded-lg bg-white/70 px-2 py-1 text-xs text-slate-900 dark:bg-slate-800 dark:text-slate-100"
           />
           <label className="text-xs text-slate-500">Row</label>
           <input
@@ -224,7 +224,7 @@ function WidgetRow({ widget, onSpanChange }: { widget: UiWidgetConfig; onSpanCha
             max={6}
             value={widget.span.row}
             onChange={(e) => onSpanChange(widget.id, undefined, Number(e.target.value))}
-            className="w-16 rounded-lg bg-white/70 px-2 py-1 text-xs"
+            className="w-16 rounded-lg bg-white/70 px-2 py-1 text-xs text-slate-900 dark:bg-slate-800 dark:text-slate-100"
           />
         </div>
       </GlassCard>
