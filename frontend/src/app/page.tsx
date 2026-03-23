@@ -49,12 +49,10 @@ export default function LoginPage() {
       <div className="w-full max-w-md animate-fade-in">
         <div className="text-center mb-8">
           <div className="mb-3 flex justify-center">
-            <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-white shadow-sm">
-              <BrandLogo className="h-6 w-6 text-white" />
-            </span>
+            <BrandLogo className="h-12 w-12 text-primary" />
           </div>
           <h1 className="text-3xl font-semibold text-slate-900 dark:text-white mb-2">
-            Відлік
+            ВІДЛІК
           </h1>
           <p className="text-slate-500 dark:text-slate-400">
             Корпоративна система звітності

@@ -185,11 +185,9 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             <div className="fixed inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
             <div className="fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-800 shadow-xl">
               <div className="flex items-center justify-between p-4 border-b">
-                <span className="inline-flex items-center gap-2 text-xl font-semibold">
-                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-white">
-                    <BrandLogo className="h-4 w-4 text-white" />
-                  </span>
-                  Відлік
+                <span className="inline-flex items-center gap-3 text-2xl font-semibold tracking-wide">
+                  <BrandLogo className="h-8 w-8 text-primary" />
+                  ВІДЛІК
                 </span>
                 <button onClick={() => setSidebarOpen(false)}>
                   <X className="w-5 h-5" />
@@ -222,11 +220,9 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-64 lg:flex-col">
         <div className="flex flex-col flex-1 min-h-0 bg-white/80 dark:bg-slate-900/70 backdrop-blur-xl border-r border-white/10">
           <div className="flex items-center h-16 px-6 border-b border-white/10">
-            <span className="inline-flex items-center gap-2 text-xl font-semibold font-display">
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-white">
-                <BrandLogo className="h-4 w-4 text-white" />
-              </span>
-              Відлік
+            <span className="inline-flex items-center gap-3 text-2xl font-semibold font-display tracking-wide">
+              <BrandLogo className="h-8 w-8 text-primary" />
+              ВІДЛІК
             </span>
           </div>
           <nav className="flex-1 p-4 space-y-1">

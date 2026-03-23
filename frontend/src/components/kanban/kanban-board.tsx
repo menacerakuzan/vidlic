@@ -24,9 +24,9 @@ interface KanbanBoardProps {
 }
 
 const columns: { id: KanbanTask['status']; label: string; className: string }[] = [
-  { id: 'todo', label: 'Заплановано', className: 'bg-slate-50 border-slate-200' },
-  { id: 'in_progress', label: 'В роботі', className: 'bg-amber-50 border-amber-200' },
-  { id: 'done', label: 'Виконано', className: 'bg-emerald-50 border-emerald-200' },
+  { id: 'todo', label: 'Заплановано', className: 'bg-slate-50 border-slate-200 dark:bg-slate-900/50 dark:border-slate-700' },
+  { id: 'in_progress', label: 'В роботі', className: 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/60' },
+  { id: 'done', label: 'Виконано', className: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800/60' },
 ]
 
 export function KanbanBoard({ tasks, onStatusChange }: KanbanBoardProps) {
@@ -103,23 +103,23 @@ function KanbanCard({ task }: { task: KanbanTask }) {
       {...attributes}
       {...listeners}
       className={
-        `rounded-xl bg-white/70 px-4 py-3 text-sm text-slate-900 shadow-sm cursor-grab active:cursor-grabbing ${
+        `rounded-xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 px-4 py-3 text-sm text-slate-900 dark:text-slate-100 shadow-sm cursor-grab active:cursor-grabbing ${
           isDragging ? 'opacity-60' : ''
         }`
       }
     >
       <p className="font-medium">{task.title}</p>
-      <p className="text-xs text-slate-500 mt-1">
+      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
         {task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : 'Без виконавця'}
       </p>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-slate-500 dark:text-slate-400">
         Автор: {task.reporter ? `${task.reporter.firstName} ${task.reporter.lastName}` : '—'}
       </p>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-slate-500 dark:text-slate-400">
         Пріоритет: {task.priority || 'medium'}
         {task.executionHours ? ` · ${task.executionHours} год` : ''}
       </p>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-slate-500 dark:text-slate-400">
         Термін: {task.dueDate ? new Date(task.dueDate).toLocaleDateString('uk-UA') : 'не вказано'}
         {task.isPrivate ? ' · Приватна' : ''}
       </p>

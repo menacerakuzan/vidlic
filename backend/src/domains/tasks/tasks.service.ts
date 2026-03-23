@@ -24,10 +24,32 @@ export class TasksService {
       ];
     } else if (user.role === 'manager') {
       where.departmentId = user.departmentId;
-      where.isPrivate = false;
+      where.NOT = {
+        OR: [
+          { isPrivate: true },
+          {
+            AND: [
+              { reportId: null },
+              { assigneeId: null },
+              { reporter: { is: { role: 'specialist' } } },
+            ],
+          },
+        ],
+      };
     } else if (user.role === 'director') {
       where.departmentId = user.departmentId;
-      where.isPrivate = false;
+      where.NOT = {
+        OR: [
+          { isPrivate: true },
+          {
+            AND: [
+              { reportId: null },
+              { assigneeId: null },
+              { reporter: { is: { role: 'specialist' } } },
+            ],
+          },
+        ],
+      };
     }
 
     if (status) where.status = status;
@@ -43,29 +65,28 @@ export class TasksService {
       };
     }
 
-    const [tasks, total] = await Promise.all([
-      this.prisma.task.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          assignee: { select: { id: true, firstName: true, lastName: true, email: true } },
-          reporter: { select: { id: true, firstName: true, lastName: true } },
-          department: { select: { id: true, name: true, nameUk: true } },
-          report: { select: { id: true, title: true, reportType: true } },
-        },
-        orderBy: [
-          { priority: 'desc' },
-          { dueDate: 'asc' },
-          { createdAt: 'desc' },
-        ],
-      }),
-      this.prisma.task.count({ where }),
-    ]);
+    const tasks = await this.prisma.task.findMany({
+      where,
+      skip,
+      take: limit,
+      include: {
+        assignee: { select: { id: true, firstName: true, lastName: true, email: true } },
+        reporter: { select: { id: true, firstName: true, lastName: true, role: true } },
+        department: { select: { id: true, name: true, nameUk: true } },
+        report: { select: { id: true, title: true, reportType: true } },
+      },
+      orderBy: [
+        { priority: 'desc' },
+        { dueDate: 'asc' },
+        { createdAt: 'desc' },
+      ],
+    });
+
+    const visibleTasks = tasks.filter((task) => !this.shouldHideFromLeadership(task, user));
 
     return {
-      data: tasks.map(t => this.mapTask(t)),
-      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      data: visibleTasks.map(t => this.mapTask(t)),
+      meta: { page, limit, total: visibleTasks.length, totalPages: Math.ceil(visibleTasks.length / limit) },
     };
   }
 
@@ -79,10 +100,32 @@ export class TasksService {
       ];
     } else if (user.role === 'manager') {
       where.departmentId = user.departmentId;
-      where.isPrivate = false;
+      where.NOT = {
+        OR: [
+          { isPrivate: true },
+          {
+            AND: [
+              { reportId: null },
+              { assigneeId: null },
+              { reporter: { is: { role: 'specialist' } } },
+            ],
+          },
+        ],
+      };
     } else if (user.role === 'director') {
       where.departmentId = user.departmentId;
-      where.isPrivate = false;
+      where.NOT = {
+        OR: [
+          { isPrivate: true },
+          {
+            AND: [
+              { reportId: null },
+              { assigneeId: null },
+              { reporter: { is: { role: 'specialist' } } },
+            ],
+          },
+        ],
+      };
     } else if (departmentId) {
       where.departmentId = departmentId;
     }
@@ -91,7 +134,7 @@ export class TasksService {
       where,
       include: {
         assignee: { select: { id: true, firstName: true, lastName: true } },
-        reporter: { select: { id: true, firstName: true, lastName: true } },
+        reporter: { select: { id: true, firstName: true, lastName: true, role: true } },
         department: { select: { id: true, nameUk: true } },
       },
       orderBy: [
@@ -100,10 +143,12 @@ export class TasksService {
       ],
     });
 
+    const visibleTasks = tasks.filter((task) => !this.shouldHideFromLeadership(task, user));
+
     const kanban = {
-      todo: tasks.filter(t => t.status === 'todo').map(t => this.mapTask(t)),
-      in_progress: tasks.filter(t => t.status === 'in_progress').map(t => this.mapTask(t)),
-      done: tasks.filter(t => t.status === 'done').map(t => this.mapTask(t)),
+      todo: visibleTasks.filter(t => t.status === 'todo').map(t => this.mapTask(t)),
+      in_progress: visibleTasks.filter(t => t.status === 'in_progress').map(t => this.mapTask(t)),
+      done: visibleTasks.filter(t => t.status === 'done').map(t => this.mapTask(t)),
     };
 
     return kanban;
@@ -186,7 +231,12 @@ export class TasksService {
   }
 
   async update(id: string, dto: UpdateTaskDto, user: any) {
-    const task = await this.prisma.task.findUnique({ where: { id } });
+    const task = await this.prisma.task.findUnique({
+      where: { id },
+      include: {
+        reporter: { select: { id: true, role: true } },
+      },
+    });
 
     if (!task) {
       throw new NotFoundException('Задачу не знайдено');
@@ -230,7 +280,12 @@ export class TasksService {
   }
 
   async updateStatus(id: string, dto: UpdateTaskStatusDto, user: any) {
-    const task = await this.prisma.task.findUnique({ where: { id } });
+    const task = await this.prisma.task.findUnique({
+      where: { id },
+      include: {
+        reporter: { select: { id: true, role: true } },
+      },
+    });
 
     if (!task) {
       throw new NotFoundException('Задачу не знайдено');
@@ -269,7 +324,12 @@ export class TasksService {
   }
 
   async addComment(id: string, dto: CreateTaskCommentDto, userId: string) {
-    const task = await this.prisma.task.findUnique({ where: { id } });
+    const task = await this.prisma.task.findUnique({
+      where: { id },
+      include: {
+        reporter: { select: { id: true, role: true } },
+      },
+    });
 
     if (!task) {
       throw new NotFoundException('Задачу не знайдено');
@@ -379,7 +439,7 @@ export class TasksService {
 
   private canManageTask(task: any, user: any) {
     if (user.role === 'admin') return true;
-    if (task.isPrivate && task.reporterId !== user.id && (user.role === 'director' || user.role === 'manager')) return false;
+    if (this.shouldHideFromLeadership(task, user) && task.reporterId !== user.id) return false;
     if ((user.role === 'director' || user.role === 'manager') && task.departmentId === user.departmentId) return true;
     if (user.role === 'specialist' && task.reporterId === user.id) return true;
     return false;
@@ -387,7 +447,7 @@ export class TasksService {
 
   private canMoveTaskStatus(task: any, user: any) {
     if (user.role === 'admin') return true;
-    if (task.isPrivate && task.reporterId !== user.id && (user.role === 'director' || user.role === 'manager')) return false;
+    if (this.shouldHideFromLeadership(task, user) && task.reporterId !== user.id) return false;
     if ((user.role === 'director' || user.role === 'manager') && task.departmentId === user.departmentId) return true;
     if (user.role === 'specialist' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
     return false;
@@ -395,10 +455,23 @@ export class TasksService {
 
   private canViewTask(task: any, user: any) {
     if (user.role === 'admin') return true;
-    if (task.isPrivate && task.reporterId !== user.id && (user.role === 'director' || user.role === 'manager')) return false;
+    if (this.shouldHideFromLeadership(task, user) && task.reporterId !== user.id) return false;
     if ((user.role === 'director' || user.role === 'manager') && task.departmentId === user.departmentId) return true;
     if (user.role === 'specialist' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
     return false;
+  }
+
+  private shouldHideFromLeadership(task: any, user: any) {
+    if (!(user.role === 'director' || user.role === 'manager')) return false;
+    if (task.isPrivate) return true;
+
+    const reporterRole = task?.reporter?.role;
+    const isLegacyPrivateSpecialistTask =
+      reporterRole === 'specialist' &&
+      !task.reportId &&
+      (!task.assigneeId || task.assigneeId === task.reporterId);
+
+    return isLegacyPrivateSpecialistTask;
   }
 
   async getDepartmentTransparency() {

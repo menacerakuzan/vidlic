@@ -1,6 +1,6 @@
 'use client'
 
-export function BrandLogo({ className = 'h-7 w-7', title = 'Відлік' }: { className?: string; title?: string }) {
+export function BrandLogo({ className = 'h-9 w-9', title = 'Відлік' }: { className?: string; title?: string }) {
   return (
     <svg
       viewBox="0 0 512 512"

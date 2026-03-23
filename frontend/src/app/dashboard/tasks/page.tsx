@@ -273,9 +273,9 @@ export default function TasksPage() {
         </div>
 
         {canFilterByEmployee && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
             <p className="text-sm font-medium mb-2">Перегляд задач співробітника</p>
-            <select value={filterAssigneeId} onChange={(e) => setFilterAssigneeId(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm min-w-[300px]">
+            <select value={filterAssigneeId} onChange={(e) => setFilterAssigneeId(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm min-w-[300px] bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
               <option value="">Усі співробітники підрозділу</option>
               {availableSorted.map((member) => (
                 <option key={member.id} value={member.id}>
@@ -286,21 +286,21 @@ export default function TasksPage() {
           </div>
         )}
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-4 gap-3 dark:border-slate-700 dark:bg-slate-900">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="md:col-span-2 h-10 rounded-lg border border-slate-300 px-3 text-sm"
+            className="md:col-span-2 h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             placeholder="Назва задачі"
           />
-          <select value={priority} onChange={(e) => setPriority(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm">
+          <select value={priority} onChange={(e) => setPriority(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
             <option value="low">{getPriorityLabel('low')}</option>
             <option value="medium">{getPriorityLabel('medium')}</option>
             <option value="high">{getPriorityLabel('high')}</option>
             <option value="critical">{getPriorityLabel('critical')}</option>
           </select>
           {canAssign ? (
-            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm">
+            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
               <option value="">Без виконавця</option>
               {availableSorted.map((member) => (
                 <option key={member.id} value={member.id}>
@@ -309,13 +309,13 @@ export default function TasksPage() {
               ))}
             </select>
           ) : (
-            <div className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 flex items-center">Призначення: через керівника/директора</div>
+            <div className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 flex items-center dark:border-slate-700 dark:text-slate-400">Призначення: через керівника/директора</div>
           )}
           <input
             type="date"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+            className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           />
           <input
             type="number"
@@ -323,7 +323,7 @@ export default function TasksPage() {
             max={999}
             value={executionHours}
             onChange={(e) => setExecutionHours(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+            className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             placeholder="Час (год)"
           />
           <button disabled={creating} onClick={createTask} className="md:col-span-4 h-10 rounded-lg bg-primary text-white text-sm font-medium disabled:opacity-60">
@@ -331,39 +331,39 @@ export default function TasksPage() {
           </button>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
           <h2 className="text-lg font-semibold mb-3">Прозорість між підрозділами</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {transparency.map((row) => (
-              <div key={row.departmentId || row.departmentCode} className="rounded-lg border border-slate-200 p-3">
+              <div key={row.departmentId || row.departmentCode} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700 dark:bg-slate-800/70">
                 <p className="text-sm font-semibold">{row.departmentName}</p>
-                <p className="text-xs text-slate-500 mt-1">{row.departmentCode}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{row.departmentCode}</p>
                 <p className="text-sm mt-2">Всього: <b>{row.total}</b></p>
-                <p className="text-xs text-slate-600">Todo: {row.todo} · In Progress: {row.inProgress} · Done: {row.done}</p>
-                <p className="text-xs text-slate-600">Critical: {row.critical} · High: {row.high} · Medium: {row.medium} · Low: {row.low}</p>
+                <p className="text-xs text-slate-600 dark:text-slate-300">Todo: {row.todo} · In Progress: {row.inProgress} · Done: {row.done}</p>
+                <p className="text-xs text-slate-600 dark:text-slate-300">Critical: {row.critical} · High: {row.high} · Medium: {row.medium} · Low: {row.low}</p>
               </div>
             ))}
-            {transparency.length === 0 && <p className="text-sm text-slate-500">Дані поки відсутні.</p>}
+            {transparency.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">Дані поки відсутні.</p>}
           </div>
         </div>
 
         {loading ? (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">Завантаження...</div>
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Завантаження...</div>
         ) : (
           <KanbanBoard tasks={kanbanTasks} onStatusChange={updateStatus} />
         )}
 
         {user?.role === 'specialist' && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
             <h2 className="text-lg font-semibold">Мої створені задачі</h2>
             {specialistOwnTasks.length === 0 && (
-              <p className="text-sm text-slate-500">У вас немає власних задач для видалення.</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">У вас немає власних задач для видалення.</p>
             )}
             {specialistOwnTasks.map((task) => (
-              <div key={task.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+              <div key={task.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                 <div>
                   <p className="text-sm font-medium">{task.title}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Статус: {task.status} {task.assignee ? `· Виконавець: ${task.assignee.firstName} ${task.assignee.lastName}` : ''}
                   </p>
                 </div>
@@ -379,10 +379,10 @@ export default function TasksPage() {
           </div>
         )}
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Вкладення до задач</h2>
-            <label className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer">
+            <label className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
               {uploadingAttachment ? 'Завантаження...' : 'Додати файл'}
               <input
                 type="file"
@@ -399,7 +399,7 @@ export default function TasksPage() {
           <select
             value={selectedTaskId}
             onChange={(e) => setSelectedTaskId(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm min-w-[320px]"
+            className="h-10 rounded-lg border border-slate-300 px-3 text-sm min-w-[320px] bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           >
             {tasks.map((task) => (
               <option key={task.id} value={task.id}>
@@ -408,18 +408,18 @@ export default function TasksPage() {
             ))}
           </select>
 
-          {attachmentsLoading && <p className="text-sm text-slate-500">Завантаження...</p>}
-          {!attachmentsLoading && taskAttachments.length === 0 && <p className="text-sm text-slate-500">Файлів поки немає.</p>}
+          {attachmentsLoading && <p className="text-sm text-slate-500 dark:text-slate-400">Завантаження...</p>}
+          {!attachmentsLoading && taskAttachments.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">Файлів поки немає.</p>}
           {taskAttachments.map((item) => (
-            <div key={item.id} className="rounded-lg border border-slate-200 p-3 flex items-center justify-between">
+            <div key={item.id} className="rounded-lg border border-slate-200 p-3 flex items-center justify-between dark:border-slate-700 dark:bg-slate-800/70">
               <div>
                 <p className="text-sm font-medium">{item.fileName}</p>
-                <p className="text-xs text-slate-500">{Math.round((item.fileSize || 0) / 1024)} KB</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{Math.round((item.fileSize || 0) / 1024)} KB</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => downloadAttachment(item.id, item.fileName)}
-                  className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700"
+                  className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:text-slate-200"
                 >
                   Завантажити
                 </button>
