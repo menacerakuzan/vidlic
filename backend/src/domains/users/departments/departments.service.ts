@@ -15,7 +15,12 @@ export class DepartmentsService {
     const departments = await this.prisma.department.findMany({
       include: {
         parent: true,
-        children: true,
+        children: {
+          select: {
+            id: true,
+            _count: { select: { users: true } },
+          },
+        },
         manager: {
           select: { id: true, firstName: true, lastName: true, email: true }
         },
@@ -41,7 +46,7 @@ export class DepartmentsService {
       clerk: d.clerk,
       director: d.director,
       childrenCount: d.children.length,
-      usersCount: d._count.users,
+      usersCount: d._count.users + d.children.reduce((sum, child) => sum + child._count.users, 0),
       createdAt: d.createdAt,
     }));
   }
