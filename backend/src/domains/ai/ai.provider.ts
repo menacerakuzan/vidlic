@@ -35,16 +35,24 @@ export interface ManagerSubmissionOutput {
 
 @Injectable()
 export class AiProviderService {
+  private readonly provider = (this.clean(process.env.AI_PROVIDER) || 'auto').toLowerCase();
   private readonly endpoint = this.clean(process.env.AI_PROVIDER_URL);
   private readonly openAiApiKey = this.clean(process.env.OPENAI_API_KEY);
   private readonly openAiModel = this.clean(process.env.OPENAI_MODEL) || 'gpt-4o-mini';
-  private readonly cloudflareAccountId = this.clean(process.env.CF_ACCOUNT_ID);
-  private readonly cloudflareApiToken = this.clean(process.env.CF_API_TOKEN);
-  private readonly cloudflareModel = this.clean(process.env.CF_MODEL) || '@cf/meta/llama-3.1-8b-instruct';
   private readonly geminiApiKey = this.clean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
   private readonly geminiModel = this.clean(process.env.GEMINI_MODEL) || 'gemini-2.0-flash';
 
   async summarize(input: AiSummaryInput): Promise<AiSummaryOutput | null> {
+    if (this.provider === 'openai') {
+      return this.openAiApiKey ? this.callOpenAiSummary(input) : null;
+    }
+    if (this.provider === 'gemini' || this.provider === 'google') {
+      return this.geminiApiKey ? this.callGemini(input) : null;
+    }
+    if (this.provider === 'generic' || this.provider === 'custom') {
+      return this.endpoint ? this.callGenericProvider(input) : null;
+    }
+
     if (this.endpoint) {
       const generic = await this.callGenericProvider(input);
       if (generic) return generic;
@@ -55,11 +63,6 @@ export class AiProviderService {
       if (openAi) return openAi;
     }
 
-    if (this.isCloudflareEnabled()) {
-      const cloudflare = await this.callCloudflareSummary(input);
-      if (cloudflare) return cloudflare;
-    }
-
     if (this.geminiApiKey) {
       return this.callGemini(input);
     }
@@ -68,6 +71,16 @@ export class AiProviderService {
   }
 
   async buildManagerSubmission(input: ManagerSubmissionInput): Promise<ManagerSubmissionOutput | null> {
+    if (this.provider === 'openai') {
+      return this.openAiApiKey ? this.callOpenAiManagerSubmission(input) : null;
+    }
+    if (this.provider === 'gemini' || this.provider === 'google') {
+      return this.geminiApiKey ? this.callGeminiManagerSubmission(input) : null;
+    }
+    if (this.provider === 'generic' || this.provider === 'custom') {
+      return this.endpoint ? this.callGenericManagerSubmission(input) : null;
+    }
+
     if (this.endpoint) {
       const generic = await this.callGenericManagerSubmission(input);
       if (generic) return generic;
@@ -76,11 +89,6 @@ export class AiProviderService {
     if (this.openAiApiKey) {
       const openAi = await this.callOpenAiManagerSubmission(input);
       if (openAi) return openAi;
-    }
-
-    if (this.isCloudflareEnabled()) {
-      const cloudflare = await this.callCloudflareManagerSubmission(input);
-      if (cloudflare) return cloudflare;
     }
 
     if (this.geminiApiKey) {
@@ -368,70 +376,6 @@ export class AiProviderService {
     }
   }
 
-  private async callCloudflareSummary(input: AiSummaryInput): Promise<AiSummaryOutput | null> {
-    const prompt = [
-      'You are an enterprise analytics assistant.',
-      'Summarize the report content in Ukrainian.',
-      'Return strict JSON with keys: summary, highlights (array), risks (array), nextSteps (array).',
-      `Title: ${input.title || ''}`,
-      `Content: ${JSON.stringify(input.content || {})}`,
-    ].join('\n');
-
-    const text = await this.callCloudflareText(prompt);
-    if (!text) return null;
-
-    const parsed = this.safeJson(text);
-    if (!parsed) return null;
-
-    return {
-      summary: parsed.summary || '',
-      highlights: parsed.highlights || [],
-      risks: parsed.risks || [],
-      nextSteps: parsed.nextSteps || [],
-    };
-  }
-
-  private async callCloudflareManagerSubmission(input: ManagerSubmissionInput): Promise<ManagerSubmissionOutput | null> {
-    const prompt = this.buildManagerSubmissionPrompt(input);
-    const text = await this.callCloudflareText(prompt);
-    if (!text) return null;
-
-    return this.normalizeManagerSubmissionFromText(text, input);
-  }
-
-  private async callCloudflareText(prompt: string): Promise<string | null> {
-    const fetchFn = (...args: any[]) => (global as any).fetch(...args);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
-
-    try {
-      const response = await fetchFn(
-        `https://api.cloudflare.com/client/v4/accounts/${this.cloudflareAccountId}/ai/run/${this.cloudflareModel}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.cloudflareApiToken}`,
-          },
-          body: JSON.stringify({
-            messages: [{ role: 'user', content: prompt }],
-            max_tokens: 1800,
-            temperature: 0.2,
-          }),
-          signal: controller.signal,
-        },
-      );
-
-      if (!response.ok) return null;
-      const data = await response.json();
-      return data?.result?.response || data?.result?.output_text || null;
-    } catch {
-      return null;
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
   private buildManagerSubmissionPrompt(input: ManagerSubmissionInput): string {
     return [
       'Ти — головний спеціаліст з підготовки офіційної звітності в Органах державної адміністрації (ОДА).',
@@ -480,50 +424,6 @@ export class AiProviderService {
   private buildModelFallbacks(): string[] {
     const models = [this.geminiModel, 'gemini-1.5-flash', 'gemini-1.5-pro'];
     return [...new Set(models.filter(Boolean))];
-  }
-
-  private isCloudflareEnabled(): boolean {
-    return !!this.cloudflareAccountId && !!this.cloudflareApiToken;
-  }
-
-  private normalizeManagerSubmissionFromText(
-    text: string,
-    input: ManagerSubmissionInput,
-  ): ManagerSubmissionOutput {
-    const parsed = this.safeJson(text);
-    if (parsed?.bodyText) {
-      const bodyText = this.enforceOfficialStyle(String(parsed.bodyText), input.reportContent);
-      return {
-        documentTitle: parsed.documentTitle || 'ЗВІТ',
-        headerLines: Array.isArray(parsed.headerLines) ? parsed.headerLines : [],
-        bodyText,
-        style: {
-          fontFamily: parsed.style?.fontFamily || 'Times New Roman',
-          fontSize: Number(parsed.style?.fontSize) || 14,
-        },
-      };
-    }
-
-    const cleaned = this.stripCodeFences(text).trim();
-    return {
-      documentTitle: 'ЗВІТ',
-      headerLines: [
-        `Про виконання роботи ${input.departmentFullName}`,
-        input.periodLabel,
-      ],
-      bodyText: this.enforceOfficialStyle(
-        cleaned || 'Не вдалося отримати текст від AI. Використайте ручне редагування.',
-        input.reportContent,
-      ),
-      style: {
-        fontFamily: 'Times New Roman',
-        fontSize: 14,
-      },
-    };
-  }
-
-  private stripCodeFences(value: string): string {
-    return value.replace(/```[a-zA-Z]*\n?/g, '').replace(/```/g, '');
   }
 
   private enforceOfficialStyle(text: string, reportContent: Record<string, any>): string {

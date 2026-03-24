@@ -62,12 +62,12 @@ export class DepartmentsController {
   }
 
   @Put(':id')
-  @Roles('admin')
+  @Roles('admin', 'director')
   @Permissions('departments:write')
-  @ApiOperation({ summary: 'Оновити підрозділ (Admin)' })
+  @ApiOperation({ summary: 'Оновити підрозділ (Admin/Director)' })
   @ApiResponse({ status: 200, description: 'Підрозділ оновлений' })
   update(@Param('id') id: string, @Body() dto: UpdateDepartmentDto, @Req() req: any) {
-    return this.departmentsService.update(id, dto, req.user.id, req.ip);
+    return this.departmentsService.update(id, dto, req.user, req.ip);
   }
 
   @Delete(':id')

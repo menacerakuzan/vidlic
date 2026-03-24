@@ -19,6 +19,9 @@ export class DepartmentsService {
         manager: {
           select: { id: true, firstName: true, lastName: true, email: true }
         },
+        clerk: {
+          select: { id: true, firstName: true, lastName: true, email: true }
+        },
         director: {
           select: { id: true, firstName: true, lastName: true, email: true }
         },
@@ -35,6 +38,7 @@ export class DepartmentsService {
       parentId: d.parentId,
       parent: d.parent ? { id: d.parent.id, name: d.parent.name } : null,
       manager: d.manager,
+      clerk: d.clerk,
       director: d.director,
       childrenCount: d.children.length,
       usersCount: d._count.users,
@@ -49,6 +53,7 @@ export class DepartmentsService {
         parent: true,
         children: true,
         manager: true,
+        clerk: true,
         director: true,
         users: {
           include: { position: true },
@@ -74,6 +79,12 @@ export class DepartmentsService {
         firstName: department.manager.firstName,
         lastName: department.manager.lastName,
         email: department.manager.email,
+      } : null,
+      clerk: department.clerk ? {
+        id: department.clerk.id,
+        firstName: department.clerk.firstName,
+        lastName: department.clerk.lastName,
+        email: department.clerk.email,
       } : null,
       director: department.director ? {
         id: department.director.id,
@@ -126,6 +137,7 @@ export class DepartmentsService {
         code: dto.code,
         parentId: dto.parentId,
         managerId: dto.managerId,
+        clerkId: dto.clerkId,
         directorId: isDirector ? actor.id : dto.directorId,
       },
     });
@@ -142,11 +154,27 @@ export class DepartmentsService {
     return department;
   }
 
-  async update(id: string, dto: UpdateDepartmentDto, adminId: string, ipAddress?: string) {
+  async update(id: string, dto: UpdateDepartmentDto, actor: any, ipAddress?: string) {
     const department = await this.prisma.department.findUnique({ where: { id } });
 
     if (!department) {
       throw new NotFoundException('Підрозділ не знайдено');
+    }
+
+    const isAdmin = actor?.role === 'admin';
+    const isDirector = actor?.role === 'director';
+    if (!isAdmin && !isDirector) {
+      throw new ForbiddenException('Недостатньо прав для оновлення підрозділу');
+    }
+    if (isDirector) {
+      const canManageOwnDepartment = department.id === actor.departmentId;
+      const canManageOwnChild = department.parentId === actor.departmentId;
+      if (!canManageOwnDepartment && !canManageOwnChild) {
+        throw new ForbiddenException('Директор може змінювати тільки свій департамент або його відділи');
+      }
+      if (dto.directorId && dto.directorId !== actor.id) {
+        throw new ForbiddenException('Директор не може призначати іншого директора');
+      }
     }
 
     if (dto.code && dto.code !== department.code) {
@@ -164,12 +192,13 @@ export class DepartmentsService {
         code: dto.code ?? department.code,
         parentId: dto.parentId !== undefined ? dto.parentId : department.parentId,
         managerId: dto.managerId !== undefined ? dto.managerId : department.managerId,
+        clerkId: dto.clerkId !== undefined ? dto.clerkId : department.clerkId,
         directorId: dto.directorId !== undefined ? dto.directorId : department.directorId,
       },
     });
 
     await this.auditService.log({
-      userId: adminId,
+      userId: actor.id,
       action: AuditAction.update,
       entityType: 'department',
       entityId: id,

@@ -31,6 +31,7 @@ export function getStatusColor(status: string): string {
   const colors: Record<string, string> = {
     draft: 'bg-gray-100 text-gray-700',
     pending_manager: 'bg-yellow-100 text-yellow-700',
+    pending_clerk: 'bg-violet-100 text-violet-700',
     pending_director: 'bg-blue-100 text-blue-700',
     approved: 'bg-green-100 text-green-700',
     rejected: 'bg-red-100 text-red-700',
@@ -42,6 +43,7 @@ export function getStatusLabel(status: string): string {
   const labels: Record<string, string> = {
     draft: 'Чернетка',
     pending_manager: 'На погодженні',
+    pending_clerk: 'На узгодженні діловода',
     pending_director: 'На затвердженні',
     approved: 'Затверджено',
     rejected: 'Відхилено',
@@ -73,6 +75,7 @@ export function getRoleLabel(role: string): string {
   const labels: Record<string, string> = {
     specialist: 'Спеціаліст',
     manager: 'Керівник',
+    clerk: 'Діловод',
     director: 'Директор',
     admin: 'Адмін',
   }

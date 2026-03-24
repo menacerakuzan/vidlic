@@ -168,7 +168,7 @@ export default function ReportDetailsPage() {
     () => report?.status === 'draft' && report?.author?.id === user?.id,
     [report, user],
   )
-  const canComment = useMemo(() => ['manager', 'director', 'admin'].includes(user?.role || ''), [user?.role])
+  const canComment = useMemo(() => ['manager', 'clerk', 'director', 'admin'].includes(user?.role || ''), [user?.role])
 
   const canDelete = useMemo(() => {
     if (!report || !user) return false
@@ -181,8 +181,11 @@ export default function ReportDetailsPage() {
     if (user.role === 'manager') {
       return report.status === 'pending_manager' && report.currentApprover?.id === user.id
     }
+    if (user.role === 'clerk') {
+      return report.status === 'pending_clerk' && report.currentApprover?.id === user.id
+    }
     if (user.role === 'director') {
-      return report.status === 'pending_director'
+      return report.status === 'pending_director' && report.currentApprover?.id === user.id
     }
     return false
   }, [report, user])

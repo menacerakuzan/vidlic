@@ -30,6 +30,12 @@ export class ReportsService {
         { authorId: user.id },
         { departmentId: user.departmentId },
       ];
+    } else if (user.role === 'clerk') {
+      where.OR = [
+        { authorId: user.id },
+        { departmentId: user.departmentId },
+        { department: { parentId: user.departmentId } },
+      ];
     }
 
     if (status) where.status = status;
@@ -181,7 +187,7 @@ export class ReportsService {
       where: { id },
       include: {
         author: { select: { firstName: true, lastName: true } },
-        department: { include: { manager: true } },
+        department: { include: { parent: true } },
       },
     });
 
@@ -197,8 +203,10 @@ export class ReportsService {
       throw new ForbiddenException('Можна відправляти тільки свої звіти');
     }
 
-    const managerId = report.department?.managerId;
-    const directorId = report.department?.directorId;
+    const routing = await this.getApprovalRoutingContext(report.departmentId);
+    const managerId = routing.managerId;
+    const clerkId = routing.clerkId;
+    const directorId = routing.directorId;
 
     const content = this.ensureObject(report.content);
     const managerSubmission = this.ensureObject(content.managerSubmission);
@@ -229,13 +237,18 @@ export class ReportsService {
           .map((step) => ({ order: step.stepOrder, role: step.role }))
       : [
           { order: 1, role: 'manager' as const },
-          { order: 2, role: 'director' as const },
+          { order: 2, role: 'clerk' as const },
+          { order: 3, role: 'director' as const },
         ];
 
+    const hasClerkStep = flowSteps.some((step) => step.role === 'clerk');
     const hasManagerStep = flowSteps.some((step) => step.role === 'manager');
     const hasDirectorStep = flowSteps.some((step) => step.role === 'director');
     if (hasManagerStep && !managerId) {
-      throw new BadRequestException('У підрозділу не призначено керівника (manager). Неможливо відправити звіт.');
+      throw new BadRequestException('У відділу не призначено керівника (manager). Неможливо відправити звіт.');
+    }
+    if (hasClerkStep && !clerkId) {
+      throw new BadRequestException('У департаменту не призначено діловода (clerk). Неможливо відправити звіт.');
     }
     if (hasDirectorStep && !directorId) {
       throw new BadRequestException('У підрозділу не призначено директора. Неможливо завершити маршрут погодження.');
@@ -248,21 +261,22 @@ export class ReportsService {
       steps: flowSteps.map((step) => ({
         order: step.order,
         role: step.role,
-        approverId: this.resolveApproverByRole(step.role, managerId, directorId),
+        approverId: this.resolveApproverByRole(step.role, managerId, clerkId, directorId),
       })),
       comment: dto.comment,
       resolveApprover: (role) => {
-        return this.resolveApproverByRole(role, managerId, directorId);
+        return this.resolveApproverByRole(role, managerId, clerkId, directorId);
       },
     });
 
     const firstStep = flowSteps[0];
-    const firstApproverId = firstStep ? this.resolveApproverByRole(firstStep.role, managerId, directorId) : null;
+    const firstApproverId = firstStep ? this.resolveApproverByRole(firstStep.role, managerId, clerkId, directorId) : null;
+    const firstStatus = this.statusByStepRole(firstStep?.role);
 
     const updated = await this.prisma.report.update({
       where: { id },
       data: {
-        status: firstStep?.role === 'director' ? 'pending_director' : 'pending_manager',
+        status: firstStatus,
         currentApproverId: firstApproverId,
         submittedAt: new Date(),
       },
@@ -275,7 +289,7 @@ export class ReportsService {
     await this.createStatusHistory(
       id,
       report.status,
-      firstStep?.role === 'director' ? 'pending_director' : 'pending_manager',
+      firstStatus,
       userId,
       dto.comment,
     );
@@ -363,7 +377,7 @@ export class ReportsService {
   async approve(id: string, dto: ApproveReportDto, user: any) {
     const report = await this.prisma.report.findUnique({
       where: { id },
-      include: { department: { include: { director: true } }, author: true },
+      include: { department: { include: { parent: true } }, author: true },
     });
 
     if (!report) {
@@ -374,13 +388,19 @@ export class ReportsService {
       throw new BadRequestException('Звіт не очікує погодження керівника');
     }
 
+    if (user.role === 'clerk' && report.status !== 'pending_clerk') {
+      throw new BadRequestException('Звіт не очікує узгодження діловода');
+    }
+
     if (user.role === 'director' && report.status !== 'pending_director') {
       throw new BadRequestException('Звіт не очікує фінального погодження');
     }
 
-    if (user.role === 'manager' && report.currentApproverId !== user.id) {
+    if ((user.role === 'manager' || user.role === 'clerk') && report.currentApproverId !== user.id) {
       throw new ForbiddenException('Ви не є погоджувачем цього звіту');
     }
+
+    const routing = await this.getApprovalRoutingContext(report.departmentId);
 
     const approvalResult = await this.approvalsService.approve({
       entityType: ApprovalEntityType.report,
@@ -388,13 +408,21 @@ export class ReportsService {
       actorId: user.id,
       comment: dto.comment,
       resolveApprover: (role) => {
-        if (role === 'director') return report.department?.directorId ?? null;
-        return null;
+        return this.resolveApproverByRole(role, routing.managerId, routing.clerkId, routing.directorId);
       },
     });
 
-    const newStatus: ReportStatus = approvalResult.nextStep ? 'pending_director' : 'approved';
-    const nextApproverId = approvalResult.nextStep ? report.department?.directorId ?? null : null;
+    const newStatus: ReportStatus = approvalResult.nextStep
+      ? this.statusByStepRole(approvalResult.nextStep.role)
+      : 'approved';
+    const nextApproverId = approvalResult.nextStep
+      ? this.resolveApproverByRole(
+          approvalResult.nextStep.role,
+          routing.managerId,
+          routing.clerkId,
+          routing.directorId,
+        )
+      : null;
 
     const updated = await this.prisma.report.update({
       where: { id },
@@ -424,7 +452,7 @@ export class ReportsService {
       throw new NotFoundException('Звіт не знайдено');
     }
 
-    if (!['pending_manager', 'pending_director'].includes(report.status)) {
+    if (!['pending_manager', 'pending_clerk', 'pending_director'].includes(report.status)) {
       throw new BadRequestException('Звіт не очікує погодження');
     }
 
@@ -488,7 +516,10 @@ export class ReportsService {
   }
 
   async getComments(id: string, user: any) {
-    const report = await this.prisma.report.findUnique({ where: { id } });
+    const report = await this.prisma.report.findUnique({
+      where: { id },
+      include: { department: { select: { parentId: true } } },
+    });
     if (!report) throw new NotFoundException('Звіт не знайдено');
     if (!this.canViewReport(report, user)) throw new ForbiddenException('Немає доступу до цього звіту');
 
@@ -509,6 +540,7 @@ export class ReportsService {
     const report = await this.prisma.report.findUnique({
       where: { id },
       include: {
+        department: { select: { parentId: true } },
         author: { select: { id: true, firstName: true, lastName: true } },
       },
     });
@@ -564,7 +596,10 @@ export class ReportsService {
     dto: { note?: string },
     user: any,
   ) {
-    const report = await this.prisma.report.findUnique({ where: { id } });
+    const report = await this.prisma.report.findUnique({
+      where: { id },
+      include: { department: { select: { parentId: true } } },
+    });
     if (!report) throw new NotFoundException('Звіт не знайдено');
     if (!this.canViewReport(report, user)) throw new ForbiddenException('Немає доступу до цього звіту');
 
@@ -599,6 +634,7 @@ export class ReportsService {
   async getVersionDiff(id: string, user: any, fromVersion?: number, toVersion?: number) {
     const report = await this.prisma.report.findUnique({
       where: { id },
+      include: { department: { select: { parentId: true } } },
     });
     if (!report) throw new NotFoundException('Звіт не знайдено');
     if (!this.canViewReport(report, user)) throw new ForbiddenException('Немає доступу до цього звіту');
@@ -686,6 +722,11 @@ export class ReportsService {
 
   private canViewReport(report: any, user: any): boolean {
     if (user.role === 'admin' || user.role === 'director') return true;
+    if (user.role === 'clerk') {
+      if (!user.departmentId) return false;
+      if (report.departmentId === user.departmentId) return true;
+      if (report.department?.parentId === user.departmentId) return true;
+    }
     if (user.role === 'manager' && report.departmentId === user.departmentId) return true;
     if (report.authorId === user.id) return true;
     return false;
@@ -800,10 +841,36 @@ export class ReportsService {
     return `${day}.${month}.${year}`;
   }
 
-  private resolveApproverByRole(role: string, managerId?: string | null, directorId?: string | null) {
+  private resolveApproverByRole(
+    role: string,
+    managerId?: string | null,
+    clerkId?: string | null,
+    directorId?: string | null,
+  ) {
     if (role === 'manager') return managerId ?? null;
+    if (role === 'clerk') return clerkId ?? null;
     if (role === 'director') return directorId ?? null;
     return null;
+  }
+
+  private statusByStepRole(role?: string): ReportStatus {
+    if (role === 'director') return 'pending_director';
+    if (role === 'clerk') return 'pending_clerk';
+    return 'pending_manager';
+  }
+
+  private async getApprovalRoutingContext(departmentId: string) {
+    const department = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+      include: { parent: true },
+    });
+    const effectiveDepartment = department?.parentId ? department.parent : department;
+
+    return {
+      managerId: department?.managerId ?? null,
+      clerkId: effectiveDepartment?.clerkId ?? null,
+      directorId: effectiveDepartment?.directorId ?? null,
+    };
   }
 
   private buildFallbackManagerSubmission(report: any) {

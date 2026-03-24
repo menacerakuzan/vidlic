@@ -7,7 +7,7 @@ export interface User {
   firstName: string
   lastName: string
   patronymic?: string
-  role: 'specialist' | 'manager' | 'director' | 'admin'
+  role: 'specialist' | 'manager' | 'clerk' | 'director' | 'admin'
   department?: {
     id: string
     name: string

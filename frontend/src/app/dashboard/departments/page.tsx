@@ -12,6 +12,7 @@ type Department = {
   code: string
   usersCount: number
   manager?: { id: string; firstName: string; lastName: string } | null
+  clerk?: { id: string; firstName: string; lastName: string } | null
   director?: { id: string; firstName: string; lastName: string } | null
 }
 
@@ -40,14 +41,16 @@ export default function DepartmentsPage() {
   const [newDepartmentCode, setNewDepartmentCode] = useState('')
   const [newDepartmentDirectorId, setNewDepartmentDirectorId] = useState('')
   const [newDepartmentManagerId, setNewDepartmentManagerId] = useState('')
+  const [newDepartmentClerkId, setNewDepartmentClerkId] = useState('')
   const [usersOptions, setUsersOptions] = useState<UserOption[]>([])
   const [selectedDirectorId, setSelectedDirectorId] = useState('')
   const [selectedManagerId, setSelectedManagerId] = useState('')
+  const [selectedClerkId, setSelectedClerkId] = useState('')
   const [savingLeads, setSavingLeads] = useState(false)
   const [newUserEmail, setNewUserEmail] = useState('')
   const [newUserFirstName, setNewUserFirstName] = useState('')
   const [newUserLastName, setNewUserLastName] = useState('')
-  const [newUserRole, setNewUserRole] = useState<'specialist' | 'manager' | 'director'>('specialist')
+  const [newUserRole, setNewUserRole] = useState<'specialist' | 'manager' | 'clerk' | 'director'>('specialist')
   const [templateTitlePattern, setTemplateTitlePattern] = useState('ЗВІТ')
   const [templateHeaderPattern, setTemplateHeaderPattern] = useState('Про виконання роботи {{departmentName}}\\n{{period}}')
   const [templateAiPrompt, setTemplateAiPrompt] = useState('')
@@ -128,11 +131,16 @@ export default function DepartmentsPage() {
     () => usersOptions.filter((userOption) => userOption.role === 'manager'),
     [usersOptions],
   )
+  const clerks = useMemo(
+    () => usersOptions.filter((userOption) => userOption.role === 'clerk'),
+    [usersOptions],
+  )
 
   useEffect(() => {
     if (!selectedDepartment) return
     setSelectedDirectorId(selectedDepartment.director?.id || '')
     setSelectedManagerId(selectedDepartment.manager?.id || '')
+    setSelectedClerkId(selectedDepartment.clerk?.id || '')
   }, [selectedDepartment])
 
   const canManageEmployees = isDirector || isAdmin
@@ -149,6 +157,7 @@ export default function DepartmentsPage() {
       parentId: isDirector ? (user?.department?.id || undefined) : undefined,
       directorId: isDirector ? user?.id : (newDepartmentDirectorId || undefined),
       managerId: newDepartmentManagerId || undefined,
+      clerkId: newDepartmentClerkId || undefined,
     }
     const resp = await fetch('/api/v1/departments', {
       method: 'POST',
@@ -163,6 +172,7 @@ export default function DepartmentsPage() {
       setNewDepartmentCode('')
       setNewDepartmentDirectorId('')
       setNewDepartmentManagerId('')
+      setNewDepartmentClerkId('')
       await loadDepartments()
       setActionSuccess(isDirector ? 'Відділ створено у межах департаменту' : 'Підрозділ створено')
       return
@@ -172,13 +182,14 @@ export default function DepartmentsPage() {
   }
 
   const saveDepartmentLeads = async () => {
-    if (!isAdmin || !accessToken || !selectedDepartmentId) return
+    if ((!isAdmin && !isDirector) || !accessToken || !selectedDepartmentId) return
     setActionError('')
     setActionSuccess('')
     setSavingLeads(true)
     const payload = {
-      directorId: selectedDirectorId || null,
+      directorId: isDirector ? user?.id : (selectedDirectorId || null),
       managerId: selectedManagerId || null,
+      clerkId: selectedClerkId || null,
     }
     const resp = await fetch(`/api/v1/departments/${selectedDepartmentId}`, {
       method: 'PUT',
@@ -310,7 +321,7 @@ export default function DepartmentsPage() {
         </div>
 
         {(isAdmin || isDirector) && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-5 gap-3 dark:border-slate-700 dark:bg-slate-900">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-6 gap-3 dark:border-slate-700 dark:bg-slate-900">
             <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder={isDirector ? 'Назва відділу' : 'Назва підрозділу'} value={newDepartmentName} onChange={(e) => setNewDepartmentName(e.target.value)} />
             <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="Код (напр. IT)" value={newDepartmentCode} onChange={(e) => setNewDepartmentCode(e.target.value)} />
             {isAdmin ? (
@@ -331,6 +342,12 @@ export default function DepartmentsPage() {
                 <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
               ))}
             </select>
+            <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={newDepartmentClerkId} onChange={(e) => setNewDepartmentClerkId(e.target.value)}>
+              <option value="">Діловод (опційно)</option>
+              {clerks.map((c) => (
+                <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
+              ))}
+            </select>
             <button onClick={createDepartment} className="h-10 rounded-lg bg-primary text-white text-sm font-medium">{isDirector ? 'Створити відділ' : 'Створити підрозділ'}</button>
           </div>
         )}
@@ -348,7 +365,7 @@ export default function DepartmentsPage() {
                   <div>{department.nameUk || department.name}</div>
                   <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{department.code} • {department.usersCount} осіб</div>
                   <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                    Керівник: {department.manager ? `${department.manager.firstName} ${department.manager.lastName}` : '-'} • Директор: {department.director ? `${department.director.firstName} ${department.director.lastName}` : '-'}
+                    Керівник: {department.manager ? `${department.manager.firstName} ${department.manager.lastName}` : '-'} • Діловод: {department.clerk ? `${department.clerk.firstName} ${department.clerk.lastName}` : '-'} • Директор: {department.director ? `${department.director.firstName} ${department.director.lastName}` : '-'}
                   </div>
                 </button>
               ))}
@@ -357,18 +374,30 @@ export default function DepartmentsPage() {
             <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white overflow-hidden dark:border-slate-700 dark:bg-slate-900">
               <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold dark:border-slate-700">Команда {selectedDepartment ? `(${selectedDepartment.nameUk || selectedDepartment.name})` : ''}</div>
 
-              {isAdmin && selectedDepartmentId && (
-                <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 border-b border-slate-100 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
-                  <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedDirectorId} onChange={(e) => setSelectedDirectorId(e.target.value)}>
-                    <option value="">Директор не призначений</option>
-                    {directors.map((d) => (
-                      <option key={d.id} value={d.id}>{d.firstName} {d.lastName}</option>
-                    ))}
-                  </select>
+              {(isAdmin || isDirector) && selectedDepartmentId && (
+                <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-3 border-b border-slate-100 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
+                  {isAdmin ? (
+                    <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedDirectorId} onChange={(e) => setSelectedDirectorId(e.target.value)}>
+                      <option value="">Директор не призначений</option>
+                      {directors.map((d) => (
+                        <option key={d.id} value={d.id}>{d.firstName} {d.lastName}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 flex items-center dark:border-slate-700 dark:text-slate-400">
+                      Директор: {user?.firstName} {user?.lastName}
+                    </div>
+                  )}
                   <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedManagerId} onChange={(e) => setSelectedManagerId(e.target.value)}>
                     <option value="">Керівник не призначений</option>
                     {managers.map((m) => (
                       <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+                    ))}
+                  </select>
+                  <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedClerkId} onChange={(e) => setSelectedClerkId(e.target.value)}>
+                    <option value="">Діловод не призначений</option>
+                    {clerks.map((c) => (
+                      <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
                     ))}
                   </select>
                   <button disabled={savingLeads} onClick={saveDepartmentLeads} className="h-10 rounded-lg border border-slate-300 text-sm font-medium disabled:opacity-60 dark:border-slate-600">
@@ -382,9 +411,10 @@ export default function DepartmentsPage() {
                   <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="Email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} />
                   <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="Ім'я" value={newUserFirstName} onChange={(e) => setNewUserFirstName(e.target.value)} />
                   <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="Прізвище" value={newUserLastName} onChange={(e) => setNewUserLastName(e.target.value)} />
-                  <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as 'specialist' | 'manager' | 'director')}>
+                  <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as 'specialist' | 'manager' | 'clerk' | 'director')}>
                     <option value="specialist">{getRoleLabel('specialist')}</option>
                     <option value="manager">{getRoleLabel('manager')}</option>
+                    <option value="clerk">{getRoleLabel('clerk')}</option>
                     {isAdmin && <option value="director">{getRoleLabel('director')}</option>}
                   </select>
                   <button onClick={addEmployee} className="md:col-span-4 h-10 rounded-lg bg-primary text-white text-sm font-medium">Додати співробітника</button>

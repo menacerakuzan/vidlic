@@ -28,8 +28,10 @@ export class SlaMonitorService implements OnModuleInit, OnModuleDestroy {
     this.running = true;
     try {
       const managerHours = Number(process.env.SLA_MANAGER_HOURS || 24);
+      const clerkHours = Number(process.env.SLA_CLERK_HOURS || 24);
       const directorHours = Number(process.env.SLA_DIRECTOR_HOURS || 24);
       const managerThreshold = new Date(Date.now() - managerHours * 60 * 60 * 1000);
+      const clerkThreshold = new Date(Date.now() - clerkHours * 60 * 60 * 1000);
       const directorThreshold = new Date(Date.now() - directorHours * 60 * 60 * 1000);
 
       const overdueManager = await this.prisma.report.findMany({
@@ -52,7 +54,17 @@ export class SlaMonitorService implements OnModuleInit, OnModuleDestroy {
         take: 80,
       });
 
-      for (const report of [...overdueManager, ...overdueDirector]) {
+      const overdueClerk = await this.prisma.report.findMany({
+        where: {
+          status: 'pending_clerk',
+          submittedAt: { lt: clerkThreshold },
+          currentApproverId: { not: null },
+        },
+        include: { department: true },
+        take: 80,
+      });
+
+      for (const report of [...overdueManager, ...overdueClerk, ...overdueDirector]) {
         await this.escalateReport(report);
       }
     } catch (error) {
@@ -68,6 +80,9 @@ export class SlaMonitorService implements OnModuleInit, OnModuleDestroy {
     if (report.currentApproverId) recipients.add(report.currentApproverId);
 
     if (stage === 'pending_manager' && report.department?.directorId) {
+      recipients.add(report.department.directorId);
+    }
+    if (stage === 'pending_clerk' && report.department?.directorId) {
       recipients.add(report.department.directorId);
     }
 

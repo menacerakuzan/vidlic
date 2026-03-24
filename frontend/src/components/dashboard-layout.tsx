@@ -28,7 +28,7 @@ const navigation = [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Звіти', href: '/dashboard/reports', icon: FileText },
   { name: 'Задачі', href: '/dashboard/tasks', icon: CheckSquare },
-  { name: 'Аналітика', href: '/dashboard/analytics', icon: BarChart3, roles: ['manager', 'director'] },
+  { name: 'Аналітика', href: '/dashboard/analytics', icon: BarChart3, roles: ['manager', 'clerk', 'director'] },
   { name: 'Сповіщення', href: '/dashboard/notifications', icon: Bell },
   { name: 'Підрозділи', href: '/dashboard/departments', icon: Users, roles: ['manager', 'director', 'admin'] },
   { name: 'Конструктор', href: '/dashboard/layouts', icon: Settings, roles: ['admin'] },
@@ -164,6 +164,8 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       ? 'Адмін'
       : user?.role === 'director'
       ? 'Директор'
+      : user?.role === 'clerk'
+      ? 'Діловод'
       : user?.role === 'manager'
       ? 'Керівник'
       : 'Спеціаліст'
@@ -385,6 +387,12 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                 <>
                   <li>Перевіряйте звіти підрозділу, залишайте зауваження по секціях і погоджуйте або повертайте на доопрацювання.</li>
                   <li>Керуйте задачами співробітників та контролюйте виконання в колонках Todo/In Progress/Done.</li>
+                </>
+              )}
+              {user?.role === 'clerk' && (
+                <>
+                  <li>Опрацьовуйте звіти від керівників відділів, узгоджуйте та формуйте консолідовану картину для директора.</li>
+                  <li>Використовуйте AI-резюме, щоб швидко прибрати дублікати та підготувати зведений матеріал.</li>
                 </>
               )}
               {user?.role === 'director' && (

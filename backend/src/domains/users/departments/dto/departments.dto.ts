@@ -27,6 +27,11 @@ export class CreateDepartmentDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()
+  clerkId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
   directorId?: string;
 }
 
@@ -55,6 +60,11 @@ export class UpdateDepartmentDto {
   @IsOptional()
   @IsUUID()
   managerId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  clerkId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

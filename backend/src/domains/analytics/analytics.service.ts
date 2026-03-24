@@ -117,10 +117,12 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
 
   async getPendingApprovals(user: any) {
     const where: any = {
-      status: { in: ['pending_manager', 'pending_director'] },
+      status: { in: ['pending_manager', 'pending_clerk', 'pending_director'] },
     };
 
     if (user.role === 'manager') {
+      where.currentApproverId = user.id;
+    } else if (user.role === 'clerk') {
       where.currentApproverId = user.id;
     } else if (user.role === 'director') {
       where.status = 'pending_director';
@@ -377,7 +379,7 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
       this.prisma.report.count({
         where: {
           ...(departmentId ? { departmentId } : {}),
-          status: { in: ['pending_manager', 'pending_director'] },
+          status: { in: ['pending_manager', 'pending_clerk', 'pending_director'] },
         },
       }),
       this.prisma.task.count({

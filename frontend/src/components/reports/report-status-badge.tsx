@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 const statusMap: Record<string, { label: string; className: string }> = {
   draft: { label: 'Чернетка', className: 'bg-slate-200 text-slate-700' },
   pending_manager: { label: 'На погодженні', className: 'bg-amber-200 text-amber-800' },
+  pending_clerk: { label: 'Узгодження діловода', className: 'bg-violet-200 text-violet-800' },
   pending_director: { label: 'Фінальне погодження', className: 'bg-indigo-200 text-indigo-800' },
   approved: { label: 'Затверджено', className: 'bg-emerald-200 text-emerald-800' },
   rejected: { label: 'Відхилено', className: 'bg-rose-200 text-rose-800' },

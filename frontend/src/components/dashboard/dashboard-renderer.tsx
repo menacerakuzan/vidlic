@@ -147,7 +147,13 @@ function resolveStatValue(source?: string, analytics?: any) {
 
 function resolveStatSubtitle(source?: string, analytics?: any) {
   if (!source || !analytics) return ''
-  if (source.includes('reports')) return `${analytics?.reports?.byStatus?.pending_manager ?? 0} на погодженні`
+  if (source.includes('reports')) {
+    const pending =
+      (analytics?.reports?.byStatus?.pending_manager ?? 0) +
+      (analytics?.reports?.byStatus?.pending_clerk ?? 0) +
+      (analytics?.reports?.byStatus?.pending_director ?? 0)
+    return `${pending} на погодженні`
+  }
   if (source.includes('tasks')) return `${analytics?.tasks?.byStatus?.in_progress ?? 0} в роботі`
   if (source.includes('overdue')) return 'Потребують уваги'
   return ''

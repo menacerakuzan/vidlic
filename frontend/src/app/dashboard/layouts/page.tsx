@@ -16,7 +16,7 @@ export default function LayoutBuilderPage() {
   const [config, setConfig] = useState<UiPresetConfig | null>(null)
   const [widgets, setWidgets] = useState<UiWidgetConfig[]>([])
   const [loading, setLoading] = useState(true)
-  const [approvalSteps, setApprovalSteps] = useState<Array<{ order: number; role: 'manager' | 'director'; required: boolean }>>([])
+  const [approvalSteps, setApprovalSteps] = useState<Array<{ order: number; role: 'manager' | 'clerk' | 'director'; required: boolean }>>([])
   const [savingFlow, setSavingFlow] = useState(false)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
@@ -63,7 +63,8 @@ export default function LayoutBuilderPage() {
         }))
         setApprovalSteps(steps.length ? steps : [
           { order: 1, role: 'manager', required: true },
-          { order: 2, role: 'director', required: true },
+          { order: 2, role: 'clerk', required: true },
+          { order: 3, role: 'director', required: true },
         ])
       }
     }
@@ -125,7 +126,7 @@ export default function LayoutBuilderPage() {
     setSavingFlow(false)
   }
 
-  const updateStepRole = (index: number, role: 'manager' | 'director') => {
+  const updateStepRole = (index: number, role: 'manager' | 'clerk' | 'director') => {
     setApprovalSteps((prev) => prev.map((step, i) => (i === index ? { ...step, role } : step)))
   }
 
@@ -162,7 +163,7 @@ export default function LayoutBuilderPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-semibold">Конструктор погодження звітів</h2>
-                    <p className="text-sm text-slate-500">Налаштуйте послідовність: керівник/директор</p>
+                    <p className="text-sm text-slate-500">Налаштуйте послідовність: керівник → діловод → директор</p>
                   </div>
                   <Button onClick={saveFlow} disabled={savingFlow}>
                     {savingFlow ? 'Збереження...' : 'Зберегти flow'}
@@ -174,10 +175,11 @@ export default function LayoutBuilderPage() {
                       <span className="text-sm text-slate-600 min-w-10">Крок {step.order}</span>
                       <select
                         value={step.role}
-                        onChange={(e) => updateStepRole(idx, e.target.value as 'manager' | 'director')}
+                        onChange={(e) => updateStepRole(idx, e.target.value as 'manager' | 'clerk' | 'director')}
                         className="h-9 rounded-lg border border-slate-300 px-3 text-sm"
                       >
                         <option value="manager">Керівник</option>
+                        <option value="clerk">Діловод</option>
                         <option value="director">Директор</option>
                       </select>
                     </div>
