@@ -65,7 +65,7 @@ export class ReportsController {
 
   @Post(':id/generate-manager-draft')
   @Permissions('reports:write')
-  @ApiOperation({ summary: 'Згенерувати AI-чернетку тексту для погодження менеджером' })
+  @ApiOperation({ summary: 'Згенерувати AI-чернетку тексту для погодження' })
   @ApiResponse({ status: 200, description: 'AI-чернетку сформовано' })
   generateManagerDraft(@Param('id') id: string, @Req() req: any) {
     return this.reportsService.generateManagerSubmissionDraft(id, req.user.id);

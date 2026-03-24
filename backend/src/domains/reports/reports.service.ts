@@ -303,8 +303,8 @@ export class ReportsService {
     const report = await this.prisma.report.findUnique({
       where: { id },
       include: {
-        author: { select: { firstName: true, lastName: true } },
-        department: true,
+        author: { select: { id: true, firstName: true, lastName: true, role: true } },
+        department: { include: { parent: true, children: true } },
       },
     });
 
@@ -320,11 +320,20 @@ export class ReportsService {
       throw new ForbiddenException('Можна формувати AI-чернетку лише для свого звіту');
     }
 
+    const aggregation = await this.buildAggregationContextForDraft(report);
+    const payloadContent = aggregation
+      ? {
+          aggregateMeta: aggregation.meta,
+          sourceReports: aggregation.sources,
+          currentReport: this.ensureObject(report.content),
+        }
+      : this.ensureObject(report.content);
+
     const aiSubmission = await this.aiProvider.buildManagerSubmission({
       title: report.title || (report.reportType === 'weekly' ? 'Тижневий звіт' : 'Місячний звіт'),
       periodLabel: this.buildPeriodLabel(report.periodStart, report.periodEnd),
       departmentFullName: report.department?.nameUk || report.department?.name || 'підрозділу',
-      reportContent: this.ensureObject(report.content),
+      reportContent: payloadContent,
       authorName: `${report.author?.firstName || ''} ${report.author?.lastName || ''}`.trim(),
       customPrompt: (
         await this.prisma.departmentReportTemplate.findUnique({
@@ -364,12 +373,15 @@ export class ReportsService {
             headerLines: managerSubmission.headerLines,
             bodyText: managerSubmission.bodyText,
             style: managerSubmission.style,
-            generatedAt: new Date().toISOString(),
-            promptProfile: 'official_ua_manager_submission_v1',
-            generatedBy: 'ai',
-          },
+          generatedAt: new Date().toISOString(),
+          promptProfile: 'official_ua_manager_submission_v1',
+          generatedBy: 'ai',
+          aggregationLevel: aggregation?.meta?.level || 'specialist',
+          sourceReportsCount: aggregation?.sources?.length || 0,
+          sourceDepartmentsCount: aggregation?.meta?.sourceDepartmentsCount || 0,
         },
-        version: report.version + 1,
+      },
+      version: report.version + 1,
       },
       include: {
         author: true,
@@ -915,6 +927,148 @@ export class ReportsService {
         fontFamily: 'Times New Roman',
         fontSize: 14,
       },
+    };
+  }
+
+  private async buildAggregationContextForDraft(report: any): Promise<{
+    meta: {
+      level: 'manager' | 'clerk' | 'director';
+      sourceDepartmentsCount: number;
+      sourceReportsCount: number;
+    };
+    sources: Array<{
+      reportId: string;
+      title: string;
+      reportType: string;
+      status: string;
+      departmentId: string;
+      departmentName: string;
+      authorId: string;
+      authorName: string;
+      periodStart: string;
+      periodEnd: string;
+      content: Record<string, any>;
+    }>;
+  } | null> {
+    const periodFilter = {
+      periodStart: { gte: report.periodStart },
+      periodEnd: { lte: report.periodEnd },
+    } as const;
+
+    if (report.author?.role === 'manager') {
+      const sourceReports = await this.prisma.report.findMany({
+        where: {
+          ...periodFilter,
+          departmentId: report.departmentId,
+          author: { role: 'specialist', isActive: true },
+          status: { in: ['pending_manager', 'pending_clerk', 'pending_director', 'approved'] },
+          id: { not: report.id },
+        },
+        include: {
+          author: { select: { id: true, firstName: true, lastName: true } },
+          department: { select: { id: true, name: true, nameUk: true } },
+        },
+        orderBy: [{ periodEnd: 'asc' }, { createdAt: 'asc' }],
+        take: 200,
+      });
+
+      if (!sourceReports.length) {
+        throw new BadRequestException('Немає звітів спеціалістів за обраний період для формування зведення керівника.');
+      }
+
+      return {
+        meta: {
+          level: 'manager',
+          sourceDepartmentsCount: 1,
+          sourceReportsCount: sourceReports.length,
+        },
+        sources: sourceReports.map((item) => this.mapSourceReport(item)),
+      };
+    }
+
+    if (report.author?.role === 'clerk') {
+      const childDepartmentIds = (report.department?.children || []).map((d: any) => d.id);
+      if (!childDepartmentIds.length) {
+        throw new BadRequestException('У департаменті не налаштовано відділи для зведення діловода.');
+      }
+
+      const sourceReports = await this.prisma.report.findMany({
+        where: {
+          ...periodFilter,
+          departmentId: { in: childDepartmentIds },
+          author: { role: 'manager', isActive: true },
+          status: { in: ['pending_clerk', 'pending_director', 'approved'] },
+          id: { not: report.id },
+        },
+        include: {
+          author: { select: { id: true, firstName: true, lastName: true } },
+          department: { select: { id: true, name: true, nameUk: true } },
+        },
+        orderBy: [{ departmentId: 'asc' }, { periodEnd: 'asc' }, { createdAt: 'asc' }],
+        take: 300,
+      });
+
+      if (!sourceReports.length) {
+        throw new BadRequestException('Немає звітів керівників відділів за обраний період для формування зведення діловода.');
+      }
+
+      return {
+        meta: {
+          level: 'clerk',
+          sourceDepartmentsCount: new Set(sourceReports.map((item) => item.departmentId)).size,
+          sourceReportsCount: sourceReports.length,
+        },
+        sources: sourceReports.map((item) => this.mapSourceReport(item)),
+      };
+    }
+
+    if (report.author?.role === 'director') {
+      const sourceReports = await this.prisma.report.findMany({
+        where: {
+          ...periodFilter,
+          departmentId: report.departmentId,
+          author: { role: 'clerk', isActive: true },
+          status: { in: ['pending_director', 'approved'] },
+          id: { not: report.id },
+        },
+        include: {
+          author: { select: { id: true, firstName: true, lastName: true } },
+          department: { select: { id: true, name: true, nameUk: true } },
+        },
+        orderBy: [{ periodEnd: 'asc' }, { createdAt: 'asc' }],
+        take: 120,
+      });
+
+      if (!sourceReports.length) {
+        throw new BadRequestException('Немає зведених звітів діловода за обраний період для формування документа директора.');
+      }
+
+      return {
+        meta: {
+          level: 'director',
+          sourceDepartmentsCount: 1,
+          sourceReportsCount: sourceReports.length,
+        },
+        sources: sourceReports.map((item) => this.mapSourceReport(item)),
+      };
+    }
+
+    return null;
+  }
+
+  private mapSourceReport(report: any) {
+    return {
+      reportId: report.id,
+      title: report.title || '',
+      reportType: report.reportType,
+      status: report.status,
+      departmentId: report.departmentId,
+      departmentName: report.department?.nameUk || report.department?.name || 'Підрозділ',
+      authorId: report.author?.id || '',
+      authorName: `${report.author?.firstName || ''} ${report.author?.lastName || ''}`.trim(),
+      periodStart: report.periodStart?.toISOString?.() || '',
+      periodEnd: report.periodEnd?.toISOString?.() || '',
+      content: this.ensureObject(report.content),
     };
   }
 

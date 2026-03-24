@@ -190,6 +190,28 @@ export default function ReportDetailsPage() {
     return false
   }, [report, user])
 
+  const submitButtonLabel = useMemo(() => {
+    if (!user) return 'Відправити на погодження'
+    if (user.role === 'specialist') return 'Відправити керівнику'
+    if (user.role === 'manager') return 'Відправити діловоду'
+    if (user.role === 'clerk') return 'Відправити директору'
+    return 'Відправити на погодження'
+  }, [user])
+
+  const draftHint = useMemo(() => {
+    if (!user) return 'Сформуйте AI-чернетку за поточний період.'
+    if (user.role === 'manager') {
+      return 'AI зведе звіти спеціалістів вашого відділу за обраний період у єдиний документ керівника.'
+    }
+    if (user.role === 'clerk') {
+      return 'AI зведе звіти керівників відділів вашого департаменту за обраний період у консолідований документ діловода.'
+    }
+    if (user.role === 'director') {
+      return 'AI сформує фінальне зведення директора на основі консолідованих документів діловода за обраний період.'
+    }
+    return 'AI сформує офіційний документ для погодження за обраний період.'
+  }, [user])
+
   const doAction = async (type: 'submit' | 'approve' | 'reject') => {
     if (!accessToken || !params?.id) return
     setActionLoading(true)
@@ -487,7 +509,7 @@ export default function ReportDetailsPage() {
                   </button>
                 )}
                 {canSubmit && (
-                  <button disabled={actionLoading} onClick={() => doAction('submit')} className="rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-60">Відправити менеджеру</button>
+                  <button disabled={actionLoading} onClick={() => doAction('submit')} className="rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-60">{submitButtonLabel}</button>
                 )}
                 {canApprove && (
                   <button disabled={actionLoading} onClick={() => doAction('approve')} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white disabled:opacity-60">Погодити</button>
@@ -505,6 +527,11 @@ export default function ReportDetailsPage() {
 
             <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-3 dark:border-slate-700 dark:bg-slate-900">
               {canEditSubmission && (
+                <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
+                  {draftHint}
+                </div>
+              )}
+              {canEditSubmission && (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
                   <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">Чек-лист перед відправкою</p>
                   <div className="space-y-1">
@@ -520,10 +547,15 @@ export default function ReportDetailsPage() {
                 <h2 className="text-lg font-semibold">Текст для погодження</h2>
                 {managerDraftSource && (
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Джерело: {managerDraftSource === 'ai' ? 'AI' : 'Шаблон'}
+                    Джерело: {managerDraftSource === 'ai' ? 'AI' : managerDraftSource}
                   </p>
                 )}
               </div>
+              {!!report?.content?.managerSubmission?.sourceReportsCount && (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Використано джерел: {report.content.managerSubmission.sourceReportsCount}; підрозділів: {report.content.managerSubmission.sourceDepartmentsCount || 0}
+                </p>
+              )}
 
               {managerDraftText ? (
                 <div className="space-y-3">

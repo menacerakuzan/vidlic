@@ -30,7 +30,7 @@ export default function ReportPrintPage() {
   const [draftHeader, setDraftHeader] = useState('')
   const [draftBodyHtml, setDraftBodyHtml] = useState('')
   const [fontFamily, setFontFamily] = useState('Times New Roman')
-  const [fontSize, setFontSize] = useState(14)
+  const [fontSize] = useState(14)
   const bodyRef = useRef<HTMLDivElement | null>(null)
 
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
@@ -60,7 +60,6 @@ export default function ReportPrintPage() {
     const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(bodyText)
     setDraftBodyHtml(looksLikeHtml ? bodyText : plainToHtml(bodyText))
     setFontFamily(submission?.style?.fontFamily || 'Times New Roman')
-    setFontSize(Number(submission?.style?.fontSize) || 14)
     setIsDirty(false)
   }, [])
 
@@ -135,7 +134,7 @@ export default function ReportPrintPage() {
           bodyTextPlain: htmlToPlain(safeBodyHtml),
           style: {
             fontFamily,
-            fontSize,
+            fontSize: 14,
           },
           editedByPrintView: true,
           editedAt: new Date().toISOString(),
@@ -223,24 +222,14 @@ export default function ReportPrintPage() {
                 <option value="Georgia">Georgia</option>
                 <option value="Arial">Arial</option>
               </select>
-              <input
-                type="number"
-                min={12}
-                max={18}
-                value={fontSize}
-                onChange={(e) => {
-                  const next = Math.max(12, Math.min(18, Number(e.target.value || 14)))
-                  setFontSize(next)
-                  setIsDirty(true)
-                }}
-                className="h-8 w-16 rounded border border-slate-300 px-2 text-xs"
-              />
+              <span className="h-8 rounded border border-slate-300 px-2 text-xs flex items-center text-slate-600">14 pt</span>
               <button onClick={() => runEditorCommand('bold')} className="h-8 rounded border border-slate-300 px-2 text-xs font-bold">B</button>
               <button onClick={() => runEditorCommand('italic')} className="h-8 rounded border border-slate-300 px-2 text-xs italic">I</button>
               <button onClick={() => runEditorCommand('underline')} className="h-8 rounded border border-slate-300 px-2 text-xs underline">U</button>
               <button onClick={() => runEditorCommand('justifyLeft')} className="h-8 rounded border border-slate-300 px-2 text-xs">L</button>
               <button onClick={() => runEditorCommand('justifyCenter')} className="h-8 rounded border border-slate-300 px-2 text-xs">C</button>
               <button onClick={() => runEditorCommand('justifyFull')} className="h-8 rounded border border-slate-300 px-2 text-xs">J</button>
+              <button onClick={() => runEditorCommand('insertOrderedList')} className="h-8 rounded border border-slate-300 px-2 text-xs">1.</button>
               <button onClick={() => runEditorCommand('insertUnorderedList')} className="h-8 rounded border border-slate-300 px-2 text-xs">• List</button>
             </div>
             <button
@@ -282,10 +271,10 @@ export default function ReportPrintPage() {
                 setIsDirty(true)
               }}
               className="mb-2 w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1 text-center font-semibold focus:border-slate-500 focus:outline-none"
-              style={{ fontFamily, fontSize: Math.max(20, fontSize + 6) }}
+              style={{ fontFamily, fontSize: 14 }}
             />
           ) : (
-            <h1 className="mb-2 text-center font-semibold uppercase tracking-[0.03em]" style={{ fontFamily, fontSize: Math.max(20, fontSize + 6) }}>
+            <h1 className="mb-2 text-center font-semibold uppercase tracking-[0.03em]" style={{ fontFamily, fontSize: 14 }}>
               {renderedTitle}
             </h1>
           )}
