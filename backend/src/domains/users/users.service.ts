@@ -78,7 +78,7 @@ export class UsersService {
     }
 
     if (actor.role === 'director') {
-      this.assertDirectorScope(actor, dto.departmentId, dto.role);
+      await this.assertDirectorScope(actor, dto.departmentId, dto.role);
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
@@ -118,7 +118,7 @@ export class UsersService {
     }
 
     if (actor.role === 'director') {
-      this.assertDirectorScope(actor, dto.departmentId ?? user.departmentId, dto.role ?? user.role);
+      await this.assertDirectorScope(actor, dto.departmentId ?? user.departmentId, dto.role ?? user.role);
       if (user.role === 'director' || user.role === 'admin') {
         throw new ForbiddenException('Директор не може змінювати директора або адміністратора');
       }
@@ -166,7 +166,7 @@ export class UsersService {
     }
 
     if (actor.role === 'director') {
-      this.assertDirectorScope(actor, user.departmentId, user.role);
+      await this.assertDirectorScope(actor, user.departmentId, user.role);
       if (user.role === 'director' || user.role === 'admin') {
         throw new ForbiddenException('Директор не може видаляти директора або адміністратора');
       }
@@ -222,9 +222,23 @@ export class UsersService {
     };
   }
 
-  private assertDirectorScope(actor: any, departmentId?: string | null, role?: UserRole) {
-    if (!departmentId || departmentId !== actor.departmentId) {
+  private async assertDirectorScope(actor: any, departmentId?: string | null, role?: UserRole) {
+    if (!departmentId || !actor?.departmentId) {
       throw new ForbiddenException('Директор може працювати тільки зі своїм підрозділом');
+    }
+
+    const targetDepartment = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+      select: { id: true, parentId: true },
+    });
+    if (!targetDepartment) {
+      throw new ForbiddenException('Цільовий підрозділ не знайдено');
+    }
+
+    const isOwnDepartment = targetDepartment.id === actor.departmentId;
+    const isOwnChildDepartment = targetDepartment.parentId === actor.departmentId;
+    if (!isOwnDepartment && !isOwnChildDepartment) {
+      throw new ForbiddenException('Директор може працювати тільки зі своїм департаментом або його відділами');
     }
 
     if (role && (role === 'admin' || role === 'director')) {

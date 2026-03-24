@@ -30,6 +30,7 @@ type UserOption = {
   firstName: string
   lastName: string
   role: string
+  departmentId?: string | null
 }
 
 export default function DepartmentsPage() {
@@ -52,6 +53,8 @@ export default function DepartmentsPage() {
   const [newUserFirstName, setNewUserFirstName] = useState('')
   const [newUserLastName, setNewUserLastName] = useState('')
   const [newUserRole, setNewUserRole] = useState<'specialist' | 'manager' | 'clerk' | 'director'>('specialist')
+  const [selectedExistingUserId, setSelectedExistingUserId] = useState('')
+  const [assigningExistingUser, setAssigningExistingUser] = useState(false)
   const [templateTitlePattern, setTemplateTitlePattern] = useState('ЗВІТ')
   const [templateHeaderPattern, setTemplateHeaderPattern] = useState('Про виконання роботи {{departmentName}}\\n{{period}}')
   const [templateAiPrompt, setTemplateAiPrompt] = useState('')
@@ -101,6 +104,7 @@ export default function DepartmentsPage() {
       firstName: u.firstName,
       lastName: u.lastName,
       role: u.role,
+      departmentId: u.department?.id || null,
     })))
   }
 
@@ -144,6 +148,16 @@ export default function DepartmentsPage() {
     () => usersOptions.filter((userOption) => userOption.role === 'clerk'),
     [usersOptions],
   )
+  const transferableUsers = useMemo(() => {
+    if (!selectedDepartmentId) return []
+    const teamIds = new Set(team.map((member) => member.id))
+    return usersOptions.filter((u) =>
+      u.role !== 'admin' &&
+      u.role !== 'director' &&
+      !teamIds.has(u.id) &&
+      u.departmentId !== selectedDepartmentId,
+    )
+  }, [usersOptions, team, selectedDepartmentId])
 
   useEffect(() => {
     if (!selectedDepartment) return
@@ -269,6 +283,32 @@ export default function DepartmentsPage() {
     }
     const err = await resp.json().catch(() => null)
     setActionError(err?.message || 'Не вдалося видалити співробітника')
+  }
+
+  const assignExistingEmployee = async () => {
+    if (!canManageEmployees || !accessToken || !selectedDepartmentId || !selectedExistingUserId) return
+    setActionError('')
+    setActionSuccess('')
+    setAssigningExistingUser(true)
+    const resp = await fetch(`/api/v1/users/${selectedExistingUserId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ departmentId: selectedDepartmentId }),
+    })
+    setAssigningExistingUser(false)
+    if (resp.ok) {
+      setSelectedExistingUserId('')
+      await loadTeam(selectedDepartmentId)
+      await loadDepartments()
+      await loadUsers()
+      setActionSuccess('Співробітника переведено у вибраний підрозділ')
+      return
+    }
+    const err = await resp.json().catch(() => null)
+    setActionError(err?.message || 'Не вдалося перевести співробітника')
   }
 
   const loadTemplate = async (departmentId: string) => {
@@ -430,6 +470,30 @@ export default function DepartmentsPage() {
                     {isAdmin && <option value="director">{getRoleLabel('director')}</option>}
                   </select>
                   <button onClick={addEmployee} className="md:col-span-4 h-10 rounded-lg bg-primary text-white text-sm font-medium">Додати співробітника</button>
+                </div>
+              )}
+
+              {canManageEmployees && selectedDepartmentId && (
+                <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-3 border-b border-slate-100 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
+                  <select
+                    className="md:col-span-3 h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    value={selectedExistingUserId}
+                    onChange={(e) => setSelectedExistingUserId(e.target.value)}
+                  >
+                    <option value="">Додати існуючого співробітника до цього підрозділу</option>
+                    {transferableUsers.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.firstName} {u.lastName} ({getRoleLabel(u.role)})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    disabled={assigningExistingUser || !selectedExistingUserId}
+                    onClick={assignExistingEmployee}
+                    className="h-10 rounded-lg border border-slate-300 text-sm font-medium disabled:opacity-60 dark:border-slate-600"
+                  >
+                    {assigningExistingUser ? 'Перенесення...' : 'Додати в підрозділ'}
+                  </button>
                 </div>
               )}
 
