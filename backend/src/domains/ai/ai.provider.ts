@@ -38,7 +38,7 @@ export class AiProviderService {
   private readonly provider = (this.clean(process.env.AI_PROVIDER) || 'auto').toLowerCase();
   private readonly endpoint = this.clean(process.env.AI_PROVIDER_URL);
   private readonly openAiApiKey = this.clean(process.env.OPENAI_API_KEY);
-  private readonly openAiModel = this.clean(process.env.OPENAI_MODEL) || 'gpt-4o-mini';
+  private readonly openAiModel = this.clean(process.env.OPENAI_MODEL) || 'gpt-5-nano';
   private readonly geminiApiKey = this.clean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
   private readonly geminiModel = this.clean(process.env.GEMINI_MODEL) || 'gemini-2.0-flash';
 
