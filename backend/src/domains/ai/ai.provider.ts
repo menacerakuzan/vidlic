@@ -258,18 +258,9 @@ export class AiProviderService {
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) continue;
 
-        const parsed = this.safeJson(text);
-        if (!parsed?.bodyText) continue;
-
-        return {
-          documentTitle: parsed.documentTitle || 'ЗВІТ',
-          headerLines: Array.isArray(parsed.headerLines) ? parsed.headerLines : [],
-          bodyText: String(parsed.bodyText),
-          style: {
-            fontFamily: parsed.style?.fontFamily || 'Times New Roman',
-            fontSize: Number(parsed.style?.fontSize) || 14,
-          },
-        };
+        const normalized = this.normalizeManagerSubmissionFromRaw(text, input);
+        if (!normalized) continue;
+        return normalized;
       }
 
       return null;
@@ -357,18 +348,7 @@ export class AiProviderService {
       const text = data?.choices?.[0]?.message?.content;
       if (!text) return null;
 
-      const parsed = this.safeJson(text);
-      if (!parsed?.bodyText) return null;
-
-      return {
-        documentTitle: parsed.documentTitle || 'ЗВІТ',
-        headerLines: Array.isArray(parsed.headerLines) ? parsed.headerLines : [],
-        bodyText: String(parsed.bodyText),
-        style: {
-          fontFamily: parsed.style?.fontFamily || 'Times New Roman',
-          fontSize: Number(parsed.style?.fontSize) || 14,
-        },
-      };
+      return this.normalizeManagerSubmissionFromRaw(text, input);
     } catch {
       return null;
     } finally {
@@ -651,5 +631,40 @@ export class AiProviderService {
         return null;
       }
     }
+  }
+
+  private normalizeManagerSubmissionFromRaw(
+    rawText: string,
+    input: ManagerSubmissionInput,
+  ): ManagerSubmissionOutput | null {
+    const parsed = this.safeJson(rawText);
+
+    if (parsed?.bodyText && String(parsed.bodyText).trim().length > 0) {
+      return {
+        documentTitle: parsed.documentTitle || 'ЗВІТ',
+        headerLines: Array.isArray(parsed.headerLines) ? parsed.headerLines : [],
+        bodyText: this.enforceOfficialStyle(String(parsed.bodyText), input.reportContent),
+        style: {
+          fontFamily: parsed.style?.fontFamily || 'Times New Roman',
+          fontSize: Number(parsed.style?.fontSize) || 14,
+        },
+      };
+    }
+
+    const cleaned = rawText.replace(/```[a-zA-Z]*\n?/g, '').replace(/```/g, '').trim();
+    if (!cleaned) return null;
+
+    return {
+      documentTitle: 'ЗВІТ',
+      headerLines: [
+        `Про виконання роботи ${input.departmentFullName}`,
+        input.periodLabel,
+      ],
+      bodyText: this.enforceOfficialStyle(cleaned, input.reportContent),
+      style: {
+        fontFamily: 'Times New Roman',
+        fontSize: 14,
+      },
+    };
   }
 }
