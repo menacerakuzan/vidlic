@@ -39,6 +39,8 @@ export class AiProviderService {
   private readonly endpoint = this.clean(process.env.AI_PROVIDER_URL);
   private readonly openAiApiKey = this.clean(process.env.OPENAI_API_KEY);
   private readonly openAiModel = this.clean(process.env.OPENAI_MODEL) || 'gpt-5-nano';
+  private readonly openAiSummaryTimeoutMs = Number(this.clean(process.env.AI_OPENAI_SUMMARY_TIMEOUT_MS) || '20000');
+  private readonly openAiDraftTimeoutMs = Number(this.clean(process.env.AI_OPENAI_DRAFT_TIMEOUT_MS) || '60000');
   private readonly geminiApiKey = this.clean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
   private readonly geminiModel = this.clean(process.env.GEMINI_MODEL) || 'gemini-2.0-flash';
 
@@ -274,7 +276,7 @@ export class AiProviderService {
   private async callOpenAiSummary(input: AiSummaryInput): Promise<AiSummaryOutput | null> {
     const fetchFn = (...args: any[]) => (global as any).fetch(...args);
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), this.openAiSummaryTimeoutMs);
 
     const prompt = [
       'You are an enterprise analytics assistant.',
@@ -336,7 +338,7 @@ export class AiProviderService {
   private async callOpenAiManagerSubmission(input: ManagerSubmissionInput): Promise<ManagerSubmissionOutput | null> {
     const fetchFn = (...args: any[]) => (global as any).fetch(...args);
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    const timeout = setTimeout(() => controller.abort(), this.openAiDraftTimeoutMs);
     const prompt = this.buildManagerSubmissionPrompt(input);
 
     try {
