@@ -340,8 +340,14 @@ export class ReportsService {
       )?.sectionSchema as any[] | undefined,
     });
 
+    if (!aiSubmission) {
+      throw new BadRequestException(
+        'AI-генерація чернетки тимчасово недоступна. Перевірте AI_PROVIDER/OPENAI_API_KEY/OPENAI_MODEL у змінних середовища та повторіть спробу.',
+      );
+    }
+
     const managerSubmission = this.applyDepartmentTemplate(
-      aiSubmission || this.buildFallbackManagerSubmission(report),
+      aiSubmission,
       await this.prisma.departmentReportTemplate.findUnique({
         where: { departmentId: report.departmentId },
       }),
@@ -360,7 +366,7 @@ export class ReportsService {
             style: managerSubmission.style,
             generatedAt: new Date().toISOString(),
             promptProfile: 'official_ua_manager_submission_v1',
-            generatedBy: aiSubmission ? 'ai' : 'fallback',
+            generatedBy: 'ai',
           },
         },
         version: report.version + 1,
