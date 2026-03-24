@@ -300,7 +300,15 @@ export class AiProviderService {
         signal: controller.signal,
       });
 
-      if (!response.ok) return null;
+      if (!response.ok) {
+        const errorText = await this.readResponseTextSafe(response);
+        console.warn('[AI] OpenAI summary failed', {
+          status: response.status,
+          model: this.openAiModel,
+          body: errorText?.slice(0, 1200) || '',
+        });
+        return null;
+      }
       const data = await response.json();
       const text = data?.choices?.[0]?.message?.content;
       if (!text) return null;
@@ -314,7 +322,11 @@ export class AiProviderService {
         risks: parsed.risks || [],
         nextSteps: parsed.nextSteps || [],
       };
-    } catch {
+    } catch (error) {
+      console.warn('[AI] OpenAI summary request error', {
+        model: this.openAiModel,
+        message: (error as Error)?.message || 'unknown',
+      });
       return null;
     } finally {
       clearTimeout(timeout);
@@ -343,13 +355,25 @@ export class AiProviderService {
         signal: controller.signal,
       });
 
-      if (!response.ok) return null;
+      if (!response.ok) {
+        const errorText = await this.readResponseTextSafe(response);
+        console.warn('[AI] OpenAI manager submission failed', {
+          status: response.status,
+          model: this.openAiModel,
+          body: errorText?.slice(0, 1200) || '',
+        });
+        return null;
+      }
       const data = await response.json();
       const text = data?.choices?.[0]?.message?.content;
       if (!text) return null;
 
       return this.normalizeManagerSubmissionFromRaw(text, input);
-    } catch {
+    } catch (error) {
+      console.warn('[AI] OpenAI manager submission request error', {
+        model: this.openAiModel,
+        message: (error as Error)?.message || 'unknown',
+      });
       return null;
     } finally {
       clearTimeout(timeout);
@@ -630,6 +654,14 @@ export class AiProviderService {
       } catch {
         return null;
       }
+    }
+  }
+
+  private async readResponseTextSafe(response: any): Promise<string> {
+    try {
+      return await response.text();
+    } catch {
+      return '';
     }
   }
 
