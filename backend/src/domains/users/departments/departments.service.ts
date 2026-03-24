@@ -239,8 +239,23 @@ export class DepartmentsService {
   }
 
   async getTeam(departmentId: string) {
+    const department = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+      select: {
+        id: true,
+        children: { select: { id: true } },
+      },
+    });
+    if (!department) {
+      throw new NotFoundException('Підрозділ не знайдено');
+    }
+
+    // For a parent department, include team members from its child departments (sections),
+    // so transferred users remain visible in the department context.
+    const departmentIds = [department.id, ...department.children.map((child) => child.id)];
+
     const users = await this.prisma.user.findMany({
-      where: { departmentId, isActive: true },
+      where: { departmentId: { in: departmentIds }, isActive: true },
       select: {
         id: true,
         firstName: true,
@@ -248,9 +263,10 @@ export class DepartmentsService {
         patronymic: true,
         email: true,
         role: true,
+        department: { select: { id: true, nameUk: true, code: true } },
         position: { select: { titleUk: true } },
       },
-      orderBy: [{ role: 'asc' }, { lastName: 'asc' }],
+      orderBy: [{ departmentId: 'asc' }, { role: 'asc' }, { lastName: 'asc' }],
     });
 
     return users;

@@ -23,6 +23,11 @@ type TeamUser = {
   lastName: string
   email: string
   role: string
+  department?: {
+    id: string
+    nameUk?: string
+    code?: string
+  } | null
 }
 
 type UserOption = {
@@ -504,6 +509,11 @@ export default function DepartmentsPage() {
                     <div>
                       <p className="text-sm font-medium">{member.firstName} {member.lastName}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">{member.email} • {getRoleLabel(member.role)}</p>
+                      {member.department && (
+                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                          Підрозділ: {member.department.nameUk || member.department.code || member.department.id}
+                        </p>
+                      )}
                     </div>
                     {canManageEmployees && member.role !== 'director' && member.role !== 'admin' && (
                       <button onClick={() => deleteEmployee(member.id)} className="text-sm text-rose-600 hover:underline">Видалити</button>
