@@ -10,6 +10,7 @@ type Department = {
   name: string
   nameUk: string
   code: string
+  parentId?: string | null
   usersCount: number
   manager?: { id: string; firstName: string; lastName: string } | null
   clerk?: { id: string; firstName: string; lastName: string } | null
@@ -62,6 +63,10 @@ export default function DepartmentsPage() {
 
   const isAdmin = user?.role === 'admin'
   const isDirector = user?.role === 'director'
+  const visibleDepartments = useMemo(() => {
+    if (!isDirector || !user?.department?.id) return departments
+    return departments.filter((d) => d.id === user.department?.id || d.parentId === user.department?.id)
+  }, [departments, isDirector, user?.department?.id])
 
   const loadDepartments = async () => {
     if (!accessToken) return
@@ -74,7 +79,9 @@ export default function DepartmentsPage() {
     const data = await resp.json()
     setDepartments(data || [])
 
-    const directorVisible = isDirector ? (data || []).filter((d: Department) => d.id === user?.department?.id) : data || []
+    const directorVisible = isDirector
+      ? (data || []).filter((d: Department) => d.id === user?.department?.id || d.parentId === user?.department?.id)
+      : data || []
     const defaultDeptId = isDirector
       ? (user?.department?.id && directorVisible.some((d: Department) => d.id === user?.department?.id) ? user?.department?.id : directorVisible?.[0]?.id || '')
       : (data?.[0]?.id || '')
@@ -83,8 +90,10 @@ export default function DepartmentsPage() {
   }
 
   const loadUsers = async () => {
-    if (!accessToken || !isAdmin) return
-    const resp = await fetch('/api/v1/users?limit=500', { headers: { Authorization: `Bearer ${accessToken}` } })
+    if (!accessToken || (!isAdmin && !isDirector)) return
+    // Director can assign people from existing accounts, not only root department members.
+    const query = '/api/v1/users?limit=500'
+    const resp = await fetch(query, { headers: { Authorization: `Bearer ${accessToken}` } })
     if (!resp.ok) return
     const data = await resp.json()
     setUsersOptions((data?.data || []).map((u: any) => ({
@@ -356,7 +365,7 @@ export default function DepartmentsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden dark:border-slate-700 dark:bg-slate-900">
               <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold dark:border-slate-700">Підрозділи</div>
-              {(isDirector ? departments.filter((d) => d.id === user?.department?.id) : departments).map((department) => (
+              {visibleDepartments.map((department) => (
                 <button
                   key={department.id}
                   onClick={() => setSelectedDepartmentId(department.id)}
@@ -364,6 +373,9 @@ export default function DepartmentsPage() {
                 >
                   <div>{department.nameUk || department.name}</div>
                   <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{department.code} • {department.usersCount} осіб</div>
+                  <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                    {department.parentId ? 'Відділ' : 'Департамент'}
+                  </div>
                   <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                     Керівник: {department.manager ? `${department.manager.firstName} ${department.manager.lastName}` : '-'} • Діловод: {department.clerk ? `${department.clerk.firstName} ${department.clerk.lastName}` : '-'} • Директор: {department.director ? `${department.director.firstName} ${department.director.lastName}` : '-'}
                   </div>
