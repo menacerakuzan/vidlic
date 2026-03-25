@@ -394,6 +394,11 @@ export class AiProviderService {
       '4. Текст має бути структурований абзацами з переносами рядків.',
       '5. Обовʼязкова багаторівнева нумерація (1., 1.1., 1.2., 2., 2.1. ...).',
       '6. Для зведених звітів обовʼязково роби окремий блок по кожному відділу/джерелу.',
+      '7. У кожному блоці зведення обовʼязково вказуй:',
+      '   - "Відділ: <назва>";',
+      '   - "Відповідальний: <ПІБ>";',
+      '   - далі нумерований перелік результатів.',
+      '8. Між логічними блоками став ОДИН порожній рядок (подвійний перенос).',
       '',
       "ОБОВ'ЯЗКОВА СТРУКТУРА ДОКУМЕНТА:",
       '1. Заголовна частина:',
@@ -689,7 +694,9 @@ export class AiProviderService {
       return {
         documentTitle: parsed.documentTitle || 'ЗВІТ',
         headerLines: Array.isArray(parsed.headerLines) ? parsed.headerLines : [],
-        bodyText: this.enforceOfficialStyle(String(parsed.bodyText), input.reportContent),
+        bodyText: this.normalizeBodySpacing(
+          this.enforceOfficialStyle(String(parsed.bodyText), input.reportContent),
+        ),
         style: {
           fontFamily: parsed.style?.fontFamily || 'Times New Roman',
           fontSize: Number(parsed.style?.fontSize) || 14,
@@ -706,11 +713,19 @@ export class AiProviderService {
         `Про виконання роботи ${input.departmentFullName}`,
         input.periodLabel,
       ],
-      bodyText: this.enforceOfficialStyle(cleaned, input.reportContent),
+      bodyText: this.normalizeBodySpacing(this.enforceOfficialStyle(cleaned, input.reportContent)),
       style: {
         fontFamily: 'Times New Roman',
         fontSize: 14,
       },
     };
+  }
+
+  private normalizeBodySpacing(text: string): string {
+    return text
+      .replace(/\r/g, '')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
 }

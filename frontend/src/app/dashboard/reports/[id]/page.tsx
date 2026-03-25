@@ -38,6 +38,12 @@ export default function ReportDetailsPage() {
   const [attachments, setAttachments] = useState<any[]>([])
   const [attachmentsLoading, setAttachmentsLoading] = useState(false)
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
+  const [aggregationSources, setAggregationSources] = useState<any[]>([])
+  const [aggregationSourcesLoading, setAggregationSourcesLoading] = useState(false)
+  const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([])
+  const [sourceStatusFilter, setSourceStatusFilter] = useState<'all' | 'approved' | 'pending'>('all')
+  const [sourceDepartmentFilter, setSourceDepartmentFilter] = useState<string>('all')
+  const [sourceAuthorFilter, setSourceAuthorFilter] = useState<string>('all')
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   useEffect(() => {
@@ -211,6 +217,55 @@ export default function ReportDetailsPage() {
     }
     return 'AI сформує офіційний документ для погодження за обраний період.'
   }, [user])
+  const canAggregateBySources = useMemo(
+    () => canEditSubmission && ['manager', 'clerk', 'director'].includes(user?.role || ''),
+    [canEditSubmission, user?.role],
+  )
+  const sourceDepartmentOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    aggregationSources.forEach((source) => {
+      if (source.departmentId) map.set(source.departmentId, source.departmentName)
+    })
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
+  }, [aggregationSources])
+  const sourceAuthorOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    aggregationSources.forEach((source) => {
+      if (source.authorId) map.set(source.authorId, source.authorName)
+    })
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
+  }, [aggregationSources])
+  const filteredAggregationSources = useMemo(() => {
+    return aggregationSources.filter((source) => {
+      if (sourceStatusFilter === 'approved' && source.status !== 'approved') return false
+      if (sourceStatusFilter === 'pending' && source.status === 'approved') return false
+      if (sourceDepartmentFilter !== 'all' && source.departmentId !== sourceDepartmentFilter) return false
+      if (sourceAuthorFilter !== 'all' && source.authorId !== sourceAuthorFilter) return false
+      return true
+    })
+  }, [aggregationSources, sourceStatusFilter, sourceDepartmentFilter, sourceAuthorFilter])
+
+  const loadAggregationSources = async () => {
+    if (!accessToken || !params?.id || !canAggregateBySources) {
+      setAggregationSources([])
+      setSelectedSourceIds([])
+      return
+    }
+    setAggregationSourcesLoading(true)
+    const resp = await fetch(`/api/v1/reports/${params.id}/aggregation-sources`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (resp.ok) {
+      const data = await resp.json()
+      const sources = Array.isArray(data?.sources) ? data.sources : []
+      setAggregationSources(sources)
+      setSelectedSourceIds(sources.map((s: any) => s.reportId))
+    } else {
+      setAggregationSources([])
+      setSelectedSourceIds([])
+    }
+    setAggregationSourcesLoading(false)
+  }
 
   const doAction = async (type: 'submit' | 'approve' | 'reject') => {
     if (!accessToken || !params?.id) return
@@ -265,9 +320,23 @@ export default function ReportDetailsPage() {
     if (!accessToken || !params?.id) return
     setDraftLoading(true)
     setError('')
+    const hasManualSelection = canAggregateBySources && aggregationSources.length > 0
+    if (hasManualSelection && selectedSourceIds.length === 0) {
+      setDraftLoading(false)
+      setError('Оберіть хоча б одне джерело для склейки')
+      return
+    }
     const resp = await fetch(`/api/v1/reports/${params.id}/generate-manager-draft`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(
+        hasManualSelection
+          ? { sourceReportIds: selectedSourceIds }
+          : {},
+      ),
     })
     setDraftLoading(false)
 
@@ -358,6 +427,11 @@ export default function ReportDetailsPage() {
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [isDirty])
+
+  useEffect(() => {
+    loadAggregationSources()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params?.id, accessToken, canAggregateBySources])
 
   const addComment = async () => {
     if (!accessToken || !params?.id || !commentText.trim()) return
@@ -529,6 +603,121 @@ export default function ReportDetailsPage() {
               {canEditSubmission && (
                 <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
                   {draftHint}
+                </div>
+              )}
+              {canAggregateBySources && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3 dark:border-slate-700 dark:bg-slate-800/60">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Джерела для AI-склейки</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Обрано: {selectedSourceIds.length} з {aggregationSources.length}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedSourceIds((prev) =>
+                          Array.from(new Set([...prev, ...filteredAggregationSources.map((item) => item.reportId)])),
+                        )
+                      }
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >
+                      Обрати всі (за фільтром)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSourceIds([])}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >
+                      Очистити вибір
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSourceStatusFilter('all')
+                        setSourceDepartmentFilter('all')
+                        setSourceAuthorFilter('all')
+                      }}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >
+                      Скинути фільтри
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <select
+                      value={sourceStatusFilter}
+                      onChange={(e) => setSourceStatusFilter(e.target.value as 'all' | 'approved' | 'pending')}
+                      className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    >
+                      <option value="all">Усі статуси</option>
+                      <option value="approved">Лише погоджені</option>
+                      <option value="pending">Лише в роботі/на погодженні</option>
+                    </select>
+                    <select
+                      value={sourceDepartmentFilter}
+                      onChange={(e) => setSourceDepartmentFilter(e.target.value)}
+                      className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    >
+                      <option value="all">Усі відділи</option>
+                      {sourceDepartmentOptions.map((item) => (
+                        <option key={item.id} value={item.id}>{item.name}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={sourceAuthorFilter}
+                      onChange={(e) => setSourceAuthorFilter(e.target.value)}
+                      className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    >
+                      <option value="all">Усі автори</option>
+                      {sourceAuthorOptions.map((item) => (
+                        <option key={item.id} value={item.id}>{item.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {aggregationSourcesLoading && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Завантаження джерел...</p>
+                  )}
+                  {!aggregationSourcesLoading && aggregationSources.length === 0 && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Джерел для обраного періоду не знайдено.</p>
+                  )}
+                  {!aggregationSourcesLoading && filteredAggregationSources.length > 0 && (
+                    <div className="max-h-56 overflow-auto space-y-2">
+                      {filteredAggregationSources.map((source) => (
+                        <label
+                          key={source.reportId}
+                          className="flex items-start gap-2 rounded-md border border-slate-200 bg-white p-2 text-sm dark:border-slate-700 dark:bg-slate-900/70"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedSourceIds.includes(source.reportId)}
+                            onChange={(e) => {
+                              const checked = e.target.checked
+                              setSelectedSourceIds((prev) =>
+                                checked ? [...prev, source.reportId] : prev.filter((id) => id !== source.reportId),
+                              )
+                            }}
+                          />
+                          <span>
+                            <span className="font-medium">{source.departmentName}</span>{' '}
+                            <span className="text-slate-500 dark:text-slate-400">• {source.authorName}</span>
+                            <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                              {source.status}
+                            </span>
+                            <br />
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              {new Date(source.periodStart).toLocaleDateString('uk-UA')} - {new Date(source.periodEnd).toLocaleDateString('uk-UA')}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {!aggregationSourcesLoading && aggregationSources.length > 0 && filteredAggregationSources.length === 0 && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">За поточним фільтром джерел немає.</p>
+                  )}
                 </div>
               )}
               {canEditSubmission && (

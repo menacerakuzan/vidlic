@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsDateString, IsObject, IsUUID, IsNumber, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsDateString, IsObject, IsUUID, IsNumber, Min, Max, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ReportType, ReportStatus } from '@prisma/client';
@@ -124,6 +124,14 @@ export class RejectReportDto {
   @ApiProperty({ description: 'Причина відхилення' })
   @IsString()
   comment: string;
+}
+
+export class GenerateManagerDraftDto {
+  @ApiPropertyOptional({ type: [String], description: 'ID джерельних звітів для ручного вибору при AI-склейці' })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  sourceReportIds?: string[];
 }
 
 export class AddReportCommentDto {

@@ -299,7 +299,7 @@ export class ReportsService {
     return this.mapReport(updated);
   }
 
-  async generateManagerSubmissionDraft(id: string, userId: string) {
+  async generateManagerSubmissionDraft(id: string, userId: string, sourceReportIds?: string[]) {
     const report = await this.prisma.report.findUnique({
       where: { id },
       include: {
@@ -320,11 +320,12 @@ export class ReportsService {
       throw new ForbiddenException('Можна формувати AI-чернетку лише для свого звіту');
     }
 
-    const aggregation = await this.buildAggregationContextForDraft(report);
+    const aggregation = await this.buildAggregationContextForDraft(report, sourceReportIds);
     const payloadContent = aggregation
       ? {
           aggregateMeta: aggregation.meta,
           sourceReports: aggregation.sources,
+          sourceReportsOutline: this.buildSourceReportsOutline(aggregation.sources),
           currentReport: this.ensureObject(report.content),
         }
       : this.ensureObject(report.content);
@@ -390,6 +391,46 @@ export class ReportsService {
     });
 
     return this.mapReportFull(updated);
+  }
+
+  async getAggregationSourcesForDraft(id: string, userId: string) {
+    const report = await this.prisma.report.findUnique({
+      where: { id },
+      include: {
+        author: { select: { id: true, firstName: true, lastName: true, role: true } },
+        department: { include: { parent: true, children: true } },
+      },
+    });
+
+    if (!report) {
+      throw new NotFoundException('Звіт не знайдено');
+    }
+    if (report.status !== 'draft') {
+      throw new BadRequestException('Джерела доступні лише для чернетки звіту');
+    }
+    if (report.authorId !== userId) {
+      throw new ForbiddenException('Можна працювати лише зі своїм звітом');
+    }
+
+    const aggregation = await this.buildAggregationContextForDraft(report);
+    if (!aggregation) {
+      return { meta: null, sources: [] };
+    }
+
+    return {
+      meta: aggregation.meta,
+      sources: aggregation.sources.map((source) => ({
+        reportId: source.reportId,
+        title: source.title,
+        status: source.status,
+        departmentId: source.departmentId,
+        departmentName: source.departmentName,
+        authorId: source.authorId,
+        authorName: source.authorName,
+        periodStart: source.periodStart,
+        periodEnd: source.periodEnd,
+      })),
+    };
   }
 
   async approve(id: string, dto: ApproveReportDto, user: any) {
@@ -930,7 +971,10 @@ export class ReportsService {
     };
   }
 
-  private async buildAggregationContextForDraft(report: any): Promise<{
+  private async buildAggregationContextForDraft(
+    report: any,
+    sourceReportIds?: string[],
+  ): Promise<{
     meta: {
       level: 'manager' | 'clerk' | 'director';
       sourceDepartmentsCount: number;
@@ -975,14 +1019,18 @@ export class ReportsService {
       if (!sourceReports.length) {
         throw new BadRequestException('Немає звітів спеціалістів за обраний період для формування зведення керівника.');
       }
+      const filteredSourceReports = this.filterAggregationSources(sourceReports, sourceReportIds);
+      if (!filteredSourceReports.length) {
+        throw new BadRequestException('Оберіть хоча б один звіт спеціаліста для формування зведення керівника.');
+      }
 
       return {
         meta: {
           level: 'manager',
           sourceDepartmentsCount: 1,
-          sourceReportsCount: sourceReports.length,
+          sourceReportsCount: filteredSourceReports.length,
         },
-        sources: sourceReports.map((item) => this.mapSourceReport(item)),
+        sources: filteredSourceReports.map((item) => this.mapSourceReport(item)),
       };
     }
 
@@ -1011,14 +1059,18 @@ export class ReportsService {
       if (!sourceReports.length) {
         throw new BadRequestException('Немає звітів керівників відділів за обраний період для формування зведення діловода.');
       }
+      const filteredSourceReports = this.filterAggregationSources(sourceReports, sourceReportIds);
+      if (!filteredSourceReports.length) {
+        throw new BadRequestException('Оберіть хоча б один звіт керівника для формування зведення діловода.');
+      }
 
       return {
         meta: {
           level: 'clerk',
-          sourceDepartmentsCount: new Set(sourceReports.map((item) => item.departmentId)).size,
-          sourceReportsCount: sourceReports.length,
+          sourceDepartmentsCount: new Set(filteredSourceReports.map((item) => item.departmentId)).size,
+          sourceReportsCount: filteredSourceReports.length,
         },
-        sources: sourceReports.map((item) => this.mapSourceReport(item)),
+        sources: filteredSourceReports.map((item) => this.mapSourceReport(item)),
       };
     }
 
@@ -1042,14 +1094,18 @@ export class ReportsService {
       if (!sourceReports.length) {
         throw new BadRequestException('Немає зведених звітів діловода за обраний період для формування документа директора.');
       }
+      const filteredSourceReports = this.filterAggregationSources(sourceReports, sourceReportIds);
+      if (!filteredSourceReports.length) {
+        throw new BadRequestException('Оберіть хоча б один звіт діловода для формування документа директора.');
+      }
 
       return {
         meta: {
           level: 'director',
           sourceDepartmentsCount: 1,
-          sourceReportsCount: sourceReports.length,
+          sourceReportsCount: filteredSourceReports.length,
         },
-        sources: sourceReports.map((item) => this.mapSourceReport(item)),
+        sources: filteredSourceReports.map((item) => this.mapSourceReport(item)),
       };
     }
 
@@ -1070,6 +1126,51 @@ export class ReportsService {
       periodEnd: report.periodEnd?.toISOString?.() || '',
       content: this.ensureObject(report.content),
     };
+  }
+
+  private filterAggregationSources<T extends { id: string }>(sourceReports: T[], sourceReportIds?: string[]): T[] {
+    if (!Array.isArray(sourceReportIds) || sourceReportIds.length === 0) {
+      return sourceReports;
+    }
+
+    const allowedIds = new Set(sourceReportIds);
+    return sourceReports.filter((item) => allowedIds.has(item.id));
+  }
+
+  private buildSourceReportsOutline(
+    sources: Array<{
+      departmentName: string;
+      authorName: string;
+      periodStart: string;
+      periodEnd: string;
+      content: Record<string, any>;
+    }>,
+  ): string {
+    const lines: string[] = [];
+    sources.forEach((source, index) => {
+      lines.push(`${index + 1}. Відділ: ${source.departmentName || 'Невідомий підрозділ'}`);
+      lines.push(`Відповідальний: ${source.authorName || 'Невідомий автор'}`);
+      if (source.periodStart && source.periodEnd) {
+        lines.push(`Період: ${this.formatDate(new Date(source.periodStart))} - ${this.formatDate(new Date(source.periodEnd))}`);
+      }
+      const points = this.extractSectionPoints(source.content || {}, [
+        'workDone',
+        'achievements',
+        'problems',
+        'nextWeekPlan',
+        'summary',
+      ]);
+      if (points.length) {
+        points.slice(0, 6).forEach((point, pointIndex) => {
+          lines.push(`${pointIndex + 1}. ${point}`);
+        });
+      } else {
+        lines.push('1. Дані по виконаних роботах надано у вільній формі.');
+      }
+      lines.push('');
+    });
+
+    return lines.join('\n').trim();
   }
 
   private applyDepartmentTemplate(base: any, template: any, report: any) {

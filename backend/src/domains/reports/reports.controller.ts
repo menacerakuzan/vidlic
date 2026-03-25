@@ -10,6 +10,7 @@ import {
   RejectReportDto,
   AddReportCommentDto,
   ResolveReportCommentDto,
+  GenerateManagerDraftDto,
 } from './dto/reports.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -67,8 +68,16 @@ export class ReportsController {
   @Permissions('reports:write')
   @ApiOperation({ summary: 'Згенерувати AI-чернетку тексту для погодження' })
   @ApiResponse({ status: 200, description: 'AI-чернетку сформовано' })
-  generateManagerDraft(@Param('id') id: string, @Req() req: any) {
-    return this.reportsService.generateManagerSubmissionDraft(id, req.user.id);
+  generateManagerDraft(@Param('id') id: string, @Body() dto: GenerateManagerDraftDto, @Req() req: any) {
+    return this.reportsService.generateManagerSubmissionDraft(id, req.user.id, dto?.sourceReportIds);
+  }
+
+  @Get(':id/aggregation-sources')
+  @Permissions('reports:write')
+  @ApiOperation({ summary: 'Отримати доступні джерела для AI-склейки чернетки' })
+  @ApiResponse({ status: 200, description: 'Список джерел' })
+  getAggregationSources(@Param('id') id: string, @Req() req: any) {
+    return this.reportsService.getAggregationSourcesForDraft(id, req.user.id);
   }
 
   @Post(':id/approve')
