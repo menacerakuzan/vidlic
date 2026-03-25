@@ -17,7 +17,7 @@ const schema = z.object({
   periodStart: z.string().min(1),
   periodEnd: z.string().min(1),
   title: z.string().min(2),
-  workDone: z.string().min(2),
+  workDone: z.string().optional(),
   achievements: z.string().optional(),
   problems: z.string().optional(),
   nextWeekPlan: z.string().optional(),
@@ -36,6 +36,7 @@ function NewReportContent() {
     register,
     handleSubmit,
     setValue,
+    setError,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -65,21 +66,29 @@ function NewReportContent() {
     }
   }, [searchParams, setValue, user?.role])
 
+  const isAggregateMode = searchParams.get('mode') === 'aggregate'
+
   const onSubmit = async (values: FormValues) => {
     if (!accessToken) return
+    if (!isAggregateMode && (!values.workDone || values.workDone.trim().length < 2)) {
+      setError('workDone', { type: 'manual', message: 'Поле "Виконана робота" обовʼязкове' })
+      return
+    }
     setSubmitting(true)
 
-    const payload = {
+    const payload: any = {
       reportType: values.reportType,
       periodStart: values.periodStart,
       periodEnd: values.periodEnd,
       title: values.title,
-      content: {
-        workDone: values.workDone,
-        achievements: values.achievements,
-        problems: values.problems,
-        nextWeekPlan: values.nextWeekPlan,
-      },
+      content: isAggregateMode
+        ? {}
+        : {
+            workDone: values.workDone,
+            achievements: values.achievements,
+            problems: values.problems,
+            nextWeekPlan: values.nextWeekPlan,
+          },
     }
 
     const resp = await fetch('/api/v1/reports', {
@@ -97,6 +106,12 @@ function NewReportContent() {
       return
     }
 
+    const created = await resp.json().catch(() => null)
+    const reportId = created?.id
+    if (reportId) {
+      router.push(`/dashboard/reports/${reportId}`)
+      return
+    }
     router.push('/dashboard/reports')
   }
 
@@ -104,7 +119,9 @@ function NewReportContent() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold font-display">Створити чернетку звіту</h1>
+          <h1 className="text-2xl font-semibold font-display">
+            {isAggregateMode ? 'Створити зведену чернетку' : 'Створити чернетку звіту'}
+          </h1>
           <p className="text-slate-500 mt-1">{user?.department?.nameUk}</p>
         </div>
 
@@ -139,50 +156,59 @@ function NewReportContent() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="workDone">Виконана робота</Label>
-              <textarea
-                id="workDone"
-                rows={4}
-                className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
-                {...register('workDone')}
-              />
-              {errors.workDone && <p className="text-xs text-red-500">{errors.workDone.message}</p>}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="achievements">Досягнення</Label>
-                <textarea
-                  id="achievements"
-                  rows={3}
-                  className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
-                  {...register('achievements')}
-                />
+            {isAggregateMode ? (
+              <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
+                Після створення чернетки ви одразу перейдете у картку звіту, де можна обрати джерела і натиснути
+                {' '}<span className="font-semibold">"Згенерувати AI-чернетку"</span>.
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="problems">Проблеми</Label>
-                <textarea
-                  id="problems"
-                  rows={3}
-                  className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
-                  {...register('problems')}
-                />
-              </div>
-            </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="workDone">Виконана робота</Label>
+                  <textarea
+                    id="workDone"
+                    rows={4}
+                    className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                    {...register('workDone')}
+                  />
+                  {errors.workDone && <p className="text-xs text-red-500">{errors.workDone.message}</p>}
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="nextWeekPlan">План на наступний період</Label>
-              <textarea
-                id="nextWeekPlan"
-                rows={3}
-                className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
-                {...register('nextWeekPlan')}
-              />
-            </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="achievements">Досягнення</Label>
+                    <textarea
+                      id="achievements"
+                      rows={3}
+                      className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                      {...register('achievements')}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="problems">Проблеми</Label>
+                    <textarea
+                      id="problems"
+                      rows={3}
+                      className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                      {...register('problems')}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="nextWeekPlan">План на наступний період</Label>
+                  <textarea
+                    id="nextWeekPlan"
+                    rows={3}
+                    className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                    {...register('nextWeekPlan')}
+                  />
+                </div>
+              </>
+            )}
 
             <Button type="submit" disabled={submitting}>
-              {submitting ? 'Збереження...' : 'Зберегти чернетку'}
+              {submitting ? 'Збереження...' : isAggregateMode ? 'Створити чернетку для AI-склейки' : 'Зберегти чернетку'}
             </Button>
           </form>
         </GlassCard>
