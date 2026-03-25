@@ -315,6 +315,7 @@ export class ReportsService {
             id: true,
             firstName: true,
             lastName: true,
+            email: true,
             role: true,
             position: { select: { titleUk: true, title: true } },
           },
@@ -335,6 +336,9 @@ export class ReportsService {
       throw new ForbiddenException('Можна формувати AI-чернетку лише для свого звіту');
     }
 
+    const executorName = this.resolveAuthorName(report.author);
+    const executorPosition = this.resolveAuthorPosition(report.author);
+
     const aggregation = await this.buildAggregationContextForDraft(report, sourceReportIds);
     const payloadContent = aggregation
       ? {
@@ -350,8 +354,9 @@ export class ReportsService {
       periodLabel: this.buildPeriodLabel(report.periodStart, report.periodEnd),
       departmentFullName: report.department?.nameUk || report.department?.name || 'підрозділу',
       reportContent: payloadContent,
-      authorName: `${report.author?.firstName || ''} ${report.author?.lastName || ''}`.trim(),
-      authorPosition: report.author?.position?.titleUk || report.author?.position?.title || undefined,
+      authorName: executorName,
+      authorPosition: executorPosition,
+      authorRole: report.author?.role || undefined,
       customPrompt: (
         await this.prisma.departmentReportTemplate.findUnique({
           where: { departmentId: report.departmentId },
@@ -379,6 +384,7 @@ export class ReportsService {
       }),
       report,
     );
+    const normalizedHeaderLines = this.buildRoleAwareHeaderLines(report);
 
     const updated = await this.prisma.report.update({
       where: { id },
@@ -387,7 +393,7 @@ export class ReportsService {
           ...this.ensureObject(report.content),
           managerSubmission: {
             documentTitle: managerSubmission.documentTitle,
-            headerLines: managerSubmission.headerLines,
+            headerLines: normalizedHeaderLines,
             bodyText: managerSubmission.bodyText,
             style: managerSubmission.style,
           generatedAt: new Date().toISOString(),
@@ -918,11 +924,70 @@ export class ReportsService {
     return `${periodEnd.getFullYear()} (станом на ${this.formatDate(periodEnd)})`;
   }
 
+  private buildRoleAwareHeaderLines(report: any): string[] {
+    const departmentName = report.department?.nameUk || report.department?.name || 'підрозділу';
+    const role = report.author?.role;
+    if (role === 'specialist') {
+      return [
+        `Про виконання роботи спеціаліста відділу ${departmentName}`,
+        this.buildPeriodLabel(report.periodStart, report.periodEnd),
+      ];
+    }
+    if (role === 'manager') {
+      return [
+        `Про виконання роботи сектору ${departmentName}`,
+        this.buildPeriodLabel(report.periodStart, report.periodEnd),
+      ];
+    }
+    if (role === 'clerk') {
+      return [
+        `Про виконання роботи діловода департаменту ${departmentName}`,
+        this.buildPeriodLabel(report.periodStart, report.periodEnd),
+      ];
+    }
+    if (role === 'director') {
+      return [
+        `Про виконання роботи директора департаменту ${departmentName}`,
+        this.buildPeriodLabel(report.periodStart, report.periodEnd),
+      ];
+    }
+    return [
+      `Про виконання роботи ${departmentName}`,
+      this.buildPeriodLabel(report.periodStart, report.periodEnd),
+    ];
+  }
+
   private formatDate(date: Date): string {
     const day = String(date.getDate()).padStart(2, '0');
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();
     return `${day}.${month}.${year}`;
+  }
+
+  private resolveAuthorName(author: any): string {
+    const fullName = `${author?.firstName || ''} ${author?.lastName || ''}`.trim();
+    if (fullName) return fullName;
+    if (author?.email) return author.email;
+    return 'Невказано';
+  }
+
+  private resolveAuthorPosition(author: any): string {
+    const explicitPosition = author?.position?.titleUk || author?.position?.title;
+    if (explicitPosition) return explicitPosition;
+    switch (author?.role) {
+      case 'specialist':
+        return 'спеціаліст';
+      case 'manager':
+        return 'керівник відділу';
+      case 'clerk':
+        return 'діловод';
+      case 'director':
+        return 'директор департаменту';
+      case 'admin':
+        return 'адміністратор';
+      default:
+        return 'посада не вказана';
+    }
   }
 
   private resolveApproverByRole(

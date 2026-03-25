@@ -20,6 +20,7 @@ export interface ManagerSubmissionInput {
   reportContent: Record<string, any>;
   authorName?: string;
   authorPosition?: string;
+  authorRole?: string;
   customPrompt?: string;
   sectionSchema?: any[];
 }
@@ -423,12 +424,14 @@ export class AiProviderService {
       `   - НАЗВА ЗВІТУ: ${input.title}`,
       `   - АВТОР: ${input.authorName || 'невказано'}`,
       `   - ПОСАДА АВТОРА: ${input.authorPosition || 'невказано'}`,
+      `   - РОЛЬ АВТОРА: ${input.authorRole || 'невказано'}`,
       '',
       "СТИЛЬ ВИКЛАДУ:",
       '1. Формула речень: [Дія] + [Обʼєкт] + [Мета] + [Результат/статус].',
       '2. Уникай розмовної мови. Використовуй формулювання: "забезпечено", "здійснено", "опрацьовано", "впроваджено", "підготовлено".',
       '3. Не дублюй одні й ті самі фрази на початку сусідніх пунктів.',
       '4. Не додавати markdown, таблиці markdown або службові примітки.',
+      '5. Обсяг тексту має бути достатньо детальним: не менше 12-18 нумерованих пунктів у сумі (залежно від кількості джерел).',
       input.customPrompt ? `5. Додаткові вимоги департаменту:\n${input.customPrompt}` : '',
       Array.isArray(input.sectionSchema) && input.sectionSchema.length
         ? `6. Рекомендована структура секцій (JSON): ${JSON.stringify(input.sectionSchema)}`
@@ -465,7 +468,7 @@ export class AiProviderService {
     // Keep AI output if it is already sufficiently detailed and structured.
     if (
       !rawOutline &&
-      ((words >= 90 && sentenceCount >= 4 && hasOfficialMarkers) || (words >= 120 && hasStructure))
+      ((words >= 150 && sentenceCount >= 7 && hasOfficialMarkers) || (words >= 180 && hasStructure))
     ) {
       return cleanedText;
     }
