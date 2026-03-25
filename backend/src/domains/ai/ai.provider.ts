@@ -19,6 +19,7 @@ export interface ManagerSubmissionInput {
   departmentFullName: string;
   reportContent: Record<string, any>;
   authorName?: string;
+  authorPosition?: string;
   customPrompt?: string;
   sectionSchema?: any[];
 }
@@ -406,6 +407,7 @@ export class AiProviderService {
       '   - Рядок 2: Про виконання роботи [ВСТАВИТИ НАЗВУ ДЕПАРТАМЕНТУ]',
       '   - Рядок 3: [ВСТАВИТИ ПЕРІОД]',
       '2. Основна частина:',
+      '   - перед основною частиною окремим рядком: "Виконавець: <посада> <ПІБ>";',
       '   - кожен розділ містить підрозділи і нумеровані пункти;',
       '   - спочатку короткий підсумок розділу, потім деталізація.',
       '3. Для сценарію діловода:',
@@ -420,6 +422,7 @@ export class AiProviderService {
       `   - ПЕРІОД: ${input.periodLabel}`,
       `   - НАЗВА ЗВІТУ: ${input.title}`,
       `   - АВТОР: ${input.authorName || 'невказано'}`,
+      `   - ПОСАДА АВТОРА: ${input.authorPosition || 'невказано'}`,
       '',
       "СТИЛЬ ВИКЛАДУ:",
       '1. Формула речень: [Дія] + [Обʼєкт] + [Мета] + [Результат/статус].',
@@ -694,8 +697,11 @@ export class AiProviderService {
       return {
         documentTitle: parsed.documentTitle || 'ЗВІТ',
         headerLines: Array.isArray(parsed.headerLines) ? parsed.headerLines : [],
-        bodyText: this.normalizeBodySpacing(
-          this.enforceOfficialStyle(String(parsed.bodyText), input.reportContent),
+        bodyText: this.ensureExecutorIdentity(
+          this.normalizeBodySpacing(
+            this.enforceOfficialStyle(String(parsed.bodyText), input.reportContent),
+          ),
+          input,
         ),
         style: {
           fontFamily: parsed.style?.fontFamily || 'Times New Roman',
@@ -713,7 +719,10 @@ export class AiProviderService {
         `Про виконання роботи ${input.departmentFullName}`,
         input.periodLabel,
       ],
-      bodyText: this.normalizeBodySpacing(this.enforceOfficialStyle(cleaned, input.reportContent)),
+      bodyText: this.ensureExecutorIdentity(
+        this.normalizeBodySpacing(this.enforceOfficialStyle(cleaned, input.reportContent)),
+        input,
+      ),
       style: {
         fontFamily: 'Times New Roman',
         fontSize: 14,
@@ -727,5 +736,15 @@ export class AiProviderService {
       .replace(/[ \t]+\n/g, '\n')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
+  }
+
+  private ensureExecutorIdentity(text: string, input: ManagerSubmissionInput): string {
+    const normalized = text.trim();
+    if (/^Виконавець:/im.test(normalized)) {
+      return normalized;
+    }
+    const executorName = (input.authorName || '').trim() || 'Невказано';
+    const executorPosition = (input.authorPosition || '').trim() || 'Посада не вказана';
+    return `Виконавець: ${executorPosition} ${executorName}\n\n${normalized}`.trim();
   }
 }

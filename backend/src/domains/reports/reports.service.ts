@@ -310,7 +310,15 @@ export class ReportsService {
     const report = await this.prisma.report.findUnique({
       where: { id },
       include: {
-        author: { select: { id: true, firstName: true, lastName: true, role: true } },
+        author: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            role: true,
+            position: { select: { titleUk: true, title: true } },
+          },
+        },
         department: { include: { parent: true, children: true } },
       },
     });
@@ -343,6 +351,7 @@ export class ReportsService {
       departmentFullName: report.department?.nameUk || report.department?.name || 'підрозділу',
       reportContent: payloadContent,
       authorName: `${report.author?.firstName || ''} ${report.author?.lastName || ''}`.trim(),
+      authorPosition: report.author?.position?.titleUk || report.author?.position?.title || undefined,
       customPrompt: (
         await this.prisma.departmentReportTemplate.findUnique({
           where: { departmentId: report.departmentId },
