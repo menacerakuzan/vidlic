@@ -195,12 +195,34 @@ export default function ReportDetailsPage() {
     }
     return false
   }, [report, user])
+  const canCreateAggregateDraft = useMemo(
+    () => !!report && ['manager', 'clerk', 'director'].includes(user?.role || '') && !canEditSubmission,
+    [report, user?.role, canEditSubmission],
+  )
+  const aggregateCreateLabel = useMemo(() => {
+    if (user?.role === 'manager') return 'Створити зведений звіт відділу'
+    if (user?.role === 'clerk') return 'Створити зведений звіт департаменту'
+    if (user?.role === 'director') return 'Створити фінальний зведений звіт'
+    return 'Створити зведений звіт'
+  }, [user?.role])
+  const aggregateDraftHint = useMemo(() => {
+    if (user?.role === 'manager') {
+      return 'Ви переглядаєте звіт спеціаліста. Для склейки по відділу створіть власну чернетку за цей період і натисніть "Згенерувати AI-чернетку".'
+    }
+    if (user?.role === 'clerk') {
+      return 'Ви переглядаєте звіт керівника. Для склейки по департаменту створіть власну чернетку за цей період і натисніть "Згенерувати AI-чернетку".'
+    }
+    if (user?.role === 'director') {
+      return 'Для фінального зведення створіть власну чернетку за цей період і натисніть "Згенерувати AI-чернетку".'
+    }
+    return ''
+  }, [user?.role])
 
   const submitButtonLabel = useMemo(() => {
     if (!user) return 'Відправити на погодження'
-    if (user.role === 'specialist') return 'Відправити керівнику'
-    if (user.role === 'manager') return 'Відправити діловоду'
-    if (user.role === 'clerk') return 'Відправити директору'
+    if (user.role === 'specialist') return 'На фінальне погодження керівнику'
+    if (user.role === 'manager') return 'На погодження діловоду'
+    if (user.role === 'clerk') return 'На погодження директору'
     return 'Відправити на погодження'
   }, [user])
 
@@ -577,6 +599,14 @@ export default function ReportDetailsPage() {
                     Друк-версія
                   </Link>
                 )}
+                {canCreateAggregateDraft && (
+                  <Link
+                    href={`/dashboard/reports/new?mode=aggregate&periodStart=${encodeURIComponent(report.periodStart)}&periodEnd=${encodeURIComponent(report.periodEnd)}&reportType=${encodeURIComponent(report.reportType)}`}
+                    className="rounded-lg border border-primary px-4 py-2 text-sm text-primary hover:bg-primary/10"
+                  >
+                    {aggregateCreateLabel}
+                  </Link>
+                )}
                 {canEditSubmission && (
                   <button disabled={draftLoading} onClick={generateManagerDraft} className="rounded-lg border border-primary px-4 py-2 text-sm text-primary disabled:opacity-60">
                     {draftLoading ? 'Генерація чернетки...' : 'Згенерувати AI-чернетку'}
@@ -600,6 +630,11 @@ export default function ReportDetailsPage() {
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-3 dark:border-slate-700 dark:bg-slate-900">
+              {canCreateAggregateDraft && (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-slate-700 dark:text-slate-200">
+                  {aggregateDraftHint}
+                </div>
+              )}
               {canEditSubmission && (
                 <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
                   {draftHint}

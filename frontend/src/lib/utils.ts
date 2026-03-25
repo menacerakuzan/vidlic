@@ -42,9 +42,9 @@ export function getStatusColor(status: string): string {
 export function getStatusLabel(status: string): string {
   const labels: Record<string, string> = {
     draft: 'Чернетка',
-    pending_manager: 'На погодженні',
-    pending_clerk: 'На узгодженні діловода',
-    pending_director: 'На затвердженні',
+    pending_manager: 'Фінальне погодження керівника',
+    pending_clerk: 'На погодженні у діловода',
+    pending_director: 'На погодженні у директора',
     approved: 'Затверджено',
     rejected: 'Відхилено',
   }

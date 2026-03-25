@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { GlassCard } from '@/components/ui/glass-card'
 import { Button } from '@/components/ui/button'
@@ -25,15 +25,17 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
-export default function NewReport() {
+function NewReportContent() {
   const { user } = useAuthStore()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [submitting, setSubmitting] = useState(false)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -41,6 +43,27 @@ export default function NewReport() {
       reportType: 'weekly',
     },
   })
+
+  useEffect(() => {
+    const mode = searchParams.get('mode')
+    const periodStart = searchParams.get('periodStart')
+    const periodEnd = searchParams.get('periodEnd')
+    const reportType = searchParams.get('reportType')
+    const title = searchParams.get('title')
+
+    if (reportType === 'weekly' || reportType === 'monthly') {
+      setValue('reportType', reportType)
+    }
+    if (periodStart) setValue('periodStart', periodStart)
+    if (periodEnd) setValue('periodEnd', periodEnd)
+    if (title) {
+      setValue('title', title)
+    } else if (mode === 'aggregate') {
+      if (user?.role === 'manager') setValue('title', 'Зведений звіт керівника відділу')
+      if (user?.role === 'clerk') setValue('title', 'Зведений звіт діловода департаменту')
+      if (user?.role === 'director') setValue('title', 'Фінальний зведений звіт директора')
+    }
+  }, [searchParams, setValue, user?.role])
 
   const onSubmit = async (values: FormValues) => {
     if (!accessToken) return
@@ -165,5 +188,13 @@ export default function NewReport() {
         </GlassCard>
       </div>
     </DashboardLayout>
+  )
+}
+
+export default function NewReport() {
+  return (
+    <Suspense fallback={<DashboardLayout><div className="p-6 text-sm text-slate-500">Завантаження...</div></DashboardLayout>}>
+      <NewReportContent />
+    </Suspense>
   )
 }

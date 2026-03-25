@@ -46,6 +46,16 @@ export default function ReportsPage() {
   }, [isAuthenticated, accessToken])
 
   const canCreate = useMemo(() => !!user, [user])
+  const canCreateAggregate = useMemo(
+    () => ['manager', 'clerk', 'director'].includes(user?.role || ''),
+    [user?.role],
+  )
+  const aggregateTitle = useMemo(() => {
+    if (user?.role === 'manager') return 'Зведений звіт керівника відділу'
+    if (user?.role === 'clerk') return 'Зведений звіт діловода департаменту'
+    if (user?.role === 'director') return 'Фінальний зведений звіт директора'
+    return 'Зведений звіт'
+  }, [user?.role])
 
   return (
     <DashboardLayout>
@@ -55,11 +65,21 @@ export default function ReportsPage() {
             <h1 className="text-2xl font-semibold font-display">Звіти</h1>
             <p className="text-slate-500 mt-1">Поточні звіти та погодження</p>
           </div>
-          {canCreate && (
-            <Link href="/dashboard/reports/new" className="rounded-xl bg-primary text-white px-4 py-2 text-sm font-medium hover:opacity-90">
-              Створити чернетку
-            </Link>
-          )}
+          <div className="flex items-center gap-2">
+            {canCreateAggregate && (
+              <Link
+                href={`/dashboard/reports/new?mode=aggregate&title=${encodeURIComponent(aggregateTitle)}`}
+                className="rounded-xl border border-primary px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10"
+              >
+                Створити зведений звіт
+              </Link>
+            )}
+            {canCreate && (
+              <Link href="/dashboard/reports/new" className="rounded-xl bg-primary text-white px-4 py-2 text-sm font-medium hover:opacity-90">
+                Створити чернетку
+              </Link>
+            )}
+          </div>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
