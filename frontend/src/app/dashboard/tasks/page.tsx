@@ -43,6 +43,7 @@ export default function TasksPage() {
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
   const [deletingTaskId, setDeletingTaskId] = useState('')
   const [transparency, setTransparency] = useState<any[]>([])
+  const [taskActionError, setTaskActionError] = useState('')
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const loadAll = async () => {
@@ -159,6 +160,7 @@ export default function TasksPage() {
     if (!accessToken) return
     const ok = window.confirm('Видалити задачу?')
     if (!ok) return
+    setTaskActionError('')
     setDeletingTaskId(id)
     const resp = await fetch(`/api/v1/tasks/${id}`, {
       method: 'DELETE',
@@ -170,7 +172,10 @@ export default function TasksPage() {
       if (selectedTaskId === id) {
         setSelectedTaskId('')
       }
+      return
     }
+    const err = await resp.json().catch(() => null)
+    setTaskActionError(err?.message || 'Не вдалося видалити задачу')
   }
 
   const loadTaskAttachments = async (taskId: string) => {
@@ -263,10 +268,19 @@ export default function TasksPage() {
     if (user?.role !== 'specialist') return []
     return tasks.filter((task) => task.reporter?.id === user.id)
   }, [tasks, user?.id, user?.role])
+  const ownCreatedTasks = useMemo(() => {
+    if (!user?.id) return []
+    return tasks.filter((task) => task.reporter?.id === user.id)
+  }, [tasks, user?.id])
 
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto space-y-6">
+        {taskActionError && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300">
+            {taskActionError}
+          </div>
+        )}
         <div>
           <h1 className="text-2xl font-semibold font-display">Задачі</h1>
           <p className="text-slate-500 mt-1">Створення, призначення та Kanban</p>
@@ -360,6 +374,32 @@ export default function TasksPage() {
               <p className="text-sm text-slate-500 dark:text-slate-400">У вас немає власних задач для видалення.</p>
             )}
             {specialistOwnTasks.map((task) => (
+              <div key={task.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                <div>
+                  <p className="text-sm font-medium">{task.title}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Статус: {task.status} {task.assignee ? `· Виконавець: ${task.assignee.firstName} ${task.assignee.lastName}` : ''}
+                  </p>
+                </div>
+                <button
+                  onClick={() => deleteTask(task.id)}
+                  disabled={deletingTaskId === task.id}
+                  className="rounded border border-rose-300 px-3 py-1.5 text-xs text-rose-700 disabled:opacity-60"
+                >
+                  {deletingTaskId === task.id ? 'Видалення...' : 'Видалити'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {user?.role !== 'specialist' && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
+            <h2 className="text-lg font-semibold">Мої створені задачі</h2>
+            {ownCreatedTasks.length === 0 && (
+              <p className="text-sm text-slate-500 dark:text-slate-400">У вас немає власних задач для видалення.</p>
+            )}
+            {ownCreatedTasks.map((task) => (
               <div key={task.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                 <div>
                   <p className="text-sm font-medium">{task.title}</p>

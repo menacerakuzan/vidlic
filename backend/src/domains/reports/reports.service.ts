@@ -29,12 +29,14 @@ export class ReportsService {
       where.OR = [
         { authorId: user.id },
         { departmentId: user.departmentId },
+        { currentApproverId: user.id },
       ];
     } else if (user.role === 'clerk') {
       where.OR = [
         { authorId: user.id },
         { departmentId: user.departmentId },
         { department: { parentId: user.departmentId } },
+        { currentApproverId: user.id },
       ];
     }
 
@@ -144,8 +146,8 @@ export class ReportsService {
       throw new NotFoundException('Звіт не знайдено');
     }
 
-    if (report.status !== 'draft') {
-      throw new BadRequestException('Можна редагувати тільки чернетки');
+    if (!['draft', 'rejected'].includes(report.status)) {
+      throw new BadRequestException('Можна редагувати тільки чернетки або повернені звіти');
     }
 
     if (report.authorId !== userId) {
@@ -169,6 +171,8 @@ export class ReportsService {
         content: dto.content ?? report.content,
         periodStart: dto.periodStart ? new Date(dto.periodStart) : report.periodStart,
         periodEnd: dto.periodEnd ? new Date(dto.periodEnd) : report.periodEnd,
+        status: report.status === 'rejected' ? 'draft' : report.status,
+        currentApproverId: report.status === 'rejected' ? null : report.currentApproverId,
         version: report.version + 1,
       },
       include: {
@@ -272,6 +276,9 @@ export class ReportsService {
     const firstStep = flowSteps[0];
     const firstApproverId = firstStep ? this.resolveApproverByRole(firstStep.role, managerId, clerkId, directorId) : null;
     const firstStatus = this.statusByStepRole(firstStep?.role);
+    if (firstStep && !firstApproverId) {
+      throw new BadRequestException('Не вдалося визначити першого погоджувача для маршруту звіту.');
+    }
 
     const updated = await this.prisma.report.update({
       where: { id },
@@ -312,8 +319,8 @@ export class ReportsService {
       throw new NotFoundException('Звіт не знайдено');
     }
 
-    if (report.status !== 'draft') {
-      throw new BadRequestException('AI-чернетку можна формувати лише для чернетки звіту');
+    if (!['draft', 'rejected'].includes(report.status)) {
+      throw new BadRequestException('AI-чернетку можна формувати лише для чернетки або поверненого звіту');
     }
 
     if (report.authorId !== userId) {
@@ -455,11 +462,19 @@ export class ReportsService {
       throw new BadRequestException('Звіт не очікує фінального погодження');
     }
 
-    if ((user.role === 'manager' || user.role === 'clerk') && report.currentApproverId !== user.id) {
-      throw new ForbiddenException('Ви не є погоджувачем цього звіту');
-    }
-
     const routing = await this.getApprovalRoutingContext(report.departmentId);
+
+    if (user.role === 'manager' || user.role === 'clerk') {
+      if (report.currentApproverId && report.currentApproverId !== user.id) {
+        throw new ForbiddenException('Ви не є погоджувачем цього звіту');
+      }
+      if (!report.currentApproverId) {
+        const expectedApproverId = user.role === 'manager' ? routing.managerId : routing.clerkId;
+        if (expectedApproverId !== user.id) {
+          throw new ForbiddenException('Ви не є погоджувачем цього звіту');
+        }
+      }
+    }
 
     const approvalResult = await this.approvalsService.approve({
       entityType: ApprovalEntityType.report,
@@ -729,8 +744,8 @@ export class ReportsService {
       throw new ForbiddenException('Немає доступу до видалення цього звіту');
     }
 
-    if (!isAdmin && report.status !== 'draft') {
-      throw new BadRequestException('Можна видаляти лише звіти у статусі чернетки');
+    if (!isAdmin && !['draft', 'rejected'].includes(report.status)) {
+      throw new BadRequestException('Можна видаляти лише звіти у статусі чернетки або повернені (rejected)');
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -781,6 +796,7 @@ export class ReportsService {
 
   private canViewReport(report: any, user: any): boolean {
     if (user.role === 'admin' || user.role === 'director') return true;
+    if (report.currentApproverId && report.currentApproverId === user.id) return true;
     if (user.role === 'clerk') {
       if (!user.departmentId) return false;
       if (report.departmentId === user.departmentId) return true;

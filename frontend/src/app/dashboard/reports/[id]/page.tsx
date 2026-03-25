@@ -179,7 +179,7 @@ export default function ReportDetailsPage() {
   const canDelete = useMemo(() => {
     if (!report || !user) return false
     if (user.role === 'admin') return true
-    return report.status === 'draft' && report.author?.id === user.id
+    return ['draft', 'rejected'].includes(report.status) && report.author?.id === user.id
   }, [report, user])
 
   const canApprove = useMemo(() => {
