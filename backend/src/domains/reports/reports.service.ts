@@ -1147,21 +1147,37 @@ export class ReportsService {
         take: 200,
       });
 
-      if (!sourceReports.length) {
-        throw new BadRequestException('Немає звітів спеціалістів за обраний період для формування зведення керівника.');
-      }
+      // Manager may create a regular report even without subordinate sources.
+      // For aggregate mode, we include manager's own current report as one of sources.
       const filteredSourceReports = this.filterAggregationSources(sourceReports, sourceReportIds);
-      if (!filteredSourceReports.length) {
-        throw new BadRequestException('Оберіть хоча б один звіт спеціаліста для формування зведення керівника.');
+      const ownManagerSource = {
+        reportId: report.id,
+        title: report.title || 'Власний звіт керівника',
+        reportType: report.reportType,
+        status: report.status,
+        departmentId: report.departmentId,
+        departmentName: report.department?.nameUk || report.department?.name || 'Підрозділ',
+        authorId: report.author?.id || report.authorId,
+        authorName: this.resolveAuthorName(report.author),
+        periodStart: report.periodStart?.toISOString?.() || '',
+        periodEnd: report.periodEnd?.toISOString?.() || '',
+        content: this.ensureObject(report.content),
+      };
+
+      const selectedSources = filteredSourceReports.map((item) => this.mapSourceReport(item));
+      const sources = [ownManagerSource, ...selectedSources];
+
+      if (sources.length === 0) {
+        return null;
       }
 
       return {
         meta: {
           level: 'manager',
-          sourceDepartmentsCount: 1,
-          sourceReportsCount: filteredSourceReports.length,
+          sourceDepartmentsCount: new Set(sources.map((item) => item.departmentId)).size || 1,
+          sourceReportsCount: sources.length,
         },
-        sources: filteredSourceReports.map((item) => this.mapSourceReport(item)),
+        sources,
       };
     }
 

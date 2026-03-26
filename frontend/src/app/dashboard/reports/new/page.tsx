@@ -160,6 +160,9 @@ function NewReportContent() {
               <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
                 Після створення чернетки ви одразу перейдете у картку звіту, де можна обрати джерела і натиснути
                 {' '}<span className="font-semibold">"Згенерувати AI-чернетку"</span>.
+                {user?.role === 'manager' && (
+                  <> До зведення також додається ваш власний текст звіту.</>
+                )}
               </div>
             ) : (
               <>
