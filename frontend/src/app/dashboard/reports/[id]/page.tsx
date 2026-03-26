@@ -185,11 +185,18 @@ export default function ReportDetailsPage() {
 
   const checklist = useMemo(() => {
     const content = report?.content || {}
+    const mode = String(content?.reportMode || '').toLowerCase()
+    const isAggregateByMode =
+      mode === 'aggregate' || (mode !== 'regular' && String(report?.title || '').toLowerCase().includes('зведен'))
     return [
       { key: 'title', label: 'Назва звіту заповнена', ok: !!report?.title?.trim() },
       { key: 'period', label: 'Період звіту заповнений', ok: !!report?.periodStart && !!report?.periodEnd },
       { key: 'workDone', label: 'Розділ \"Виконана робота\" заповнений', ok: !!content?.workDone?.trim?.() },
-      { key: 'managerSubmission', label: 'Текст для погодження підготовлений', ok: managerDraftText.trim().length > 0 },
+      {
+        key: 'managerSubmission',
+        label: 'Текст для погодження підготовлений',
+        ok: isAggregateByMode ? managerDraftText.trim().length > 0 : true,
+      },
     ]
   }, [report, managerDraftText])
 

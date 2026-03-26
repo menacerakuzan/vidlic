@@ -403,6 +403,9 @@ export class AiProviderService {
       '   - "Відповідальний: <ПІБ>";',
       '   - далі нумерований перелік результатів.',
       '10. Між логічними блоками став ОДИН порожній рядок (подвійний перенос).',
+      '11. Використай УСІ передані sourceReports/sourceReportsOutline без пропусків.',
+      '12. Категорично заборонено вигадувати нові відділи/сектори/підрозділи. Використовуй тільки ті назви, які є у вхідних даних.',
+      '13. Якщо у вхідних даних лише один відділ — у результаті має бути лише один відділ.',
       '',
       "ОБОВ'ЯЗКОВА СТРУКТУРА ДОКУМЕНТА:",
       '1. Заголовна частина:',
@@ -704,7 +707,7 @@ export class AiProviderService {
         headerLines: Array.isArray(parsed.headerLines) ? parsed.headerLines : [],
         bodyText: this.ensureExecutorIdentity(
           this.normalizeBodySpacing(
-            this.enforceOfficialStyle(String(parsed.bodyText), input.reportContent),
+            String(parsed.bodyText),
           ),
           input,
         ),
@@ -725,7 +728,7 @@ export class AiProviderService {
         input.periodLabel,
       ],
       bodyText: this.ensureExecutorIdentity(
-        this.normalizeBodySpacing(this.enforceOfficialStyle(cleaned, input.reportContent)),
+        this.normalizeBodySpacing(cleaned),
         input,
       ),
       style: {

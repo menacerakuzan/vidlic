@@ -18,12 +18,12 @@ export class TasksService {
 
     const where: any = {};
 
-    if (user.role === 'specialist') {
+    if (user.role === 'specialist' || user.role === 'clerk') {
       where.OR = [
         { assigneeId: user.id },
         { reporterId: user.id },
       ];
-    } else if (user.role === 'manager' || user.role === 'director' || user.role === 'clerk') {
+    } else if (user.role === 'manager' || user.role === 'director') {
       const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
       where.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) };
       where.NOT = {
@@ -82,12 +82,12 @@ export class TasksService {
   async getKanban(departmentId: string, user: any) {
     const where: any = {};
 
-    if (user.role === 'specialist') {
+    if (user.role === 'specialist' || user.role === 'clerk') {
       where.OR = [
         { assigneeId: user.id },
         { reporterId: user.id },
       ];
-    } else if (user.role === 'manager' || user.role === 'director' || user.role === 'clerk') {
+    } else if (user.role === 'manager' || user.role === 'director') {
       const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
       where.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) };
       where.NOT = {
@@ -417,6 +417,7 @@ export class TasksService {
     if (user.role === 'admin') return true;
     if (this.shouldHideFromLeadership(task, user) && task.reporterId !== user.id) return false;
     if ((user.role === 'director' || user.role === 'manager') && task.departmentId === user.departmentId) return true;
+    if (user.role === 'clerk' && (task.reporterId === user.id || task.assigneeId === user.id)) return true;
     if (user.role === 'specialist' && task.reporterId === user.id) return true;
     return false;
   }
@@ -425,6 +426,7 @@ export class TasksService {
     if (user.role === 'admin') return true;
     if (this.shouldHideFromLeadership(task, user) && task.reporterId !== user.id) return false;
     if ((user.role === 'director' || user.role === 'manager') && task.departmentId === user.departmentId) return true;
+    if (user.role === 'clerk' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
     if (user.role === 'specialist' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
     return false;
   }
@@ -433,6 +435,7 @@ export class TasksService {
     if (user.role === 'admin') return true;
     if (this.shouldHideFromLeadership(task, user) && task.reporterId !== user.id) return false;
     if ((user.role === 'director' || user.role === 'manager') && task.departmentId === user.departmentId) return true;
+    if (user.role === 'clerk' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
     if (user.role === 'specialist' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
     return false;
   }
@@ -451,6 +454,9 @@ export class TasksService {
   }
 
   async getDepartmentTransparency(user: any) {
+    if (user?.role === 'clerk') {
+      return [];
+    }
     const where: any = { isPrivate: false };
     if (user?.role !== 'admin') {
       const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user?.departmentId);

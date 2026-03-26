@@ -32,7 +32,7 @@ const navigation = [
   { name: 'Задачі', href: '/dashboard/tasks', icon: CheckSquare },
   { name: 'Аналітика', href: '/dashboard/analytics', icon: BarChart3, roles: ['manager', 'clerk', 'director'] },
   { name: 'Сповіщення', href: '/dashboard/notifications', icon: Bell },
-  { name: 'Підрозділи', href: '/dashboard/departments', icon: Users, roles: ['manager', 'director', 'admin'] },
+  { name: 'Підрозділи', href: '/dashboard/departments', icon: Users, roles: ['specialist', 'manager', 'director', 'admin', 'clerk'] },
   { name: 'Конструктор', href: '/dashboard/layouts', icon: Settings, roles: ['admin'] },
   { name: 'Налаштування', href: '/dashboard/settings', icon: Settings, roles: ['admin'] },
 ]

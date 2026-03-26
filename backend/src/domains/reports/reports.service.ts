@@ -220,9 +220,10 @@ export class ReportsService {
     const directorId = routing.directorId;
 
     const content = this.ensureObject(report.content);
+    const reportMode = this.getReportMode(report);
     const managerSubmission = this.ensureObject(content.managerSubmission);
     const hasSubmissionText = typeof managerSubmission.bodyText === 'string' && managerSubmission.bodyText.trim().length > 0;
-    if (!hasSubmissionText) {
+    if (reportMode === 'aggregate' && !hasSubmissionText) {
       throw new BadRequestException(
         'Перед відправкою сформуйте AI-чернетку для погодження та за потреби відредагуйте її.',
       );
@@ -240,7 +241,6 @@ export class ReportsService {
       }
     }
 
-    const reportMode = this.getReportMode(report);
     let flowSteps: Array<{ order: number; role: 'manager' | 'clerk' | 'director' }> = [];
     if (report.author?.role === 'specialist') {
       flowSteps = [{ order: 1, role: 'manager' }];
@@ -2033,6 +2033,7 @@ export class ReportsService {
 
   private buildSourceReportsOutline(
     sources: Array<{
+      reportId: string;
       departmentName: string;
       authorName: string;
       periodStart: string;
@@ -2040,73 +2041,39 @@ export class ReportsService {
       content: Record<string, any>;
     }>,
   ): string {
-    const grouped = new Map<
-      string,
-      {
-        authors: Map<
-          string,
-          {
-            done: string[];
-            risks: string[];
-            next: string[];
-          }
-        >;
-      }
-    >();
-
-    for (const source of sources) {
-      const department = source.departmentName || 'Невідомий підрозділ';
-      const bucket = grouped.get(department) || {
-        authors: new Map(),
-      };
-
-      const author = source.authorName || 'Невідомий автор';
-      const authorBucket = bucket.authors.get(author) || { done: [], risks: [], next: [] };
-      authorBucket.done.push(...this.extractSectionPoints(source.content || {}, ['workDone', 'achievements', 'summary']));
-      authorBucket.risks.push(...this.extractSectionPoints(source.content || {}, ['problems']));
-      authorBucket.next.push(...this.extractSectionPoints(source.content || {}, ['nextWeekPlan']));
-      bucket.authors.set(author, authorBucket);
-
-      grouped.set(department, bucket);
-    }
-
     const lines: string[] = [];
-    Array.from(grouped.entries()).forEach(([department, bucket], index) => {
-      lines.push(`${index + 1}. Відділ: ${department}`);
+    sources.forEach((source, index) => {
+      const department = source.departmentName || 'Невідомий підрозділ';
+      const author = source.authorName || 'Невідомий автор';
+      lines.push(`${index + 1}. Звіт джерела #${index + 1}`);
+      lines.push(`Відділ: ${department}`);
+      lines.push(`Відповідальний: ${author}`);
+      if (source.periodStart && source.periodEnd) {
+        lines.push(`Період: ${this.formatDate(new Date(source.periodStart))} - ${this.formatDate(new Date(source.periodEnd))}`);
+      }
+
       lines.push(`${index + 1}.1. Виконана робота`);
-      const done: string[] = [];
-      Array.from(bucket.authors.entries()).forEach(([author, authorData]) => {
-        const authorDone = authorData.done.slice(0, 6).map((item) => `${author}: ${item}`);
-        done.push(...authorDone);
-      });
+      const done = this.extractSectionPoints(source.content || {}, ['workDone', 'achievements', 'summary']).slice(0, 16);
       if (!done.length) {
         lines.push(`${index + 1}.1.1. Дані по виконаних роботах надано у вільній формі.`);
       } else {
-        done.slice(0, 16).forEach((item, i) => lines.push(`${index + 1}.1.${i + 1}. ${item}`));
+        done.forEach((item, i) => lines.push(`${index + 1}.1.${i + 1}. ${item}`));
       }
 
       lines.push(`${index + 1}.2. Проблеми/ризики`);
-      const risks: string[] = [];
-      Array.from(bucket.authors.entries()).forEach(([author, authorData]) => {
-        const authorRisks = authorData.risks.slice(0, 4).map((item) => `${author}: ${item}`);
-        risks.push(...authorRisks);
-      });
+      const risks = this.extractSectionPoints(source.content || {}, ['problems']).slice(0, 12);
       if (!risks.length) {
         lines.push(`${index + 1}.2.1. Критичних ризиків за звітний період не зафіксовано.`);
       } else {
-        risks.slice(0, 12).forEach((item, i) => lines.push(`${index + 1}.2.${i + 1}. ${item}`));
+        risks.forEach((item, i) => lines.push(`${index + 1}.2.${i + 1}. ${item}`));
       }
 
       lines.push(`${index + 1}.3. Наступні кроки`);
-      const next: string[] = [];
-      Array.from(bucket.authors.entries()).forEach(([author, authorData]) => {
-        const authorNext = authorData.next.slice(0, 4).map((item) => `${author}: ${item}`);
-        next.push(...authorNext);
-      });
+      const next = this.extractSectionPoints(source.content || {}, ['nextWeekPlan']).slice(0, 12);
       if (!next.length) {
         lines.push(`${index + 1}.3.1. Продовжити виконання планових завдань за напрямом.`);
       } else {
-        next.slice(0, 12).forEach((item, i) => lines.push(`${index + 1}.3.${i + 1}. ${item}`));
+        next.forEach((item, i) => lines.push(`${index + 1}.3.${i + 1}. ${item}`));
       }
 
       lines.push('');
