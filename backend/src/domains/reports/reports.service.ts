@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../shared/prisma.service';
 import { CreateReportDto, UpdateReportDto, ReportQueryDto, SubmitReportDto, ApproveReportDto, RejectReportDto, UpsertActivityRowDto } from './dto/reports.dto';
@@ -7,6 +7,7 @@ import { ApprovalsService } from '../approvals/approvals.service';
 import { ReportApprovedEvent, ReportCreatedEvent, ReportRejectedEvent, ReportSubmittedEvent } from '../../events/report.events';
 import { AiProviderService } from '../ai/ai.provider';
 import { v4 as uuidv4 } from 'uuid';
+import { AlignmentType, Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from 'docx';
 
 @Injectable()
 export class ReportsService {
@@ -79,9 +80,12 @@ export class ReportsService {
       this.prisma.report.count({ where }),
     ]);
 
+    const visibleReports = reports.filter((item) => !this.isActivityPlanReport(item));
+    const normalizedTotal = user.role === 'specialist' ? visibleReports.length : total;
+
     return {
-      data: reports.map(r => this.mapReport(r)),
-      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      data: visibleReports.map(r => this.mapReport(r)),
+      meta: { page, limit, total: normalizedTotal, totalPages: Math.max(1, Math.ceil(normalizedTotal / limit)) },
     };
   }
 
@@ -1241,13 +1245,15 @@ export class ReportsService {
     }
     const rootDepartmentId = scopedDepartmentIds[0];
 
+    const title = this.buildActivitiesPlanTitle(normalizedPeriod, periodType);
+
     let report = await this.prisma.report.findFirst({
       where: {
         departmentId: rootDepartmentId,
         reportType: periodType === 'weekly' ? 'weekly' : 'monthly',
         periodStart: start,
         periodEnd: end,
-        title: { contains: `План заходів ${normalizedPeriod}` },
+        title,
       },
       include: {
         department: { select: { id: true, nameUk: true, name: true } },
@@ -1262,7 +1268,7 @@ export class ReportsService {
           reportType: periodType === 'weekly' ? 'weekly' : 'monthly',
           periodStart: start,
           periodEnd: end,
-          title: `План заходів ${normalizedPeriod}`,
+          title,
           status: 'draft',
           departmentId: rootDepartmentId,
           authorId: user.id,
@@ -1271,6 +1277,9 @@ export class ReportsService {
               period: normalizedPeriod,
               periodType,
               rows: [],
+              lockedAt: null,
+              lockedById: null,
+              reminderSentAt: null,
             },
           },
         },
@@ -1285,6 +1294,26 @@ export class ReportsService {
     return this.mapActivitiesPlan(report);
   }
 
+  async listActivitiesPlans(periodType: 'weekly' | 'monthly', user: any) {
+    const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+    if (!scopedDepartmentIds.length) return [];
+    const rootDepartmentId = scopedDepartmentIds[0];
+    const reports = await this.prisma.report.findMany({
+      where: {
+        departmentId: rootDepartmentId,
+        reportType: periodType === 'weekly' ? 'weekly' : 'monthly',
+        title: { startsWith: this.activitiesPlanTitlePrefix() },
+      },
+      include: {
+        department: { select: { id: true, nameUk: true, name: true } },
+      },
+      orderBy: [{ periodStart: 'desc' }],
+      take: 60,
+    });
+
+    return reports.map((report) => this.mapActivitiesPlan(report));
+  }
+
   async upsertActivitiesRow(reportId: string, dto: UpsertActivityRowDto, user: any) {
     const report = await this.prisma.report.findUnique({
       where: { id: reportId },
@@ -1296,15 +1325,24 @@ export class ReportsService {
     if (!report) throw new NotFoundException('План заходів не знайдено');
 
     await this.ensureCanAccessActivitiesPlan(report, user);
+    this.assertActivitiesEditor(user);
 
     const content = this.ensureObject(report.content);
     const plan = this.ensureObject(content.activityPlan);
+    if (plan.lockedAt) {
+      throw new BadRequestException('Документ плану заходів заблоковано діловодом');
+    }
+    if (dto.expectedVersion && Number(dto.expectedVersion) !== Number(report.version)) {
+      throw new ConflictException('Документ був змінений іншим користувачем. Оновіть сторінку.');
+    }
     const rows = Array.isArray(plan.rows) ? [...plan.rows] : [];
     const now = new Date().toISOString();
+    this.assertActivityRowPayload(dto);
 
     if (dto.id) {
       const index = rows.findIndex((row: any) => row?.id === dto.id);
       if (index < 0) throw new NotFoundException('Рядок не знайдено');
+      this.assertCanEditActivitiesRow(rows[index], user);
       rows[index] = {
         ...rows[index],
         title: dto.title?.trim() || rows[index].title || '',
@@ -1349,7 +1387,7 @@ export class ReportsService {
     return this.mapActivitiesPlan(updated);
   }
 
-  async deleteActivitiesRow(reportId: string, rowId: string, user: any) {
+  async deleteActivitiesRow(reportId: string, rowId: string, user: any, expectedVersion?: number) {
     const report = await this.prisma.report.findUnique({
       where: { id: reportId },
       include: {
@@ -1360,10 +1398,20 @@ export class ReportsService {
     if (!report) throw new NotFoundException('План заходів не знайдено');
 
     await this.ensureCanAccessActivitiesPlan(report, user);
+    this.assertActivitiesEditor(user);
 
     const content = this.ensureObject(report.content);
     const plan = this.ensureObject(content.activityPlan);
+    if (plan.lockedAt) {
+      throw new BadRequestException('Документ плану заходів заблоковано діловодом');
+    }
+    if (expectedVersion && expectedVersion !== Number(report.version)) {
+      throw new ConflictException('Документ був змінений іншим користувачем. Оновіть сторінку.');
+    }
     const rows = Array.isArray(plan.rows) ? [...plan.rows] : [];
+    const targetRow = rows.find((row: any) => row?.id === rowId);
+    if (!targetRow) return { success: true };
+    this.assertCanEditActivitiesRow(targetRow, user);
     const nextRows = rows.filter((row: any) => row?.id !== rowId);
 
     await this.prisma.report.update({
@@ -1412,11 +1460,200 @@ export class ReportsService {
       );
     });
 
-    const month = this.normalizeMonth((plan.month as string) || '') || this.toMonth(report.periodStart);
     return {
       fileName: `zahody-${this.resolveActivityPeriodKey(plan, report)}.csv`,
       csv: csvLines.join('\n'),
     };
+  }
+
+  async exportActivitiesDocx(reportId: string, user: any) {
+    const report = await this.prisma.report.findUnique({
+      where: { id: reportId },
+      include: {
+        department: { select: { id: true, nameUk: true, name: true } },
+      },
+    });
+    if (!report) throw new NotFoundException('План заходів не знайдено');
+    await this.ensureCanAccessActivitiesPlan(report, user);
+
+    const content = this.ensureObject(report.content);
+    const plan = this.ensureObject(content.activityPlan);
+    const rows = Array.isArray(plan.rows) ? plan.rows : [];
+    const periodType = plan.periodType === 'weekly' ? 'weekly' : 'monthly';
+    const periodKey = this.resolveActivityPeriodKey(plan, report);
+
+    const document = new Document({
+      sections: [
+        {
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.RIGHT,
+              children: [new TextRun({ text: 'ПОГОДЖУЮ', bold: true, font: 'Times New Roman', size: 28 })],
+            }),
+            new Paragraph({
+              alignment: AlignmentType.RIGHT,
+              children: [new TextRun({ text: 'Заступник голови обласної державної адміністрації', font: 'Times New Roman', size: 28 })],
+            }),
+            new Paragraph({
+              alignment: AlignmentType.RIGHT,
+              children: [new TextRun({ text: '_____________________', font: 'Times New Roman', size: 28 })],
+            }),
+            new Paragraph({ text: '' }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: 'ОСНОВНІ ЗАХОДИ', bold: true, font: 'Times New Roman', size: 28 })],
+            }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: report.department?.nameUk || report.department?.name || '', font: 'Times New Roman', size: 26 })],
+            }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: this.formatActivitiesPeriodLabel(periodType, periodKey), font: 'Times New Roman', size: 26 })],
+            }),
+            new Paragraph({ text: '' }),
+            new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              rows: [
+                new TableRow({
+                  children: [
+                    this.docxCell('№', true),
+                    this.docxCell('Назва заходу', true),
+                    this.docxCell('Місце проведення заходу', true),
+                    this.docxCell('Дата та час проведення заходу', true),
+                    this.docxCell('Відповідальний за проведення заходу', true),
+                  ],
+                }),
+                ...rows.map((row: any, idx: number) =>
+                  new TableRow({
+                    children: [
+                      this.docxCell(String(idx + 1)),
+                      this.docxCell(row?.title || ''),
+                      this.docxCell(row?.location || ''),
+                      this.docxCell(row?.schedule || ''),
+                      this.docxCell(row?.responsible || ''),
+                    ],
+                  }),
+                ),
+              ],
+            }),
+          ],
+        },
+      ],
+    });
+
+    const buffer = await Packer.toBuffer(document);
+    return {
+      fileName: `zahody-${periodKey}.docx`,
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      contentBase64: buffer.toString('base64'),
+    };
+  }
+
+  async lockActivitiesPlan(reportId: string, user: any) {
+    const report = await this.prisma.report.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('План заходів не знайдено');
+    await this.ensureCanAccessActivitiesPlan(report, user);
+    this.assertCanManageActivitiesLock(user);
+
+    const content = this.ensureObject(report.content);
+    const plan = this.ensureObject(content.activityPlan);
+    const updated = await this.prisma.report.update({
+      where: { id: reportId },
+      data: {
+        content: {
+          ...content,
+          activityPlan: {
+            ...plan,
+            lockedAt: new Date().toISOString(),
+            lockedById: user.id,
+          },
+        },
+        version: report.version + 1,
+      },
+      include: {
+        department: { select: { id: true, nameUk: true, name: true } },
+      },
+    });
+    return this.mapActivitiesPlan(updated);
+  }
+
+  async unlockActivitiesPlan(reportId: string, user: any) {
+    const report = await this.prisma.report.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('План заходів не знайдено');
+    await this.ensureCanAccessActivitiesPlan(report, user);
+    this.assertCanManageActivitiesLock(user);
+
+    const content = this.ensureObject(report.content);
+    const plan = this.ensureObject(content.activityPlan);
+    const updated = await this.prisma.report.update({
+      where: { id: reportId },
+      data: {
+        content: {
+          ...content,
+          activityPlan: {
+            ...plan,
+            lockedAt: null,
+            lockedById: null,
+          },
+        },
+        version: report.version + 1,
+      },
+      include: {
+        department: { select: { id: true, nameUk: true, name: true } },
+      },
+    });
+    return this.mapActivitiesPlan(updated);
+  }
+
+  async remindActivitiesPlanParticipants(reportId: string, user: any) {
+    const report = await this.prisma.report.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('План заходів не знайдено');
+    await this.ensureCanAccessActivitiesPlan(report, user);
+    this.assertCanManageActivitiesLock(user);
+
+    const content = this.ensureObject(report.content);
+    const plan = this.ensureObject(content.activityPlan);
+    const rows = Array.isArray(plan.rows) ? plan.rows : [];
+    const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+    const users = await this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        departmentId: { in: scopedDepartmentIds },
+        role: { in: ['specialist', 'manager', 'clerk'] },
+      },
+      select: { id: true, firstName: true, lastName: true, role: true },
+    });
+
+    const filledBy = new Set(rows.map((row: any) => row?.createdById).filter(Boolean));
+    const targets = users.filter((item) => !filledBy.has(item.id) && item.id !== user.id);
+    if (!targets.length) return { sent: 0 };
+
+    await this.prisma.notification.createMany({
+      data: targets.map((target) => ({
+        userId: target.id,
+        type: 'reminder',
+        title: 'Нагадування: заповнення плану заходів',
+        message: 'Будь ласка, додайте ваші заходи у спільний план поточного періоду.',
+        referenceType: 'activities_plan',
+        referenceId: reportId,
+      })),
+    });
+
+    await this.prisma.report.update({
+      where: { id: reportId },
+      data: {
+        content: {
+          ...content,
+          activityPlan: {
+            ...plan,
+            reminderSentAt: new Date().toISOString(),
+          },
+        },
+      },
+    });
+
+    return { sent: targets.length };
   }
 
   private async ensureCanAccessActivitiesPlan(report: any, user: any) {
@@ -1425,6 +1662,35 @@ export class ReportsService {
     if (!scopedDepartmentIds.includes(report.departmentId)) {
       throw new ForbiddenException('Немає доступу до цього плану заходів');
     }
+  }
+
+  private assertActivitiesEditor(user: any) {
+    if (!user) throw new ForbiddenException('Немає доступу');
+    if (['admin', 'director', 'clerk', 'manager', 'specialist'].includes(user.role)) return;
+    throw new ForbiddenException('Немає доступу до редагування плану заходів');
+  }
+
+  private assertCanManageActivitiesLock(user: any) {
+    if (!user) throw new ForbiddenException('Немає доступу');
+    if (['admin', 'director', 'clerk'].includes(user.role)) return;
+    throw new ForbiddenException('Лише діловод/директор можуть завершувати або відкривати документ');
+  }
+
+  private assertCanEditActivitiesRow(row: any, user: any) {
+    if (!row) return;
+    if (['admin', 'director', 'clerk'].includes(user?.role)) return;
+    if (user?.role === 'manager') return;
+    if (row.createdById && row.createdById === user?.id) return;
+    throw new ForbiddenException('Можна редагувати лише власні рядки');
+  }
+
+  private assertActivityRowPayload(dto: UpsertActivityRowDto) {
+    const title = (dto.title || '').trim();
+    const schedule = (dto.schedule || '').trim();
+    const responsible = (dto.responsible || '').trim();
+    if (!title) throw new BadRequestException('Поле "Назва заходу" є обовʼязковим');
+    if (!schedule) throw new BadRequestException('Поле "Дата та час проведення заходу" є обовʼязковим');
+    if (!responsible) throw new BadRequestException('Поле "Відповідальний" є обовʼязковим');
   }
 
   private mapActivitiesPlan(report: any) {
@@ -1449,7 +1715,12 @@ export class ReportsService {
         location: row.location || '',
         schedule: row.schedule || '',
         responsible: row.responsible || '',
+        createdById: row.createdById || null,
       })),
+      isLocked: Boolean(plan.lockedAt),
+      lockedAt: plan.lockedAt || null,
+      lockedById: plan.lockedById || null,
+      version: report.version,
       updatedAt: report.updatedAt,
     };
   }
@@ -1458,6 +1729,22 @@ export class ReportsService {
     const str = (value || '').trim();
     if (!/^\d{4}-\d{2}$/.test(str)) return null;
     return str;
+  }
+
+  private activitiesPlanTitlePrefix() {
+    return '[ACTIVITY_PLAN]';
+  }
+
+  private buildActivitiesPlanTitle(period: string, periodType: 'weekly' | 'monthly') {
+    const typeLabel = periodType === 'weekly' ? 'weekly' : 'monthly';
+    return `${this.activitiesPlanTitlePrefix()} План заходів ${period} (${typeLabel})`;
+  }
+
+  private isActivityPlanReport(report: any): boolean {
+    const title = String(report?.title || '');
+    if (title.startsWith(this.activitiesPlanTitlePrefix())) return true;
+    const content = this.ensureObject(report?.content);
+    return Boolean(content.activityPlan);
   }
 
   private normalizeWeek(value?: string | null): string | null {
@@ -1525,6 +1812,41 @@ export class ReportsService {
       return this.toIsoWeek(report.periodStart);
     }
     return this.toMonth(report.periodStart);
+  }
+
+  private formatActivitiesPeriodLabel(periodType: 'weekly' | 'monthly', periodKey: string) {
+    if (periodType === 'weekly') {
+      return `які відбудуться протягом тижня ${periodKey}`;
+    }
+    const [yearRaw, monthRaw] = periodKey.split('-');
+    const year = Number(yearRaw);
+    const month = Number(monthRaw);
+    const monthNames = [
+      'січні',
+      'лютому',
+      'березні',
+      'квітні',
+      'травні',
+      'червні',
+      'липні',
+      'серпні',
+      'вересні',
+      'жовтні',
+      'листопаді',
+      'грудні',
+    ];
+    return `які відбудуться у ${monthNames[month - 1] || periodKey} ${year || ''} року`.trim();
+  }
+
+  private docxCell(text: string, header = false) {
+    return new TableCell({
+      children: [
+        new Paragraph({
+          alignment: header ? AlignmentType.CENTER : AlignmentType.LEFT,
+          children: [new TextRun({ text: text || '', font: 'Times New Roman', size: 24, bold: header })],
+        }),
+      ],
+    });
   }
 
   private escapeCsv(value: string): string {

@@ -55,7 +55,7 @@ export class RolesGuard implements CanActivate {
           'ai:read', 'ui:read',
         ],
         clerk: [
-          'reports:read', 'reports:approve',
+          'reports:read', 'reports:write', 'reports:approve',
           'tasks:read',
           'analytics:read', 'analytics:view',
           'departments:read',

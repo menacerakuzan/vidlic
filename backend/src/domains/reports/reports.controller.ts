@@ -45,6 +45,14 @@ export class ReportsController {
     return this.reportsService.getOrCreateActivitiesPlan(period || month, normalizedType, req.user);
   }
 
+  @Get('activities/plans')
+  @Permissions('reports:read')
+  @ApiOperation({ summary: 'Список документів плану заходів' })
+  listActivitiesPlans(@Query('periodType') periodType: string, @Req() req: any) {
+    const normalizedType = periodType === 'weekly' ? 'weekly' : 'monthly';
+    return this.reportsService.listActivitiesPlans(normalizedType, req.user);
+  }
+
   @Post('activities/plan/:id/rows')
   @Permissions('reports:write')
   @ApiOperation({ summary: 'Додати або оновити рядок плану заходів' })
@@ -55,8 +63,13 @@ export class ReportsController {
   @Delete('activities/plan/:id/rows/:rowId')
   @Permissions('reports:write')
   @ApiOperation({ summary: 'Видалити рядок плану заходів' })
-  deleteActivitiesRow(@Param('id') id: string, @Param('rowId') rowId: string, @Req() req: any) {
-    return this.reportsService.deleteActivitiesRow(id, rowId, req.user);
+  deleteActivitiesRow(
+    @Param('id') id: string,
+    @Param('rowId') rowId: string,
+    @Query('expectedVersion') expectedVersion: string,
+    @Req() req: any,
+  ) {
+    return this.reportsService.deleteActivitiesRow(id, rowId, req.user, Number(expectedVersion) || undefined);
   }
 
   @Get('activities/plan/:id/export')
@@ -64,6 +77,34 @@ export class ReportsController {
   @ApiOperation({ summary: 'Експорт плану заходів у CSV' })
   exportActivitiesCsv(@Param('id') id: string, @Req() req: any) {
     return this.reportsService.exportActivitiesCsv(id, req.user);
+  }
+
+  @Get('activities/plan/:id/export-docx')
+  @Permissions('reports:read')
+  @ApiOperation({ summary: 'Експорт плану заходів у DOCX' })
+  exportActivitiesDocx(@Param('id') id: string, @Req() req: any) {
+    return this.reportsService.exportActivitiesDocx(id, req.user);
+  }
+
+  @Post('activities/plan/:id/lock')
+  @Permissions('reports:write')
+  @ApiOperation({ summary: 'Заблокувати документ плану заходів' })
+  lockActivitiesPlan(@Param('id') id: string, @Req() req: any) {
+    return this.reportsService.lockActivitiesPlan(id, req.user);
+  }
+
+  @Post('activities/plan/:id/unlock')
+  @Permissions('reports:write')
+  @ApiOperation({ summary: 'Розблокувати документ плану заходів' })
+  unlockActivitiesPlan(@Param('id') id: string, @Req() req: any) {
+    return this.reportsService.unlockActivitiesPlan(id, req.user);
+  }
+
+  @Post('activities/plan/:id/remind')
+  @Permissions('reports:write')
+  @ApiOperation({ summary: 'Надіслати нагадування щодо заповнення плану заходів' })
+  remindActivitiesPlan(@Param('id') id: string, @Req() req: any) {
+    return this.reportsService.remindActivitiesPlanParticipants(id, req.user);
   }
 
   @Get(':id')

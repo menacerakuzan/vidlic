@@ -172,12 +172,15 @@ export class UpsertActivityRowDto {
   location?: string;
 
   @ApiPropertyOptional({ description: 'Дата/час або період проведення' })
-  @IsOptional()
   @IsString()
-  schedule?: string;
+  schedule: string;
 
   @ApiPropertyOptional({ description: 'Відповідальний за проведення заходу' })
-  @IsOptional()
   @IsString()
-  responsible?: string;
+  responsible: string;
+
+  @ApiPropertyOptional({ description: 'Версія документа для оптимістичного блокування' })
+  @IsOptional()
+  @IsNumber()
+  expectedVersion?: number;
 }
