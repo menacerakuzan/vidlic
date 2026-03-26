@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../shared/prisma.service';
-import { CreateReportDto, UpdateReportDto, ReportQueryDto, SubmitReportDto, ApproveReportDto, RejectReportDto, UpsertActivityRowDto } from './dto/reports.dto';
+import { CreateReportDto, UpdateReportDto, ReportQueryDto, SubmitReportDto, ApproveReportDto, RejectReportDto, UpsertActivityRowDto, UpdateActivitiesGoogleSheetDto } from './dto/reports.dto';
 import { ReportStatus, ApprovalEntityType } from '@prisma/client';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { ReportApprovedEvent, ReportCreatedEvent, ReportRejectedEvent, ReportSubmittedEvent } from '../../events/report.events';
@@ -1280,6 +1280,8 @@ export class ReportsService {
               lockedAt: null,
               lockedById: null,
               reminderSentAt: null,
+              googleSheetUrl: null,
+              googleSheetEmbedUrl: null,
             },
           },
         },
@@ -1291,6 +1293,22 @@ export class ReportsService {
     }
 
     await this.ensureCanAccessActivitiesPlan(report, user);
+    return this.mapActivitiesPlan(report);
+  }
+
+  async getActivitiesPlanById(reportId: string, user: any) {
+    const report = await this.prisma.report.findUnique({
+      where: { id: reportId },
+      include: {
+        department: { select: { id: true, nameUk: true, name: true } },
+        author: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
+    if (!report) throw new NotFoundException('План заходів не знайдено');
+    await this.ensureCanAccessActivitiesPlan(report, user);
+    if (!this.isActivityPlanReport(report)) {
+      throw new BadRequestException('Документ не є планом заходів');
+    }
     return this.mapActivitiesPlan(report);
   }
 
@@ -1656,6 +1674,42 @@ export class ReportsService {
     return { sent: targets.length };
   }
 
+  async setActivitiesGoogleSheet(reportId: string, dto: UpdateActivitiesGoogleSheetDto, user: any) {
+    const report = await this.prisma.report.findUnique({
+      where: { id: reportId },
+      include: {
+        department: { select: { id: true, nameUk: true, name: true } },
+      },
+    });
+    if (!report) throw new NotFoundException('План заходів не знайдено');
+    await this.ensureCanAccessActivitiesPlan(report, user);
+    this.assertCanManageActivitiesLock(user);
+
+    const content = this.ensureObject(report.content);
+    const plan = this.ensureObject(content.activityPlan);
+    const normalizedUrl = this.normalizeGoogleSheetUrl(dto.googleSheetUrl);
+    const updated = await this.prisma.report.update({
+      where: { id: reportId },
+      data: {
+        content: {
+          ...content,
+          activityPlan: {
+            ...plan,
+            googleSheetUrl: normalizedUrl,
+            googleSheetEmbedUrl: this.toGoogleSheetEmbedUrl(normalizedUrl),
+            updatedAt: new Date().toISOString(),
+          },
+        },
+        version: report.version + 1,
+      },
+      include: {
+        department: { select: { id: true, nameUk: true, name: true } },
+      },
+    });
+
+    return this.mapActivitiesPlan(updated);
+  }
+
   private async ensureCanAccessActivitiesPlan(report: any, user: any) {
     if (user?.role === 'admin') return;
     const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user?.departmentId);
@@ -1720,9 +1774,38 @@ export class ReportsService {
       isLocked: Boolean(plan.lockedAt),
       lockedAt: plan.lockedAt || null,
       lockedById: plan.lockedById || null,
+      googleSheetUrl: typeof plan.googleSheetUrl === 'string' ? plan.googleSheetUrl : null,
+      googleSheetEmbedUrl: typeof plan.googleSheetEmbedUrl === 'string' ? plan.googleSheetEmbedUrl : null,
       version: report.version,
       updatedAt: report.updatedAt,
     };
+  }
+
+  private normalizeGoogleSheetUrl(value?: string | null): string | null {
+    const input = (value || '').trim();
+    if (!input) return null;
+    let parsed: URL;
+    try {
+      parsed = new URL(input);
+    } catch (_err) {
+      throw new BadRequestException('Некоректне посилання Google Sheets');
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (host !== 'docs.google.com') {
+      throw new BadRequestException('Потрібне посилання саме на docs.google.com/spreadsheets');
+    }
+    const match = parsed.pathname.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match?.[1]) {
+      throw new BadRequestException('Не вдалося визначити ID Google Sheets документа');
+    }
+    return `https://docs.google.com/spreadsheets/d/${match[1]}/edit`;
+  }
+
+  private toGoogleSheetEmbedUrl(value?: string | null): string | null {
+    if (!value) return null;
+    const match = value.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match?.[1]) return null;
+    return `https://docs.google.com/spreadsheets/d/${match[1]}/edit?usp=sharing`;
   }
 
   private normalizeMonth(value?: string | null): string | null {

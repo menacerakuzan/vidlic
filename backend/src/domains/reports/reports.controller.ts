@@ -12,6 +12,7 @@ import {
   ResolveReportCommentDto,
   GenerateManagerDraftDto,
   UpsertActivityRowDto,
+  UpdateActivitiesGoogleSheetDto,
 } from './dto/reports.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -60,6 +61,13 @@ export class ReportsController {
     return this.reportsService.upsertActivitiesRow(id, dto, req.user);
   }
 
+  @Get('activities/plan/:id')
+  @Permissions('reports:read')
+  @ApiOperation({ summary: 'Отримати план заходів за ID документа' })
+  getActivitiesPlanById(@Param('id') id: string, @Req() req: any) {
+    return this.reportsService.getActivitiesPlanById(id, req.user);
+  }
+
   @Delete('activities/plan/:id/rows/:rowId')
   @Permissions('reports:write')
   @ApiOperation({ summary: 'Видалити рядок плану заходів' })
@@ -105,6 +113,13 @@ export class ReportsController {
   @ApiOperation({ summary: 'Надіслати нагадування щодо заповнення плану заходів' })
   remindActivitiesPlan(@Param('id') id: string, @Req() req: any) {
     return this.reportsService.remindActivitiesPlanParticipants(id, req.user);
+  }
+
+  @Post('activities/plan/:id/google-sheet')
+  @Permissions('reports:write')
+  @ApiOperation({ summary: 'Привʼязати Google Sheets документ до плану заходів' })
+  setActivitiesGoogleSheet(@Param('id') id: string, @Body() dto: UpdateActivitiesGoogleSheetDto, @Req() req: any) {
+    return this.reportsService.setActivitiesGoogleSheet(id, dto, req.user);
   }
 
   @Get(':id')

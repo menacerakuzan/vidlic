@@ -184,3 +184,10 @@ export class UpsertActivityRowDto {
   @IsNumber()
   expectedVersion?: number;
 }
+
+export class UpdateActivitiesGoogleSheetDto {
+  @ApiPropertyOptional({ description: 'Посилання на Google Sheets документ', example: 'https://docs.google.com/spreadsheets/d/FILE_ID/edit' })
+  @IsOptional()
+  @IsString()
+  googleSheetUrl?: string;
+}
