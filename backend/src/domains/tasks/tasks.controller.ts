@@ -33,8 +33,8 @@ export class TasksController {
   @Permissions('tasks:read')
   @ApiOperation({ summary: 'Порівняльна прозорість задач між підрозділами' })
   @ApiResponse({ status: 200, description: 'Агреговані показники по підрозділах' })
-  getTransparency() {
-    return this.tasksService.getDepartmentTransparency();
+  getTransparency(@Req() req: any) {
+    return this.tasksService.getDepartmentTransparency(req.user);
   }
 
   @Get(':id')

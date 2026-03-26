@@ -155,3 +155,29 @@ export class ResolveReportCommentDto {
   @IsString()
   note?: string;
 }
+
+export class UpsertActivityRowDto {
+  @ApiPropertyOptional({ description: 'ID рядка (для редагування)' })
+  @IsOptional()
+  @IsString()
+  id?: string;
+
+  @ApiProperty({ description: 'Назва заходу' })
+  @IsString()
+  title: string;
+
+  @ApiPropertyOptional({ description: 'Місце проведення заходу' })
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional({ description: 'Дата/час або період проведення' })
+  @IsOptional()
+  @IsString()
+  schedule?: string;
+
+  @ApiPropertyOptional({ description: 'Відповідальний за проведення заходу' })
+  @IsOptional()
+  @IsString()
+  responsible?: string;
+}

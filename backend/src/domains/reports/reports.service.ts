@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../shared/prisma.service';
-import { CreateReportDto, UpdateReportDto, ReportQueryDto, SubmitReportDto, ApproveReportDto, RejectReportDto } from './dto/reports.dto';
+import { CreateReportDto, UpdateReportDto, ReportQueryDto, SubmitReportDto, ApproveReportDto, RejectReportDto, UpsertActivityRowDto } from './dto/reports.dto';
 import { ReportStatus, ApprovalEntityType } from '@prisma/client';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { ReportApprovedEvent, ReportCreatedEvent, ReportRejectedEvent, ReportSubmittedEvent } from '../../events/report.events';
@@ -25,24 +25,27 @@ export class ReportsService {
 
     if (user.role === 'specialist') {
       where.authorId = user.id;
-    } else if (user.role === 'manager') {
+    } else if (user.role === 'manager' || user.role === 'clerk' || user.role === 'director') {
+      const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
       where.OR = [
         { authorId: user.id },
-        { departmentId: user.departmentId },
-        { currentApproverId: user.id },
-      ];
-    } else if (user.role === 'clerk') {
-      where.OR = [
-        { authorId: user.id },
-        { departmentId: user.departmentId },
-        { department: { parentId: user.departmentId } },
+        { departmentId: { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) } },
         { currentApproverId: user.id },
       ];
     }
 
     if (status) where.status = status;
     if (type) where.reportType = type;
-    if (departmentId && user.role !== 'specialist') where.departmentId = departmentId;
+    if (departmentId && user.role !== 'specialist') {
+      if (user.role === 'manager' || user.role === 'clerk' || user.role === 'director') {
+        const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+        where.departmentId = scopedDepartmentIds.includes(departmentId)
+          ? departmentId
+          : '00000000-0000-0000-0000-000000000000';
+      } else {
+        where.departmentId = departmentId;
+      }
+    }
     if (authorId) where.authorId = authorId;
     if (periodStart && periodEnd) {
       where.periodStart = { gte: new Date(periodStart) };
@@ -101,7 +104,7 @@ export class ReportsService {
       throw new NotFoundException('Звіт не знайдено');
     }
 
-    if (!this.canViewReport(report, user)) {
+    if (!(await this.canViewReport(report, user))) {
       throw new ForbiddenException('Немає доступу до цього звіту');
     }
 
@@ -610,7 +613,7 @@ export class ReportsService {
       include: { department: { select: { parentId: true } } },
     });
     if (!report) throw new NotFoundException('Звіт не знайдено');
-    if (!this.canViewReport(report, user)) throw new ForbiddenException('Немає доступу до цього звіту');
+    if (!(await this.canViewReport(report, user))) throw new ForbiddenException('Немає доступу до цього звіту');
 
     const content = this.ensureObject(report.content);
     const comments = Array.isArray(content.reviewComments) ? content.reviewComments : [];
@@ -634,7 +637,7 @@ export class ReportsService {
       },
     });
     if (!report) throw new NotFoundException('Звіт не знайдено');
-    if (!this.canViewReport(report, user)) throw new ForbiddenException('Немає доступу до цього звіту');
+    if (!(await this.canViewReport(report, user))) throw new ForbiddenException('Немає доступу до цього звіту');
 
     const content = this.ensureObject(report.content);
     const reviewComments = Array.isArray(content.reviewComments) ? content.reviewComments : [];
@@ -690,7 +693,7 @@ export class ReportsService {
       include: { department: { select: { parentId: true } } },
     });
     if (!report) throw new NotFoundException('Звіт не знайдено');
-    if (!this.canViewReport(report, user)) throw new ForbiddenException('Немає доступу до цього звіту');
+    if (!(await this.canViewReport(report, user))) throw new ForbiddenException('Немає доступу до цього звіту');
 
     const content = this.ensureObject(report.content);
     const reviewComments = Array.isArray(content.reviewComments) ? content.reviewComments : [];
@@ -726,7 +729,7 @@ export class ReportsService {
       include: { department: { select: { parentId: true } } },
     });
     if (!report) throw new NotFoundException('Звіт не знайдено');
-    if (!this.canViewReport(report, user)) throw new ForbiddenException('Немає доступу до цього звіту');
+    if (!(await this.canViewReport(report, user))) throw new ForbiddenException('Немає доступу до цього звіту');
 
     const targetToVersion = toVersion || report.version;
     const targetFromVersion = fromVersion || Math.max(1, targetToVersion - 1);
@@ -809,15 +812,13 @@ export class ReportsService {
     });
   }
 
-  private canViewReport(report: any, user: any): boolean {
-    if (user.role === 'admin' || user.role === 'director') return true;
+  private async canViewReport(report: any, user: any): Promise<boolean> {
+    if (user.role === 'admin') return true;
     if (report.currentApproverId && report.currentApproverId === user.id) return true;
-    if (user.role === 'clerk') {
-      if (!user.departmentId) return false;
-      if (report.departmentId === user.departmentId) return true;
-      if (report.department?.parentId === user.departmentId) return true;
+    if (user.role === 'clerk' || user.role === 'manager' || user.role === 'director') {
+      const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+      if (scopedDepartmentIds.includes(report.departmentId)) return true;
     }
-    if (user.role === 'manager' && report.departmentId === user.departmentId) return true;
     if (report.authorId === user.id) return true;
     return false;
   }
@@ -962,6 +963,27 @@ export class ReportsService {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();
     return `${day}.${month}.${year}`;
+  }
+
+  private async resolveDepartmentScopeIds(departmentId?: string | null): Promise<string[]> {
+    if (!departmentId) return [];
+    const current = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+      select: { id: true, parentId: true },
+    });
+    if (!current) return [];
+
+    const rootId = current.parentId || current.id;
+    const root = await this.prisma.department.findUnique({
+      where: { id: rootId },
+      select: {
+        id: true,
+        children: { select: { id: true } },
+      },
+    });
+
+    if (!root) return [departmentId];
+    return [root.id, ...(root.children || []).map((child) => child.id)];
   }
 
   private resolveAuthorName(author: any): string {
@@ -1200,6 +1222,317 @@ export class ReportsService {
     }
 
     return null;
+  }
+
+  async getOrCreateActivitiesPlan(period: string, periodType: 'weekly' | 'monthly', user: any) {
+    const normalizedPeriod = this.normalizePeriod(period, periodType);
+    if (!normalizedPeriod) {
+      throw new BadRequestException(
+        periodType === 'weekly'
+          ? 'Тиждень має бути у форматі YYYY-Www'
+          : 'Місяць має бути у форматі YYYY-MM',
+      );
+    }
+
+    const { start, end } = this.periodBounds(normalizedPeriod, periodType);
+    const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+    if (!scopedDepartmentIds.length) {
+      throw new ForbiddenException('Немає доступу до підрозділу для плану заходів');
+    }
+    const rootDepartmentId = scopedDepartmentIds[0];
+
+    let report = await this.prisma.report.findFirst({
+      where: {
+        departmentId: rootDepartmentId,
+        reportType: periodType === 'weekly' ? 'weekly' : 'monthly',
+        periodStart: start,
+        periodEnd: end,
+        title: { contains: `План заходів ${normalizedPeriod}` },
+      },
+      include: {
+        department: { select: { id: true, nameUk: true, name: true } },
+        author: { select: { id: true, firstName: true, lastName: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (!report) {
+      report = await this.prisma.report.create({
+        data: {
+          reportType: periodType === 'weekly' ? 'weekly' : 'monthly',
+          periodStart: start,
+          periodEnd: end,
+          title: `План заходів ${normalizedPeriod}`,
+          status: 'draft',
+          departmentId: rootDepartmentId,
+          authorId: user.id,
+          content: {
+            activityPlan: {
+              period: normalizedPeriod,
+              periodType,
+              rows: [],
+            },
+          },
+        },
+        include: {
+          department: { select: { id: true, nameUk: true, name: true } },
+          author: { select: { id: true, firstName: true, lastName: true } },
+        },
+      });
+    }
+
+    await this.ensureCanAccessActivitiesPlan(report, user);
+    return this.mapActivitiesPlan(report);
+  }
+
+  async upsertActivitiesRow(reportId: string, dto: UpsertActivityRowDto, user: any) {
+    const report = await this.prisma.report.findUnique({
+      where: { id: reportId },
+      include: {
+        department: { select: { id: true, nameUk: true, name: true } },
+        author: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
+    if (!report) throw new NotFoundException('План заходів не знайдено');
+
+    await this.ensureCanAccessActivitiesPlan(report, user);
+
+    const content = this.ensureObject(report.content);
+    const plan = this.ensureObject(content.activityPlan);
+    const rows = Array.isArray(plan.rows) ? [...plan.rows] : [];
+    const now = new Date().toISOString();
+
+    if (dto.id) {
+      const index = rows.findIndex((row: any) => row?.id === dto.id);
+      if (index < 0) throw new NotFoundException('Рядок не знайдено');
+      rows[index] = {
+        ...rows[index],
+        title: dto.title?.trim() || rows[index].title || '',
+        location: dto.location?.trim() || '',
+        schedule: dto.schedule?.trim() || '',
+        responsible: dto.responsible?.trim() || '',
+        updatedById: user.id,
+        updatedAt: now,
+      };
+    } else {
+      rows.push({
+        id: uuidv4(),
+        title: dto.title?.trim() || '',
+        location: dto.location?.trim() || '',
+        schedule: dto.schedule?.trim() || '',
+        responsible: dto.responsible?.trim() || '',
+        createdById: user.id,
+        updatedById: user.id,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const updated = await this.prisma.report.update({
+      where: { id: report.id },
+      data: {
+        content: {
+          ...content,
+          activityPlan: {
+            ...plan,
+            rows,
+          },
+        },
+        version: report.version + 1,
+      },
+      include: {
+        department: { select: { id: true, nameUk: true, name: true } },
+        author: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
+
+    return this.mapActivitiesPlan(updated);
+  }
+
+  async deleteActivitiesRow(reportId: string, rowId: string, user: any) {
+    const report = await this.prisma.report.findUnique({
+      where: { id: reportId },
+      include: {
+        department: { select: { id: true, nameUk: true, name: true } },
+        author: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
+    if (!report) throw new NotFoundException('План заходів не знайдено');
+
+    await this.ensureCanAccessActivitiesPlan(report, user);
+
+    const content = this.ensureObject(report.content);
+    const plan = this.ensureObject(content.activityPlan);
+    const rows = Array.isArray(plan.rows) ? [...plan.rows] : [];
+    const nextRows = rows.filter((row: any) => row?.id !== rowId);
+
+    await this.prisma.report.update({
+      where: { id: report.id },
+      data: {
+        content: {
+          ...content,
+          activityPlan: {
+            ...plan,
+            rows: nextRows,
+          },
+        },
+        version: report.version + 1,
+      },
+    });
+
+    return { success: true };
+  }
+
+  async exportActivitiesCsv(reportId: string, user: any) {
+    const report = await this.prisma.report.findUnique({
+      where: { id: reportId },
+      include: {
+        department: { select: { id: true, nameUk: true, name: true } },
+      },
+    });
+    if (!report) throw new NotFoundException('План заходів не знайдено');
+
+    await this.ensureCanAccessActivitiesPlan(report, user);
+
+    const content = this.ensureObject(report.content);
+    const plan = this.ensureObject(content.activityPlan);
+    const rows = Array.isArray(plan.rows) ? plan.rows : [];
+
+    const header = ['№', 'Назва заходу', 'Місце проведення заходу', 'Дата та час проведення заходу', 'Відповідальний за проведення заходу'];
+    const csvLines = [header.map(this.escapeCsv).join(',')];
+    rows.forEach((row: any, index: number) => {
+      csvLines.push(
+        [
+          String(index + 1),
+          row?.title || '',
+          row?.location || '',
+          row?.schedule || '',
+          row?.responsible || '',
+        ].map(this.escapeCsv).join(','),
+      );
+    });
+
+    const month = this.normalizeMonth((plan.month as string) || '') || this.toMonth(report.periodStart);
+    return {
+      fileName: `zahody-${this.resolveActivityPeriodKey(plan, report)}.csv`,
+      csv: csvLines.join('\n'),
+    };
+  }
+
+  private async ensureCanAccessActivitiesPlan(report: any, user: any) {
+    if (user?.role === 'admin') return;
+    const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user?.departmentId);
+    if (!scopedDepartmentIds.includes(report.departmentId)) {
+      throw new ForbiddenException('Немає доступу до цього плану заходів');
+    }
+  }
+
+  private mapActivitiesPlan(report: any) {
+    const content = this.ensureObject(report.content);
+    const plan = this.ensureObject(content.activityPlan);
+    const rows = Array.isArray(plan.rows) ? plan.rows : [];
+    const periodType = plan.periodType === 'weekly' ? 'weekly' : (report.reportType === 'weekly' ? 'weekly' : 'monthly');
+    const period = this.resolveActivityPeriodKey(plan, report);
+    return {
+      reportId: report.id,
+      periodType,
+      period,
+      title: report.title,
+      department: {
+        id: report.department?.id,
+        nameUk: report.department?.nameUk || report.department?.name || '',
+      },
+      rows: rows.map((row: any, idx: number) => ({
+        id: row.id,
+        index: idx + 1,
+        title: row.title || '',
+        location: row.location || '',
+        schedule: row.schedule || '',
+        responsible: row.responsible || '',
+      })),
+      updatedAt: report.updatedAt,
+    };
+  }
+
+  private normalizeMonth(value?: string | null): string | null {
+    const str = (value || '').trim();
+    if (!/^\d{4}-\d{2}$/.test(str)) return null;
+    return str;
+  }
+
+  private normalizeWeek(value?: string | null): string | null {
+    const str = (value || '').trim();
+    if (!/^\d{4}-W\d{2}$/.test(str)) return null;
+    return str;
+  }
+
+  private normalizePeriod(value?: string | null, periodType: 'weekly' | 'monthly' = 'monthly'): string | null {
+    if (periodType === 'weekly') return this.normalizeWeek(value);
+    return this.normalizeMonth(value);
+  }
+
+  private monthBounds(month: string): { start: Date; end: Date } {
+    const [yearRaw, monthRaw] = month.split('-');
+    const year = Number(yearRaw);
+    const mon = Number(monthRaw);
+    const start = new Date(Date.UTC(year, mon - 1, 1, 0, 0, 0));
+    const end = new Date(Date.UTC(year, mon, 0, 23, 59, 59));
+    return { start, end };
+  }
+
+  private weekBounds(week: string): { start: Date; end: Date } {
+    const match = week.match(/^(\d{4})-W(\d{2})$/);
+    if (!match) throw new BadRequestException('Невірний формат тижня');
+    const year = Number(match[1]);
+    const weekNum = Number(match[2]);
+    const jan4 = new Date(Date.UTC(year, 0, 4));
+    const jan4Day = jan4.getUTCDay() || 7;
+    const mondayWeek1 = new Date(jan4);
+    mondayWeek1.setUTCDate(jan4.getUTCDate() - jan4Day + 1);
+    const start = new Date(mondayWeek1);
+    start.setUTCDate(mondayWeek1.getUTCDate() + (weekNum - 1) * 7);
+    start.setUTCHours(0, 0, 0, 0);
+
+    const end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+    end.setUTCHours(23, 59, 59, 999);
+    return { start, end };
+  }
+
+  private periodBounds(period: string, periodType: 'weekly' | 'monthly'): { start: Date; end: Date } {
+    return periodType === 'weekly' ? this.weekBounds(period) : this.monthBounds(period);
+  }
+
+  private toMonth(date: Date): string {
+    const year = date.getUTCFullYear();
+    const mon = String(date.getUTCMonth() + 1).padStart(2, '0');
+    return `${year}-${mon}`;
+  }
+
+  private toIsoWeek(date: Date): string {
+    const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    const day = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - day);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+  }
+
+  private resolveActivityPeriodKey(plan: Record<string, any>, report: any): string {
+    const normalizedPlanPeriod = this.normalizeMonth((plan.period as string) || '') || this.normalizeWeek((plan.period as string) || '');
+    if (normalizedPlanPeriod) return normalizedPlanPeriod;
+    if (plan.periodType === 'weekly' || report.reportType === 'weekly') {
+      return this.toIsoWeek(report.periodStart);
+    }
+    return this.toMonth(report.periodStart);
+  }
+
+  private escapeCsv(value: string): string {
+    const str = String(value ?? '');
+    if (/[",\n]/.test(str)) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
   }
 
   private mapSourceReport(report: any) {

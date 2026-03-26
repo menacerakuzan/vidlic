@@ -737,7 +737,7 @@ export class AiProviderService {
     return text
       .replace(/\r/g, '')
       .replace(/[ \t]+\n/g, '\n')
-      .replace(/\n{3,}/g, '\n\n')
+      .replace(/\n{2,}/g, '\n')
       .trim();
   }
 

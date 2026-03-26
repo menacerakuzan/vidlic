@@ -17,8 +17,8 @@ export class AiController {
   @Permissions('ai:read')
   @ApiOperation({ summary: 'AI-резюме звіту' })
   @ApiResponse({ status: 200, description: 'Резюме сформовано' })
-  getReportSummary(@Param('id') id: string) {
-    return this.aiService.summarizeReport(id);
+  getReportSummary(@Param('id') id: string, @Req() req: any) {
+    return this.aiService.summarizeReport(id, req.user);
   }
 
   @Get('ui-config')

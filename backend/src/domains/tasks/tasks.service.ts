@@ -23,22 +23,9 @@ export class TasksService {
         { assigneeId: user.id },
         { reporterId: user.id },
       ];
-    } else if (user.role === 'manager') {
-      where.departmentId = user.departmentId;
-      where.NOT = {
-        OR: [
-          { isPrivate: true },
-          {
-            AND: [
-              { reportId: null },
-              { assigneeId: null },
-              { reporter: { is: { role: 'specialist' } } },
-            ],
-          },
-        ],
-      };
-    } else if (user.role === 'director') {
-      where.departmentId = user.departmentId;
+    } else if (user.role === 'manager' || user.role === 'director' || user.role === 'clerk') {
+      const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+      where.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) };
       where.NOT = {
         OR: [
           { isPrivate: true },
@@ -100,22 +87,9 @@ export class TasksService {
         { assigneeId: user.id },
         { reporterId: user.id },
       ];
-    } else if (user.role === 'manager') {
-      where.departmentId = user.departmentId;
-      where.NOT = {
-        OR: [
-          { isPrivate: true },
-          {
-            AND: [
-              { reportId: null },
-              { assigneeId: null },
-              { reporter: { is: { role: 'specialist' } } },
-            ],
-          },
-        ],
-      };
-    } else if (user.role === 'director') {
-      where.departmentId = user.departmentId;
+    } else if (user.role === 'manager' || user.role === 'director' || user.role === 'clerk') {
+      const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+      where.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) };
       where.NOT = {
         OR: [
           { isPrivate: true },
@@ -476,9 +450,15 @@ export class TasksService {
     return isLegacyPrivateSpecialistTask;
   }
 
-  async getDepartmentTransparency() {
+  async getDepartmentTransparency(user: any) {
+    const where: any = { isPrivate: false };
+    if (user?.role !== 'admin') {
+      const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user?.departmentId);
+      where.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user?.departmentId].filter(Boolean) };
+    }
+
     const tasks = await this.prisma.task.findMany({
-      where: { isPrivate: false },
+      where,
       select: {
         id: true,
         status: true,
@@ -516,5 +496,25 @@ export class TasksService {
     }
 
     return Array.from(summary.values()).sort((a, b) => b.total - a.total);
+  }
+
+  private async resolveDepartmentScopeIds(departmentId?: string | null): Promise<string[]> {
+    if (!departmentId) return [];
+    const current = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+      select: { id: true, parentId: true },
+    });
+    if (!current) return [];
+
+    const rootId = current.parentId || current.id;
+    const root = await this.prisma.department.findUnique({
+      where: { id: rootId },
+      select: {
+        id: true,
+        children: { select: { id: true } },
+      },
+    });
+    if (!root) return [departmentId];
+    return [root.id, ...(root.children || []).map((child) => child.id)];
   }
 }

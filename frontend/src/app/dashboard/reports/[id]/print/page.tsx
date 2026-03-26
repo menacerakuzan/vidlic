@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuthStore } from '@/store/auth-store'
 
 type ReportSubmission = {
@@ -28,40 +28,44 @@ export default function ReportPrintPage() {
 
   const [draftTitle, setDraftTitle] = useState('ЗВІТ')
   const [draftHeader, setDraftHeader] = useState('')
-  const [draftBodyHtml, setDraftBodyHtml] = useState('')
+  const [draftBodyText, setDraftBodyText] = useState('')
   const [fontFamily, setFontFamily] = useState('Times New Roman')
   const [fontSize] = useState(14)
-  const bodyRef = useRef<HTMLDivElement | null>(null)
 
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
-  const plainToHtml = (value: string) => {
-    const escaped = value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-    return escaped
-      .split('\n')
-      .map((line) => `<p>${line.trim() || '&nbsp;'}</p>`)
-      .join('')
-  }
+  const decodeEntities = (value: string) =>
+    value
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
 
-  const htmlToPlain = (value: string) => value
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/\n{2,}/g, '\n')
-    .trim()
+  const htmlToPlain = (value: string) =>
+    decodeEntities(
+      value
+        .replace(/\r/g, '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<li>/gi, '• ')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim(),
+    )
 
   const applySubmissionToDraft = useCallback((submission: ReportSubmission | null) => {
     setDraftTitle(submission?.documentTitle || 'ЗВІТ')
     setDraftHeader(Array.isArray(submission?.headerLines) ? submission!.headerLines!.join('\n') : '')
-    const bodyText = submission?.bodyText || ''
+    const bodyText = String((submission as any)?.bodyTextPlain || submission?.bodyText || '')
     const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(bodyText)
-    setDraftBodyHtml(looksLikeHtml ? bodyText : plainToHtml(bodyText))
+    setDraftBodyText(looksLikeHtml ? htmlToPlain(bodyText) : bodyText)
     setFontFamily(submission?.style?.fontFamily || 'Times New Roman')
     setIsDirty(false)
-  }, [])
+  }, [htmlToPlain])
 
   const load = useCallback(async () => {
     if (!accessToken || !params?.id) return
@@ -93,10 +97,12 @@ export default function ReportPrintPage() {
   const renderedHeaderLines = (editMode
     ? draftHeader.split('\n').map((line) => line.trim()).filter(Boolean)
     : (submission?.headerLines || [])).slice(0, 6)
-  const renderedBodyHtml = editMode ? draftBodyHtml : (() => {
-    const body = submission?.bodyText || ''
-    return /<\/?[a-z][\s\S]*>/i.test(body) ? body : plainToHtml(body)
-  })()
+  const renderedBodyText = editMode
+    ? draftBodyText
+    : (() => {
+      const body = String((submission as any)?.bodyTextPlain || submission?.bodyText || '')
+      return /<\/?[a-z][\s\S]*>/i.test(body) ? htmlToPlain(body) : body
+    })()
 
   const canEdit = useMemo(() => {
     if (!user || !report) return false
@@ -104,21 +110,13 @@ export default function ReportPrintPage() {
     return report.status === 'draft' && report.author?.id === user.id
   }, [report, user])
 
-  const runEditorCommand = (command: string, value?: string) => {
-    if (!editMode) return
-    bodyRef.current?.focus()
-    document.execCommand(command, false, value)
-    setDraftBodyHtml(bodyRef.current?.innerHTML || draftBodyHtml)
-    setIsDirty(true)
-  }
-
   const saveDraft = async () => {
     if (!accessToken || !report?.id) return
     setSaving(true)
     setError('')
     setSuccess('')
 
-    const safeBodyHtml = bodyRef.current?.innerHTML || draftBodyHtml
+    const plainBody = draftBodyText.trim()
     const existingContent = report.content || {}
     const payload = {
       title: report.title,
@@ -130,8 +128,8 @@ export default function ReportPrintPage() {
           ...(existingContent.managerSubmission || {}),
           documentTitle: (draftTitle || 'ЗВІТ').trim() || 'ЗВІТ',
           headerLines: draftHeader.split('\n').map((line: string) => line.trim()).filter(Boolean),
-          bodyText: safeBodyHtml,
-          bodyTextPlain: htmlToPlain(safeBodyHtml),
+          bodyText: plainBody,
+          bodyTextPlain: plainBody,
           style: {
             fontFamily,
             fontSize: 14,
@@ -223,14 +221,6 @@ export default function ReportPrintPage() {
                 <option value="Arial">Arial</option>
               </select>
               <span className="h-8 rounded border border-slate-300 px-2 text-xs flex items-center text-slate-600">14 pt</span>
-              <button onClick={() => runEditorCommand('bold')} className="h-8 rounded border border-slate-300 px-2 text-xs font-bold">B</button>
-              <button onClick={() => runEditorCommand('italic')} className="h-8 rounded border border-slate-300 px-2 text-xs italic">I</button>
-              <button onClick={() => runEditorCommand('underline')} className="h-8 rounded border border-slate-300 px-2 text-xs underline">U</button>
-              <button onClick={() => runEditorCommand('justifyLeft')} className="h-8 rounded border border-slate-300 px-2 text-xs">L</button>
-              <button onClick={() => runEditorCommand('justifyCenter')} className="h-8 rounded border border-slate-300 px-2 text-xs">C</button>
-              <button onClick={() => runEditorCommand('justifyFull')} className="h-8 rounded border border-slate-300 px-2 text-xs">J</button>
-              <button onClick={() => runEditorCommand('insertOrderedList')} className="h-8 rounded border border-slate-300 px-2 text-xs">1.</button>
-              <button onClick={() => runEditorCommand('insertUnorderedList')} className="h-8 rounded border border-slate-300 px-2 text-xs">• List</button>
             </div>
             <button
               onClick={saveDraft}
@@ -300,24 +290,20 @@ export default function ReportPrintPage() {
 
           <div className={editMode ? 'mt-4' : 'mt-6'}>
             {editMode ? (
-              <div
-                ref={bodyRef}
-                contentEditable
-                suppressContentEditableWarning
-                onInput={(e) => {
-                  setDraftBodyHtml((e.target as HTMLDivElement).innerHTML)
+              <textarea
+                value={draftBodyText}
+                onChange={(e) => {
+                  setDraftBodyText(e.target.value)
                   setIsDirty(true)
                 }}
-                className="doc-editor min-h-[62vh] rounded-sm border border-slate-300 bg-white px-3 py-3 focus:outline-none"
+                className="doc-editor min-h-[62vh] w-full rounded-sm border border-slate-300 bg-white px-3 py-3 focus:outline-none"
                 style={{ fontFamily, fontSize, lineHeight: 1.6 }}
-                dangerouslySetInnerHTML={{ __html: renderedBodyHtml }}
+                rows={28}
               />
-            ) : htmlToPlain(renderedBodyHtml).length > 0 ? (
-              <div
-                className="doc-render"
-                style={{ fontFamily, fontSize, lineHeight: 1.6 }}
-                dangerouslySetInnerHTML={{ __html: renderedBodyHtml }}
-              />
+            ) : renderedBodyText.trim().length > 0 ? (
+              <div className="doc-render whitespace-pre-wrap" style={{ fontFamily, fontSize, lineHeight: 1.6 }}>
+                {renderedBodyText}
+              </div>
             ) : (
               <p className="text-sm text-slate-500">Немає підготовленого тексту для друку.</p>
             )}
@@ -330,7 +316,7 @@ export default function ReportPrintPage() {
         .doc-render p {
           margin: 0 0 8px 0;
           text-align: justify;
-          text-indent: 2em;
+          text-indent: 0;
         }
         .doc-editor ul,
         .doc-render ul {

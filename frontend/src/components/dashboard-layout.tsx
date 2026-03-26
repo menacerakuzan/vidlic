@@ -10,6 +10,7 @@ import {
   FileText, 
   CheckSquare, 
   BarChart3, 
+  CalendarDays,
   Users, 
   Settings, 
   Bell,
@@ -27,6 +28,7 @@ import { BrandLogo } from '@/components/brand-logo'
 const navigation = [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Звіти', href: '/dashboard/reports', icon: FileText },
+  { name: 'Заходи', href: '/dashboard/activities', icon: CalendarDays },
   { name: 'Задачі', href: '/dashboard/tasks', icon: CheckSquare },
   { name: 'Аналітика', href: '/dashboard/analytics', icon: BarChart3, roles: ['manager', 'clerk', 'director'] },
   { name: 'Сповіщення', href: '/dashboard/notifications', icon: Bell },

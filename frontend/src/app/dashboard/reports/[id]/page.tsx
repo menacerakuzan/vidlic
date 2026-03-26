@@ -45,6 +45,34 @@ export default function ReportDetailsPage() {
   const [sourceDepartmentFilter, setSourceDepartmentFilter] = useState<string>('all')
   const [sourceAuthorFilter, setSourceAuthorFilter] = useState<string>('all')
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
+  const decodeEntities = (value: string) =>
+    value
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+  const normalizeSubmissionText = (submission: any) => {
+    const plain = typeof submission?.bodyTextPlain === 'string' ? submission.bodyTextPlain : ''
+    if (plain.trim()) return plain
+    const body = typeof submission?.bodyText === 'string' ? submission.bodyText : ''
+    if (!body) return ''
+    const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(body)
+    if (!looksLikeHtml) return body
+    return decodeEntities(
+      body
+        .replace(/\r/g, '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<li>/gi, '• ')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim(),
+    )
+  }
 
   useEffect(() => {
     if (!isAuthenticated) router.push('/')
@@ -65,7 +93,7 @@ export default function ReportDetailsPage() {
       setReport(data)
       const submission = data?.content?.managerSubmission
       if (submission) {
-        setManagerDraftText(submission.bodyText || '')
+        setManagerDraftText(normalizeSubmissionText(submission))
         setManagerDraftTitle(submission.documentTitle || 'ЗВІТ')
         setManagerDraftHeaderLines(Array.isArray(submission.headerLines) ? submission.headerLines : [])
         setManagerDraftSource(submission.generatedBy || '')
@@ -378,16 +406,17 @@ export default function ReportDetailsPage() {
       title: report.title,
       periodStart: report.periodStart,
       periodEnd: report.periodEnd,
-      content: {
-        ...existingContent,
-        managerSubmission: {
-          ...(existingContent.managerSubmission || {}),
-          documentTitle: managerDraftTitle || 'ЗВІТ',
-          headerLines: managerDraftHeaderLines,
-          bodyText: managerDraftText,
-          style: {
-            fontFamily: 'Times New Roman',
-            fontSize: 14,
+        content: {
+          ...existingContent,
+          managerSubmission: {
+            ...(existingContent.managerSubmission || {}),
+            documentTitle: managerDraftTitle || 'ЗВІТ',
+            headerLines: managerDraftHeaderLines,
+            bodyText: managerDraftText,
+            bodyTextPlain: managerDraftText,
+            style: {
+              fontFamily: 'Times New Roman',
+              fontSize: 14,
           },
           editedByAuthor: true,
           editedAt: new Date().toISOString(),
@@ -802,9 +831,9 @@ export default function ReportDetailsPage() {
                           setManagerDraftText(e.target.value)
                           setIsDirty(true)
                         }}
-                        rows={16}
-                        className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
-                        style={{ fontFamily: 'Times New Roman', fontSize: 14 }}
+                        rows={28}
+                        className="mx-auto block w-full max-w-[210mm] min-h-[297mm] rounded-md border border-input bg-white p-[14mm] text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                        style={{ fontFamily: 'Times New Roman', fontSize: 14, lineHeight: 1.6 }}
                       />
                       <button
                         disabled={savingDraft}

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma.service';
 import { UiPresetsService } from '../ui-presets/ui-presets.service';
 import { AiProviderService } from './ai.provider';
@@ -14,17 +14,22 @@ export class AiService {
     private redis: RedisService,
   ) {}
 
-  async summarizeReport(reportId: string) {
+  async summarizeReport(reportId: string, user: any) {
     const report = await this.prisma.report.findUnique({
       where: { id: reportId },
       include: {
-        author: { select: { firstName: true, lastName: true } },
-        department: { select: { nameUk: true } },
+        author: { select: { id: true, firstName: true, lastName: true } },
+        department: { select: { id: true, nameUk: true } },
+        currentApprover: { select: { id: true } },
       },
     });
 
     if (!report) {
       throw new NotFoundException('Звіт не знайдено');
+    }
+
+    if (!(await this.canAccessReport(report, user))) {
+      throw new ForbiddenException('Немає доступу до цього звіту');
     }
 
     const content = (report.content || {}) as any;
@@ -192,5 +197,36 @@ export class AiService {
     } catch {
       return null;
     }
+  }
+
+  private async canAccessReport(report: any, user: any): Promise<boolean> {
+    if (!user) return false;
+    if (user.role === 'admin') return true;
+    if (report.author?.id === user.id) return true;
+    if (report.currentApprover?.id === user.id) return true;
+    if (!['manager', 'clerk', 'director'].includes(user.role)) return false;
+
+    const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+    return scopedDepartmentIds.includes(report.department?.id);
+  }
+
+  private async resolveDepartmentScopeIds(departmentId?: string | null): Promise<string[]> {
+    if (!departmentId) return [];
+    const current = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+      select: { id: true, parentId: true },
+    });
+    if (!current) return [];
+
+    const rootId = current.parentId || current.id;
+    const root = await this.prisma.department.findUnique({
+      where: { id: rootId },
+      select: {
+        id: true,
+        children: { select: { id: true } },
+      },
+    });
+    if (!root) return [departmentId];
+    return [root.id, ...(root.children || []).map((child) => child.id)];
   }
 }

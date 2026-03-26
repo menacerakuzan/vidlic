@@ -11,6 +11,7 @@ import {
   AddReportCommentDto,
   ResolveReportCommentDto,
   GenerateManagerDraftDto,
+  UpsertActivityRowDto,
 } from './dto/reports.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -29,6 +30,40 @@ export class ReportsController {
   @ApiResponse({ status: 200, description: 'Список звітів' })
   findAll(@Query() query: ReportQueryDto, @Req() req: any) {
     return this.reportsService.findAll(query, req.user);
+  }
+
+  @Get('activities/plan')
+  @Permissions('reports:read')
+  @ApiOperation({ summary: 'Отримати або створити план заходів на місяць' })
+  getActivitiesPlan(
+    @Query('period') period: string,
+    @Query('month') month: string,
+    @Query('periodType') periodType: string,
+    @Req() req: any,
+  ) {
+    const normalizedType = periodType === 'weekly' ? 'weekly' : 'monthly';
+    return this.reportsService.getOrCreateActivitiesPlan(period || month, normalizedType, req.user);
+  }
+
+  @Post('activities/plan/:id/rows')
+  @Permissions('reports:write')
+  @ApiOperation({ summary: 'Додати або оновити рядок плану заходів' })
+  upsertActivitiesRow(@Param('id') id: string, @Body() dto: UpsertActivityRowDto, @Req() req: any) {
+    return this.reportsService.upsertActivitiesRow(id, dto, req.user);
+  }
+
+  @Delete('activities/plan/:id/rows/:rowId')
+  @Permissions('reports:write')
+  @ApiOperation({ summary: 'Видалити рядок плану заходів' })
+  deleteActivitiesRow(@Param('id') id: string, @Param('rowId') rowId: string, @Req() req: any) {
+    return this.reportsService.deleteActivitiesRow(id, rowId, req.user);
+  }
+
+  @Get('activities/plan/:id/export')
+  @Permissions('reports:read')
+  @ApiOperation({ summary: 'Експорт плану заходів у CSV' })
+  exportActivitiesCsv(@Param('id') id: string, @Req() req: any) {
+    return this.reportsService.exportActivitiesCsv(id, req.user);
   }
 
   @Get(':id')
