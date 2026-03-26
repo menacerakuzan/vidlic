@@ -212,9 +212,6 @@ export default function ReportDetailsPage() {
 
   const canApprove = useMemo(() => {
     if (!report || !user) return false
-    if (user.role === 'manager') {
-      return report.status === 'pending_manager' && report.currentApprover?.id === user.id
-    }
     if (user.role === 'clerk') {
       return report.status === 'pending_clerk' && report.currentApprover?.id === user.id
     }
@@ -248,7 +245,7 @@ export default function ReportDetailsPage() {
 
   const submitButtonLabel = useMemo(() => {
     if (!user) return 'Відправити на погодження'
-    if (user.role === 'specialist') return 'На фінальне погодження керівнику'
+    if (user.role === 'specialist') return 'Відправити у зведення керівника'
     if (user.role === 'manager') return 'На погодження діловоду'
     if (user.role === 'clerk') return 'На погодження директору'
     return 'Відправити на погодження'

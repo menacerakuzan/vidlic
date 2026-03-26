@@ -240,16 +240,49 @@ export class ReportsService {
       }
     }
 
-    let flowSteps: Array<{ order: number; role: 'manager' | 'clerk' | 'director' }> = [];
     if (report.author?.role === 'specialist') {
-      flowSteps = [{ order: 1, role: 'manager' }];
-    } else if (report.author?.role === 'manager') {
+      const updated = await this.prisma.report.update({
+        where: { id },
+        data: {
+          status: 'approved',
+          currentApproverId: null,
+          submittedAt: new Date(),
+          approvedAt: new Date(),
+        },
+        include: {
+          author: true,
+          department: true,
+        },
+      });
+
+      await this.createStatusHistory(id, report.status, 'approved', userId, dto.comment);
+      this.eventEmitter.emit('report.submitted', new ReportSubmittedEvent(id, userId, null));
+      return this.mapReport(updated);
+    }
+
+    let flowSteps: Array<{ order: number; role: 'manager' | 'clerk' | 'director' }> = [];
+    if (report.author?.role === 'manager') {
       flowSteps = [{ order: 1, role: 'clerk' }];
     } else if (report.author?.role === 'clerk') {
       flowSteps = [{ order: 1, role: 'director' }];
     } else {
-      // Safety fallback for non-standard authors.
-      flowSteps = [{ order: 1, role: 'manager' }];
+      // Directors/admins do not require additional approval chain.
+      const updated = await this.prisma.report.update({
+        where: { id },
+        data: {
+          status: 'approved',
+          currentApproverId: null,
+          submittedAt: new Date(),
+          approvedAt: new Date(),
+        },
+        include: {
+          author: true,
+          department: true,
+        },
+      });
+      await this.createStatusHistory(id, report.status, 'approved', userId, dto.comment);
+      this.eventEmitter.emit('report.submitted', new ReportSubmittedEvent(id, userId, null));
+      return this.mapReport(updated);
     }
 
     const hasClerkStep = flowSteps.some((step) => step.role === 'clerk');
@@ -472,8 +505,8 @@ export class ReportsService {
       throw new NotFoundException('Звіт не знайдено');
     }
 
-    if (user.role === 'manager' && report.status !== 'pending_manager') {
-      throw new BadRequestException('Звіт не очікує погодження керівника');
+    if (user.role === 'manager') {
+      throw new ForbiddenException('Керівник не виконує погодження. Керівник формує зведений звіт відділу.');
     }
 
     if (user.role === 'clerk' && report.status !== 'pending_clerk') {
