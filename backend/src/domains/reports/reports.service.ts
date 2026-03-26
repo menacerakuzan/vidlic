@@ -240,10 +240,30 @@ export class ReportsService {
       }
     }
 
+    const reportMode = this.getReportMode(report);
     let flowSteps: Array<{ order: number; role: 'manager' | 'clerk' | 'director' }> = [];
     if (report.author?.role === 'specialist') {
       flowSteps = [{ order: 1, role: 'manager' }];
     } else if (report.author?.role === 'manager') {
+      if (reportMode !== 'aggregate') {
+        const updated = await this.prisma.report.update({
+          where: { id },
+          data: {
+            status: 'approved',
+            currentApproverId: null,
+            submittedAt: new Date(),
+            approvedAt: new Date(),
+          },
+          include: {
+            author: true,
+            department: true,
+          },
+        });
+
+        await this.createStatusHistory(id, report.status, 'approved', userId, dto.comment);
+        this.eventEmitter.emit('report.submitted', new ReportSubmittedEvent(id, userId, null));
+        return this.mapReport(updated);
+      }
       flowSteps = [{ order: 1, role: 'clerk' }];
     } else if (report.author?.role === 'clerk') {
       flowSteps = [{ order: 1, role: 'director' }];
@@ -1125,6 +1145,11 @@ export class ReportsService {
       content: Record<string, any>;
     }>;
   } | null> {
+    const mode = this.getReportMode(report);
+    if (['manager', 'clerk', 'director'].includes(report.author?.role) && mode !== 'aggregate') {
+      return null;
+    }
+
     const periodFilter = {
       periodStart: { gte: report.periodStart },
       periodEnd: { lte: report.periodEnd },
@@ -2018,26 +2043,29 @@ export class ReportsService {
     const grouped = new Map<
       string,
       {
-        authors: Set<string>;
-        done: Set<string>;
-        risks: Set<string>;
-        next: Set<string>;
+        authors: Map<
+          string,
+          {
+            done: string[];
+            risks: string[];
+            next: string[];
+          }
+        >;
       }
     >();
 
     for (const source of sources) {
       const department = source.departmentName || 'Невідомий підрозділ';
       const bucket = grouped.get(department) || {
-        authors: new Set<string>(),
-        done: new Set<string>(),
-        risks: new Set<string>(),
-        next: new Set<string>(),
+        authors: new Map(),
       };
 
-      if (source.authorName) bucket.authors.add(source.authorName);
-      this.extractSectionPoints(source.content || {}, ['workDone', 'achievements', 'summary']).forEach((item) => bucket.done.add(item));
-      this.extractSectionPoints(source.content || {}, ['problems']).forEach((item) => bucket.risks.add(item));
-      this.extractSectionPoints(source.content || {}, ['nextWeekPlan']).forEach((item) => bucket.next.add(item));
+      const author = source.authorName || 'Невідомий автор';
+      const authorBucket = bucket.authors.get(author) || { done: [], risks: [], next: [] };
+      authorBucket.done.push(...this.extractSectionPoints(source.content || {}, ['workDone', 'achievements', 'summary']));
+      authorBucket.risks.push(...this.extractSectionPoints(source.content || {}, ['problems']));
+      authorBucket.next.push(...this.extractSectionPoints(source.content || {}, ['nextWeekPlan']));
+      bucket.authors.set(author, authorBucket);
 
       grouped.set(department, bucket);
     }
@@ -2045,29 +2073,40 @@ export class ReportsService {
     const lines: string[] = [];
     Array.from(grouped.entries()).forEach(([department, bucket], index) => {
       lines.push(`${index + 1}. Відділ: ${department}`);
-      lines.push(`Відповідальні: ${Array.from(bucket.authors).join(', ') || 'Невказано'}`);
       lines.push(`${index + 1}.1. Виконана робота`);
-      const done = Array.from(bucket.done).slice(0, 12);
+      const done: string[] = [];
+      Array.from(bucket.authors.entries()).forEach(([author, authorData]) => {
+        const authorDone = authorData.done.slice(0, 6).map((item) => `${author}: ${item}`);
+        done.push(...authorDone);
+      });
       if (!done.length) {
         lines.push(`${index + 1}.1.1. Дані по виконаних роботах надано у вільній формі.`);
       } else {
-        done.forEach((item, i) => lines.push(`${index + 1}.1.${i + 1}. ${item}`));
+        done.slice(0, 16).forEach((item, i) => lines.push(`${index + 1}.1.${i + 1}. ${item}`));
       }
 
       lines.push(`${index + 1}.2. Проблеми/ризики`);
-      const risks = Array.from(bucket.risks).slice(0, 8);
+      const risks: string[] = [];
+      Array.from(bucket.authors.entries()).forEach(([author, authorData]) => {
+        const authorRisks = authorData.risks.slice(0, 4).map((item) => `${author}: ${item}`);
+        risks.push(...authorRisks);
+      });
       if (!risks.length) {
         lines.push(`${index + 1}.2.1. Критичних ризиків за звітний період не зафіксовано.`);
       } else {
-        risks.forEach((item, i) => lines.push(`${index + 1}.2.${i + 1}. ${item}`));
+        risks.slice(0, 12).forEach((item, i) => lines.push(`${index + 1}.2.${i + 1}. ${item}`));
       }
 
       lines.push(`${index + 1}.3. Наступні кроки`);
-      const next = Array.from(bucket.next).slice(0, 8);
+      const next: string[] = [];
+      Array.from(bucket.authors.entries()).forEach(([author, authorData]) => {
+        const authorNext = authorData.next.slice(0, 4).map((item) => `${author}: ${item}`);
+        next.push(...authorNext);
+      });
       if (!next.length) {
         lines.push(`${index + 1}.3.1. Продовжити виконання планових завдань за напрямом.`);
       } else {
-        next.forEach((item, i) => lines.push(`${index + 1}.3.${i + 1}. ${item}`));
+        next.slice(0, 12).forEach((item, i) => lines.push(`${index + 1}.3.${i + 1}. ${item}`));
       }
 
       lines.push('');
@@ -2102,6 +2141,17 @@ export class ReportsService {
       documentTitle: title || base.documentTitle,
       headerLines: headerLines.length ? headerLines : base.headerLines,
     };
+  }
+
+  private getReportMode(report: any): 'regular' | 'aggregate' {
+    const content = this.ensureObject(report?.content);
+    const mode = String(content.reportMode || '').toLowerCase();
+    if (mode === 'aggregate') return 'aggregate';
+    if (mode === 'regular') return 'regular';
+
+    const title = String(report?.title || '').toLowerCase();
+    if (title.includes('зведен')) return 'aggregate';
+    return 'regular';
   }
 
   private extractSectionPoints(content: Record<string, any>, keys: string[]): string[] {

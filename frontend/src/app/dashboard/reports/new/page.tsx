@@ -82,8 +82,9 @@ function NewReportContent() {
       periodEnd: values.periodEnd,
       title: values.title,
       content: isAggregateMode
-        ? {}
+        ? { reportMode: 'aggregate' }
         : {
+            reportMode: 'regular',
             workDone: values.workDone,
             achievements: values.achievements,
             problems: values.problems,

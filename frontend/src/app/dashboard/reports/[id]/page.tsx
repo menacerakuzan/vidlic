@@ -209,6 +209,13 @@ export default function ReportDetailsPage() {
     if (user.role === 'admin') return true
     return ['draft', 'rejected'].includes(report.status) && report.author?.id === user.id
   }, [report, user])
+  const isAggregateReport = useMemo(() => {
+    const mode = String(report?.content?.reportMode || '').toLowerCase()
+    if (mode === 'aggregate') return true
+    if (mode === 'regular') return false
+    const title = String(report?.title || '').toLowerCase()
+    return title.includes('зведен')
+  }, [report?.content?.reportMode, report?.title])
 
   const canApprove = useMemo(() => {
     if (!report || !user) return false
@@ -249,10 +256,10 @@ export default function ReportDetailsPage() {
   const submitButtonLabel = useMemo(() => {
     if (!user) return 'Відправити на погодження'
     if (user.role === 'specialist') return 'На погодження керівнику'
-    if (user.role === 'manager') return 'На погодження діловоду'
+    if (user.role === 'manager') return isAggregateReport ? 'На погодження діловоду' : 'Погодити'
     if (user.role === 'clerk') return 'На погодження директору'
     return 'Відправити на погодження'
-  }, [user])
+  }, [user, isAggregateReport])
 
   const draftHint = useMemo(() => {
     if (!user) return 'Сформуйте AI-чернетку за поточний період.'
@@ -268,8 +275,8 @@ export default function ReportDetailsPage() {
     return 'AI сформує офіційний документ для погодження за обраний період.'
   }, [user])
   const canAggregateBySources = useMemo(
-    () => canEditSubmission && ['manager', 'clerk', 'director'].includes(user?.role || ''),
-    [canEditSubmission, user?.role],
+    () => canEditSubmission && isAggregateReport && ['manager', 'clerk', 'director'].includes(user?.role || ''),
+    [canEditSubmission, user?.role, isAggregateReport],
   )
   const sourceDepartmentOptions = useMemo(() => {
     const map = new Map<string, string>()
