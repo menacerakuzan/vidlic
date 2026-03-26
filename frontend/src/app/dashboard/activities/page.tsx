@@ -215,7 +215,7 @@ export default function ActivitiesPage() {
                     }`}
                   >
                     <div className="font-medium">{item.periodType === 'weekly' ? 'Тиждень' : 'Місяць'}: {item.period}</div>
-                    <div className="mt-1 text-xs text-slate-500">{item.googleSheetUrl ? 'Google Sheets підключено' : 'Google Sheets не підключено'}</div>
+                    <div className="mt-1 text-xs text-slate-500">{item.googleSheetUrl ? 'Google Docs/Sheets підключено' : 'Google Docs/Sheets не підключено'}</div>
                   </button>
                 )
               })}
@@ -253,12 +253,12 @@ export default function ActivitiesPage() {
 
                 {canManageSheet && (
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <div className="mb-2 text-sm font-medium text-slate-800">Посилання на Google Sheets</div>
+                    <div className="mb-2 text-sm font-medium text-slate-800">Посилання на Google Docs або Sheets</div>
                     <div className="flex flex-wrap gap-2">
                       <input
                         value={googleSheetUrl}
                         onChange={(e) => setGoogleSheetUrl(e.target.value)}
-                        placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+                        placeholder="https://docs.google.com/document/d/.../edit або https://docs.google.com/spreadsheets/d/.../edit"
                         className="h-10 min-w-[320px] flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
                       />
                       <button

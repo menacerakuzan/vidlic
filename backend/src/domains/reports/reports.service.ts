@@ -197,7 +197,7 @@ export class ReportsService {
     const report = await this.prisma.report.findUnique({
       where: { id },
       include: {
-        author: { select: { firstName: true, lastName: true } },
+        author: { select: { firstName: true, lastName: true, role: true } },
         department: { include: { parent: true } },
       },
     });
@@ -240,17 +240,17 @@ export class ReportsService {
       }
     }
 
-    const configuredFlow = await this.approvalsService.getActiveFlow(ApprovalEntityType.report);
-    const flowSteps = configuredFlow?.steps?.length
-      ? configuredFlow.steps
-          .slice()
-          .sort((a, b) => a.stepOrder - b.stepOrder)
-          .map((step) => ({ order: step.stepOrder, role: step.role }))
-      : [
-          { order: 1, role: 'manager' as const },
-          { order: 2, role: 'clerk' as const },
-          { order: 3, role: 'director' as const },
-        ];
+    let flowSteps: Array<{ order: number; role: 'manager' | 'clerk' | 'director' }> = [];
+    if (report.author?.role === 'specialist') {
+      flowSteps = [{ order: 1, role: 'manager' }];
+    } else if (report.author?.role === 'manager') {
+      flowSteps = [{ order: 1, role: 'clerk' }];
+    } else if (report.author?.role === 'clerk') {
+      flowSteps = [{ order: 1, role: 'director' }];
+    } else {
+      // Safety fallback for non-standard authors.
+      flowSteps = [{ order: 1, role: 'manager' }];
+    }
 
     const hasClerkStep = flowSteps.some((step) => step.role === 'clerk');
     const hasManagerStep = flowSteps.some((step) => step.role === 'manager');
@@ -1121,7 +1121,7 @@ export class ReportsService {
           ...periodFilter,
           departmentId: report.departmentId,
           author: { role: 'specialist', isActive: true },
-          status: { in: ['pending_manager', 'pending_clerk', 'pending_director', 'approved'] },
+          status: { in: ['approved'] },
           id: { not: report.id },
         },
         include: {
@@ -1788,24 +1788,34 @@ export class ReportsService {
     try {
       parsed = new URL(input);
     } catch (_err) {
-      throw new BadRequestException('Некоректне посилання Google Sheets');
+      throw new BadRequestException('Некоректне посилання Google Docs/Sheets');
     }
     const host = parsed.hostname.toLowerCase();
     if (host !== 'docs.google.com') {
-      throw new BadRequestException('Потрібне посилання саме на docs.google.com/spreadsheets');
+      throw new BadRequestException('Потрібне посилання саме на docs.google.com');
     }
-    const match = parsed.pathname.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-    if (!match?.[1]) {
-      throw new BadRequestException('Не вдалося визначити ID Google Sheets документа');
+    const sheetMatch = parsed.pathname.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (sheetMatch?.[1]) {
+      return `https://docs.google.com/spreadsheets/d/${sheetMatch[1]}/edit`;
     }
-    return `https://docs.google.com/spreadsheets/d/${match[1]}/edit`;
+    const docMatch = parsed.pathname.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+    if (docMatch?.[1]) {
+      return `https://docs.google.com/document/d/${docMatch[1]}/edit`;
+    }
+    throw new BadRequestException('Не вдалося визначити ID Google документа');
   }
 
   private toGoogleSheetEmbedUrl(value?: string | null): string | null {
     if (!value) return null;
-    const match = value.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-    if (!match?.[1]) return null;
-    return `https://docs.google.com/spreadsheets/d/${match[1]}/edit?usp=sharing`;
+    const sheetMatch = value.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (sheetMatch?.[1]) {
+      return `https://docs.google.com/spreadsheets/d/${sheetMatch[1]}/edit?usp=sharing`;
+    }
+    const docMatch = value.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+    if (docMatch?.[1]) {
+      return `https://docs.google.com/document/d/${docMatch[1]}/edit?usp=sharing`;
+    }
+    return null;
   }
 
   private normalizeMonth(value?: string | null): string | null {
@@ -1974,27 +1984,61 @@ export class ReportsService {
       content: Record<string, any>;
     }>,
   ): string {
+    const grouped = new Map<
+      string,
+      {
+        authors: Set<string>;
+        done: Set<string>;
+        risks: Set<string>;
+        next: Set<string>;
+      }
+    >();
+
+    for (const source of sources) {
+      const department = source.departmentName || 'Невідомий підрозділ';
+      const bucket = grouped.get(department) || {
+        authors: new Set<string>(),
+        done: new Set<string>(),
+        risks: new Set<string>(),
+        next: new Set<string>(),
+      };
+
+      if (source.authorName) bucket.authors.add(source.authorName);
+      this.extractSectionPoints(source.content || {}, ['workDone', 'achievements', 'summary']).forEach((item) => bucket.done.add(item));
+      this.extractSectionPoints(source.content || {}, ['problems']).forEach((item) => bucket.risks.add(item));
+      this.extractSectionPoints(source.content || {}, ['nextWeekPlan']).forEach((item) => bucket.next.add(item));
+
+      grouped.set(department, bucket);
+    }
+
     const lines: string[] = [];
-    sources.forEach((source, index) => {
-      lines.push(`${index + 1}. Відділ: ${source.departmentName || 'Невідомий підрозділ'}`);
-      lines.push(`Відповідальний: ${source.authorName || 'Невідомий автор'}`);
-      if (source.periodStart && source.periodEnd) {
-        lines.push(`Період: ${this.formatDate(new Date(source.periodStart))} - ${this.formatDate(new Date(source.periodEnd))}`);
-      }
-      const points = this.extractSectionPoints(source.content || {}, [
-        'workDone',
-        'achievements',
-        'problems',
-        'nextWeekPlan',
-        'summary',
-      ]);
-      if (points.length) {
-        points.slice(0, 6).forEach((point, pointIndex) => {
-          lines.push(`${pointIndex + 1}. ${point}`);
-        });
+    Array.from(grouped.entries()).forEach(([department, bucket], index) => {
+      lines.push(`${index + 1}. Відділ: ${department}`);
+      lines.push(`Відповідальні: ${Array.from(bucket.authors).join(', ') || 'Невказано'}`);
+      lines.push(`${index + 1}.1. Виконана робота`);
+      const done = Array.from(bucket.done).slice(0, 12);
+      if (!done.length) {
+        lines.push(`${index + 1}.1.1. Дані по виконаних роботах надано у вільній формі.`);
       } else {
-        lines.push('1. Дані по виконаних роботах надано у вільній формі.');
+        done.forEach((item, i) => lines.push(`${index + 1}.1.${i + 1}. ${item}`));
       }
+
+      lines.push(`${index + 1}.2. Проблеми/ризики`);
+      const risks = Array.from(bucket.risks).slice(0, 8);
+      if (!risks.length) {
+        lines.push(`${index + 1}.2.1. Критичних ризиків за звітний період не зафіксовано.`);
+      } else {
+        risks.forEach((item, i) => lines.push(`${index + 1}.2.${i + 1}. ${item}`));
+      }
+
+      lines.push(`${index + 1}.3. Наступні кроки`);
+      const next = Array.from(bucket.next).slice(0, 8);
+      if (!next.length) {
+        lines.push(`${index + 1}.3.1. Продовжити виконання планових завдань за напрямом.`);
+      } else {
+        next.forEach((item, i) => lines.push(`${index + 1}.3.${i + 1}. ${item}`));
+      }
+
       lines.push('');
     });
 
