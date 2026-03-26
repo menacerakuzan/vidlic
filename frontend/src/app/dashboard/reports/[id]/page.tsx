@@ -191,7 +191,11 @@ export default function ReportDetailsPage() {
     return [
       { key: 'title', label: 'Назва звіту заповнена', ok: !!report?.title?.trim() },
       { key: 'period', label: 'Період звіту заповнений', ok: !!report?.periodStart && !!report?.periodEnd },
-      { key: 'workDone', label: 'Розділ \"Виконана робота\" заповнений', ok: !!content?.workDone?.trim?.() },
+      {
+        key: 'workDone',
+        label: 'Розділ \"Виконана робота\" заповнений',
+        ok: isAggregateByMode ? true : !!content?.workDone?.trim?.(),
+      },
       {
         key: 'managerSubmission',
         label: 'Текст для погодження підготовлений',

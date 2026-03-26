@@ -23,6 +23,15 @@ export class ReportsService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
+    const andClauses: any[] = [
+      {
+        NOT: {
+          title: {
+            startsWith: this.activitiesPlanTitlePrefix(),
+          },
+        },
+      },
+    ];
 
     if (user.role === 'specialist') {
       where.authorId = user.id;
@@ -54,15 +63,17 @@ export class ReportsService {
     }
 
     if (search) {
-      where.AND = [
-        {
-          OR: [
-            { title: { contains: search, mode: 'insensitive' } },
-            { author: { firstName: { contains: search, mode: 'insensitive' } } },
-            { author: { lastName: { contains: search, mode: 'insensitive' } } },
-          ],
-        },
-      ];
+      andClauses.push({
+        OR: [
+          { title: { contains: search, mode: 'insensitive' } },
+          { author: { firstName: { contains: search, mode: 'insensitive' } } },
+          { author: { lastName: { contains: search, mode: 'insensitive' } } },
+        ],
+      });
+    }
+
+    if (andClauses.length) {
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : []), ...andClauses];
     }
 
     const [reports, total] = await Promise.all([
@@ -81,7 +92,7 @@ export class ReportsService {
     ]);
 
     const visibleReports = reports.filter((item) => !this.isActivityPlanReport(item));
-    const normalizedTotal = user.role === 'specialist' ? visibleReports.length : total;
+    const normalizedTotal = total;
 
     return {
       data: visibleReports.map(r => this.mapReport(r)),
@@ -228,16 +239,18 @@ export class ReportsService {
         'Перед відправкою сформуйте AI-чернетку для погодження та за потреби відредагуйте її.',
       );
     }
-    const template = await this.prisma.departmentReportTemplate.findUnique({
-      where: { departmentId: report.departmentId },
-    });
-    const requiredSections = Array.isArray(template?.sectionSchema)
-      ? (template?.sectionSchema as any[]).filter((item) => item?.required && item?.key)
-      : [];
-    for (const section of requiredSections) {
-      const value = (content as any)?.[section.key];
-      if (typeof value !== 'string' || !value.trim()) {
-        throw new BadRequestException(`Не заповнено обов'язковий розділ: ${section.title || section.key}`);
+    if (reportMode !== 'aggregate') {
+      const template = await this.prisma.departmentReportTemplate.findUnique({
+        where: { departmentId: report.departmentId },
+      });
+      const requiredSections = Array.isArray(template?.sectionSchema)
+        ? (template?.sectionSchema as any[]).filter((item) => item?.required && item?.key)
+        : [];
+      for (const section of requiredSections) {
+        const value = (content as any)?.[section.key];
+        if (typeof value !== 'string' || !value.trim()) {
+          throw new BadRequestException(`Не заповнено обов'язковий розділ: ${section.title || section.key}`);
+        }
       }
     }
 

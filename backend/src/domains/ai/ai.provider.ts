@@ -406,6 +406,9 @@ export class AiProviderService {
       '11. Використай УСІ передані sourceReports/sourceReportsOutline без пропусків.',
       '12. Категорично заборонено вигадувати нові відділи/сектори/підрозділи. Використовуй тільки ті назви, які є у вхідних даних.',
       '13. Якщо у вхідних даних лише один відділ — у результаті має бути лише один відділ.',
+      '14. Заборонено дублювати зміст робіт різними формулюваннями. Якщо пункти семантично однакові — залиш лише один, більш конкретний.',
+      '15. Для кожного відділу формуй єдиний консолідований блок, а не повторювані блоки з однаковою назвою.',
+      '16. Перед фінальним виводом зроби внутрішню дедуплікацію пунктів у розділах "Виконана робота", "Проблеми/ризики", "Наступні кроки".',
       '',
       "ОБОВ'ЯЗКОВА СТРУКТУРА ДОКУМЕНТА:",
       '1. Заголовна частина:',
@@ -699,18 +702,21 @@ export class AiProviderService {
     rawText: string,
     input: ManagerSubmissionInput,
   ): ManagerSubmissionOutput | null {
+    const reportMode = String((input.reportContent as any)?.reportMode || '').toLowerCase();
+    const isAggregate = reportMode === 'aggregate';
     const parsed = this.safeJson(rawText);
 
     if (parsed?.bodyText && String(parsed.bodyText).trim().length > 0) {
+      const normalizedBody = this.deduplicateStructuredBody(
+        this.normalizeBodySpacing(
+          String(parsed.bodyText),
+        ),
+      );
+      const cleanedBody = isAggregate ? this.stripAggregateIdentityLines(normalizedBody) : normalizedBody;
       return {
         documentTitle: parsed.documentTitle || 'ЗВІТ',
         headerLines: Array.isArray(parsed.headerLines) ? parsed.headerLines : [],
-        bodyText: this.ensureExecutorIdentity(
-          this.normalizeBodySpacing(
-            String(parsed.bodyText),
-          ),
-          input,
-        ),
+        bodyText: isAggregate ? cleanedBody : this.ensureExecutorIdentity(cleanedBody, input),
         style: {
           fontFamily: parsed.style?.fontFamily || 'Times New Roman',
           fontSize: Number(parsed.style?.fontSize) || 14,
@@ -721,16 +727,15 @@ export class AiProviderService {
     const cleaned = rawText.replace(/```[a-zA-Z]*\n?/g, '').replace(/```/g, '').trim();
     if (!cleaned) return null;
 
+    const normalizedFallback = this.deduplicateStructuredBody(this.normalizeBodySpacing(cleaned));
+    const cleanedFallback = isAggregate ? this.stripAggregateIdentityLines(normalizedFallback) : normalizedFallback;
     return {
       documentTitle: 'ЗВІТ',
       headerLines: [
         `Про виконання роботи ${input.departmentFullName}`,
         input.periodLabel,
       ],
-      bodyText: this.ensureExecutorIdentity(
-        this.normalizeBodySpacing(cleaned),
-        input,
-      ),
+      bodyText: isAggregate ? cleanedFallback : this.ensureExecutorIdentity(cleanedFallback, input),
       style: {
         fontFamily: 'Times New Roman',
         fontSize: 14,
@@ -754,5 +759,100 @@ export class AiProviderService {
     const executorName = (input.authorName || '').trim() || 'Невказано';
     const executorPosition = (input.authorPosition || '').trim() || 'Посада не вказана';
     return `Виконавець: ${executorPosition} ${executorName}\n\n${normalized}`.trim();
+  }
+
+  private deduplicateStructuredBody(text: string): string {
+    const lines = text.split('\n');
+    const result: string[] = [];
+    const seenPointNorms: string[] = [];
+
+    for (const rawLine of lines) {
+      const line = rawLine.trimEnd();
+      const pointMatch = line.match(/^\s*\d+(?:\.\d+){1,3}\.?\s+(.+)$/);
+      if (!pointMatch) {
+        result.push(rawLine);
+        continue;
+      }
+
+      const pointText = pointMatch[1].trim();
+      const norm = this.normalizePointText(pointText);
+      if (!norm) continue;
+
+      const isDuplicate = seenPointNorms.some((seen) => {
+        if (seen === norm) return true;
+        return this.jaccardSimilarity(norm, seen) >= 0.86;
+      });
+
+      if (isDuplicate) {
+        continue;
+      }
+
+      seenPointNorms.push(norm);
+      result.push(rawLine);
+    }
+
+    return result.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  private stripAggregateIdentityLines(text: string): string {
+    const lines = text.split('\n');
+    const cleaned: string[] = [];
+    let skipCurrentSectionHeader = false;
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) {
+        cleaned.push(rawLine);
+        skipCurrentSectionHeader = false;
+        continue;
+      }
+
+      if (/^виконавець\s*:/i.test(line)) {
+        continue;
+      }
+      if (/^відділ\s*:/i.test(line)) {
+        continue;
+      }
+      if (/^відповідальний\s*:/i.test(line)) {
+        continue;
+      }
+
+      if (/^\d+\.\s*відділ\s*:/i.test(line) || /^\d+\.\s*сектор\s*:/i.test(line)) {
+        skipCurrentSectionHeader = true;
+        continue;
+      }
+
+      if (skipCurrentSectionHeader && /^\d+\.\d+\.\s*(виконана робота|проблеми\/ризики|наступні кроки)\s*$/i.test(line)) {
+        cleaned.push(rawLine);
+        skipCurrentSectionHeader = false;
+        continue;
+      }
+
+      cleaned.push(rawLine);
+    }
+
+    return cleaned.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  private normalizePointText(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/[«»"']/g, '')
+      .replace(/[^a-zа-яіїєґ0-9\s]/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private jaccardSimilarity(a: string, b: string): number {
+    const aSet = new Set(a.split(' ').filter((w) => w.length > 2));
+    const bSet = new Set(b.split(' ').filter((w) => w.length > 2));
+    if (!aSet.size || !bSet.size) return 0;
+
+    let intersection = 0;
+    for (const token of aSet) {
+      if (bSet.has(token)) intersection += 1;
+    }
+    const union = aSet.size + bSet.size - intersection;
+    return union > 0 ? intersection / union : 0;
   }
 }
