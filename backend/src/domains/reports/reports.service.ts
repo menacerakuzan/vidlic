@@ -35,7 +35,19 @@ export class ReportsService {
 
     if (user.role === 'specialist') {
       where.authorId = user.id;
-    } else if (user.role === 'manager' || user.role === 'clerk' || user.role === 'director') {
+    } else if (user.role === 'clerk') {
+      const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+      where.OR = [
+        { authorId: user.id },
+        { currentApproverId: user.id },
+        {
+          AND: [
+            { departmentId: { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) } },
+            { status: 'pending_clerk' },
+          ],
+        },
+      ];
+    } else if (user.role === 'manager' || user.role === 'director') {
       const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
       where.OR = [
         { authorId: user.id },
@@ -556,10 +568,17 @@ export class ReportsService {
       },
     });
 
-    const newStatus: ReportStatus = approvalResult.nextStep
+    // Specialist reports must stop at manager approval and must not continue to clerk/director chain.
+    const forceSpecialistFinalApproval = report.author?.role === 'specialist' && user.role === 'manager';
+
+    const newStatus: ReportStatus = forceSpecialistFinalApproval
+      ? 'approved'
+      : approvalResult.nextStep
       ? this.statusByStepRole(approvalResult.nextStep.role)
       : 'approved';
-    const nextApproverId = approvalResult.nextStep
+    const nextApproverId = forceSpecialistFinalApproval
+      ? null
+      : approvalResult.nextStep
       ? this.resolveApproverByRole(
           approvalResult.nextStep.role,
           routing.managerId,
@@ -867,7 +886,12 @@ export class ReportsService {
   private async canViewReport(report: any, user: any): Promise<boolean> {
     if (user.role === 'admin') return true;
     if (report.currentApproverId && report.currentApproverId === user.id) return true;
-    if (user.role === 'clerk' || user.role === 'manager' || user.role === 'director') {
+    if (user.role === 'clerk') {
+      if (report.authorId === user.id) return true;
+      const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+      return report.status === 'pending_clerk' && scopedDepartmentIds.includes(report.departmentId);
+    }
+    if (user.role === 'manager' || user.role === 'director') {
       const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
       if (scopedDepartmentIds.includes(report.departmentId)) return true;
     }
@@ -1156,6 +1180,7 @@ export class ReportsService {
       periodStart: string;
       periodEnd: string;
       content: Record<string, any>;
+      managerSubmissionBodyText?: string;
     }>;
   } | null> {
     const mode = this.getReportMode(report);
@@ -1200,10 +1225,17 @@ export class ReportsService {
         periodStart: report.periodStart?.toISOString?.() || '',
         periodEnd: report.periodEnd?.toISOString?.() || '',
         content: this.ensureObject(report.content),
+        managerSubmissionBodyText:
+          typeof this.ensureObject(report.content)?.managerSubmission?.bodyText === 'string'
+            ? String(this.ensureObject(report.content).managerSubmission.bodyText)
+            : undefined,
       };
 
       const selectedSources = filteredSourceReports.map((item) => this.mapSourceReport(item));
-      const sources = [ownManagerSource, ...selectedSources];
+      const shouldIncludeOwnReport = !Array.isArray(sourceReportIds) || sourceReportIds.length === 0
+        ? true
+        : sourceReportIds.includes(report.id);
+      const sources = shouldIncludeOwnReport ? [ownManagerSource, ...selectedSources] : selectedSources;
 
       if (sources.length === 0) {
         return null;
@@ -2020,6 +2052,8 @@ export class ReportsService {
   }
 
   private mapSourceReport(report: any) {
+    const content = this.ensureObject(report.content);
+    const submission = this.ensureObject(content.managerSubmission);
     return {
       reportId: report.id,
       title: report.title || '',
@@ -2031,7 +2065,11 @@ export class ReportsService {
       authorName: `${report.author?.firstName || ''} ${report.author?.lastName || ''}`.trim(),
       periodStart: report.periodStart?.toISOString?.() || '',
       periodEnd: report.periodEnd?.toISOString?.() || '',
-      content: this.ensureObject(report.content),
+      content,
+      managerSubmissionBodyText:
+        typeof submission.bodyText === 'string' && submission.bodyText.trim().length > 0
+          ? submission.bodyText
+          : undefined,
     };
   }
 
@@ -2052,6 +2090,7 @@ export class ReportsService {
       periodStart: string;
       periodEnd: string;
       content: Record<string, any>;
+      managerSubmissionBodyText?: string;
     }>,
   ): string {
     const lines: string[] = [];
@@ -2065,8 +2104,11 @@ export class ReportsService {
         lines.push(`Період: ${this.formatDate(new Date(source.periodStart))} - ${this.formatDate(new Date(source.periodEnd))}`);
       }
 
+      const structured = this.extractSectionsFromManagerSubmission(source.managerSubmissionBodyText);
       lines.push(`${index + 1}.1. Виконана робота`);
-      const done = this.extractSectionPoints(source.content || {}, ['workDone', 'achievements', 'summary']).slice(0, 16);
+      const done = (structured.workDone.length
+        ? structured.workDone
+        : this.extractSectionPoints(source.content || {}, ['workDone', 'achievements', 'summary'])).slice(0, 20);
       if (!done.length) {
         lines.push(`${index + 1}.1.1. Дані по виконаних роботах надано у вільній формі.`);
       } else {
@@ -2074,7 +2116,9 @@ export class ReportsService {
       }
 
       lines.push(`${index + 1}.2. Проблеми/ризики`);
-      const risks = this.extractSectionPoints(source.content || {}, ['problems']).slice(0, 12);
+      const risks = (structured.problems.length
+        ? structured.problems
+        : this.extractSectionPoints(source.content || {}, ['problems'])).slice(0, 14);
       if (!risks.length) {
         lines.push(`${index + 1}.2.1. Критичних ризиків за звітний період не зафіксовано.`);
       } else {
@@ -2082,7 +2126,9 @@ export class ReportsService {
       }
 
       lines.push(`${index + 1}.3. Наступні кроки`);
-      const next = this.extractSectionPoints(source.content || {}, ['nextWeekPlan']).slice(0, 12);
+      const next = (structured.nextSteps.length
+        ? structured.nextSteps
+        : this.extractSectionPoints(source.content || {}, ['nextWeekPlan'])).slice(0, 14);
       if (!next.length) {
         lines.push(`${index + 1}.3.1. Продовжити виконання планових завдань за напрямом.`);
       } else {
@@ -2145,5 +2191,70 @@ export class ReportsService {
       .map((line) => line.replace(/^\d+[\).\s-]*/, '').trim())
       .filter(Boolean)
       .slice(0, 14);
+  }
+
+  private extractSectionsFromManagerSubmission(bodyText?: string): {
+    workDone: string[];
+    problems: string[];
+    nextSteps: string[];
+  } {
+    if (!bodyText || typeof bodyText !== 'string') {
+      return { workDone: [], problems: [], nextSteps: [] };
+    }
+
+    const lines = bodyText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const result = { workDone: [] as string[], problems: [] as string[], nextSteps: [] as string[] };
+    let current: 'workDone' | 'problems' | 'nextSteps' | null = null;
+
+    for (const line of lines) {
+      if (/виконана робота/i.test(line)) {
+        current = 'workDone';
+        continue;
+      }
+      if (/проблеми\s*\/\s*ризики|проблеми|ризики/i.test(line)) {
+        current = 'problems';
+        continue;
+      }
+      if (/наступні кроки|наступні дії|план/i.test(line)) {
+        current = 'nextSteps';
+        continue;
+      }
+      if (/^виконавець\s*:/i.test(line) || /^відділ\s*:/i.test(line) || /^відповідальний\s*:/i.test(line)) {
+        continue;
+      }
+
+      const normalized = line
+        .replace(/^\d+(?:\.\d+)*\.?\s*/, '')
+        .replace(/^[-*•]\s*/, '')
+        .trim();
+      if (!normalized) continue;
+      if (!current) {
+        result.workDone.push(normalized);
+      } else {
+        result[current].push(normalized);
+      }
+    }
+
+    return {
+      workDone: this.uniqueLines(result.workDone),
+      problems: this.uniqueLines(result.problems),
+      nextSteps: this.uniqueLines(result.nextSteps),
+    };
+  }
+
+  private uniqueLines(lines: string[]): string[] {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const line of lines) {
+      const key = line.toLowerCase().replace(/\s+/g, ' ').trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      result.push(line);
+    }
+    return result;
   }
 }
