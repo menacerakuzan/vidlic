@@ -268,7 +268,10 @@ export class ReportsService {
 
     let flowSteps: Array<{ order: number; role: 'manager' | 'clerk' | 'director' }> = [];
     if (report.author?.role === 'specialist') {
-      flowSteps = [{ order: 1, role: 'manager' }];
+      // If the section has no manager, specialist report goes directly to clerk.
+      flowSteps = managerId
+        ? [{ order: 1, role: 'manager' }]
+        : [{ order: 1, role: 'clerk' }];
     } else if (report.author?.role === 'manager') {
       if (reportMode !== 'aggregate') {
         const updated = await this.prisma.report.update({
@@ -568,15 +571,23 @@ export class ReportsService {
       },
     });
 
-    // Specialist reports must stop at manager approval and must not continue to clerk/director chain.
-    const forceSpecialistFinalApproval = report.author?.role === 'specialist' && user.role === 'manager';
+    // Specialist reports must stop at manager approval and must not continue further.
+    const forceSpecialistFinalApproval =
+      report.author?.role === 'specialist' &&
+      (user.role === 'manager' || user.role === 'clerk');
+    // Manager aggregate reports must stop at clerk approval; clerk prepares their own aggregate report for director.
+    const forceManagerAggregateFinalApproval =
+      report.author?.role === 'manager' &&
+      user.role === 'clerk' &&
+      this.getReportMode(report) === 'aggregate';
+    const forceFinalApproval = forceSpecialistFinalApproval || forceManagerAggregateFinalApproval;
 
-    const newStatus: ReportStatus = forceSpecialistFinalApproval
+    const newStatus: ReportStatus = forceFinalApproval
       ? 'approved'
       : approvalResult.nextStep
       ? this.statusByStepRole(approvalResult.nextStep.role)
       : 'approved';
-    const nextApproverId = forceSpecialistFinalApproval
+    const nextApproverId = forceFinalApproval
       ? null
       : approvalResult.nextStep
       ? this.resolveApproverByRole(
@@ -1257,28 +1268,54 @@ export class ReportsService {
         throw new BadRequestException('У департаменті не налаштовано відділи для зведення діловода.');
       }
 
-      const sourceReports = await this.prisma.report.findMany({
-        where: {
-          ...periodFilter,
-          departmentId: { in: childDepartmentIds },
-          author: { role: 'manager', isActive: true },
-          status: { in: ['pending_clerk', 'pending_director', 'approved'] },
-          id: { not: report.id },
-        },
-        include: {
-          author: { select: { id: true, firstName: true, lastName: true } },
-          department: { select: { id: true, name: true, nameUk: true } },
-        },
-        orderBy: [{ departmentId: 'asc' }, { periodEnd: 'asc' }, { createdAt: 'asc' }],
-        take: 300,
-      });
+      const [managerSourceReports, specialistFallbackReports] = await Promise.all([
+        this.prisma.report.findMany({
+          where: {
+            ...periodFilter,
+            departmentId: { in: childDepartmentIds },
+            author: { role: 'manager', isActive: true },
+            status: { in: ['pending_clerk', 'pending_director', 'approved'] },
+            id: { not: report.id },
+          },
+          include: {
+            author: { select: { id: true, firstName: true, lastName: true } },
+            department: { select: { id: true, name: true, nameUk: true, managerId: true } },
+          },
+          orderBy: [{ departmentId: 'asc' }, { periodEnd: 'asc' }, { createdAt: 'asc' }],
+          take: 300,
+        }),
+        this.prisma.report.findMany({
+          where: {
+            ...periodFilter,
+            departmentId: { in: childDepartmentIds },
+            author: { role: 'specialist', isActive: true },
+            status: { in: ['pending_clerk', 'approved'] },
+            id: { not: report.id },
+          },
+          include: {
+            author: { select: { id: true, firstName: true, lastName: true } },
+            department: { select: { id: true, name: true, nameUk: true, managerId: true } },
+          },
+          orderBy: [{ departmentId: 'asc' }, { periodEnd: 'asc' }, { createdAt: 'asc' }],
+          take: 500,
+        }),
+      ]);
 
-      if (!sourceReports.length) {
-        throw new BadRequestException('Немає звітів керівників відділів за обраний період для формування зведення діловода.');
+      // Include specialist reports only for sections without a manager.
+      const managerlessSpecialistReports = specialistFallbackReports.filter((item) => !item.department?.managerId);
+      const sourceReports = [...managerSourceReports, ...managerlessSpecialistReports];
+
+      const sourceReportsById = new Map<string, any>();
+      sourceReports.forEach((item) => sourceReportsById.set(item.id, item));
+      const sourceReportsUnique = Array.from(sourceReportsById.values());
+
+      if (!sourceReportsUnique.length) {
+        throw new BadRequestException('Немає звітів для формування зведення діловода за обраний період.');
       }
-      const filteredSourceReports = this.filterAggregationSources(sourceReports, sourceReportIds);
+
+      const filteredSourceReports = this.filterAggregationSources(sourceReportsUnique, sourceReportIds);
       if (!filteredSourceReports.length) {
-        throw new BadRequestException('Оберіть хоча б один звіт керівника для формування зведення діловода.');
+        throw new BadRequestException('Оберіть хоча б один звіт для формування зведення діловода.');
       }
 
       return {

@@ -108,3 +108,10 @@ export class UserQueryDto {
   @IsString()
   search?: string;
 }
+
+export class UpdateUserPasswordDto {
+  @ApiProperty({ example: 'N3wStrongP@ssw0rd!' })
+  @IsString()
+  @MinLength(12)
+  password: string;
+}

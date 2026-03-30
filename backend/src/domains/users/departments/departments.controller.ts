@@ -17,8 +17,8 @@ export class DepartmentsController {
   @Permissions('departments:read')
   @ApiOperation({ summary: 'Отримати список підрозділів' })
   @ApiResponse({ status: 200, description: 'Список підрозділів' })
-  findAll() {
-    return this.departmentsService.findAll();
+  findAll(@Req() req: any) {
+    return this.departmentsService.findAll(req.user);
   }
 
   @Get(':id')
@@ -26,23 +26,23 @@ export class DepartmentsController {
   @ApiOperation({ summary: 'Отримати підрозділ за ID' })
   @ApiResponse({ status: 200, description: 'Дані підрозділу' })
   @ApiResponse({ status: 404, description: 'Підрозділ не знайдено' })
-  findById(@Param('id') id: string) {
-    return this.departmentsService.findById(id);
+  findById(@Param('id') id: string, @Req() req: any) {
+    return this.departmentsService.findById(id, req.user);
   }
 
   @Get(':id/team')
   @Permissions('departments:read')
   @ApiOperation({ summary: 'Отримати команду підрозділу' })
   @ApiResponse({ status: 200, description: 'Команда підрозділу' })
-  getTeam(@Param('id') id: string) {
-    return this.departmentsService.getTeam(id);
+  getTeam(@Param('id') id: string, @Req() req: any) {
+    return this.departmentsService.getTeam(id, req.user);
   }
 
   @Get(':id/report-template')
   @Permissions('departments:read')
   @ApiOperation({ summary: 'Отримати шаблон звіту підрозділу' })
-  getReportTemplate(@Param('id') id: string) {
-    return this.departmentsService.getReportTemplate(id);
+  getReportTemplate(@Param('id') id: string, @Req() req: any) {
+    return this.departmentsService.getReportTemplate(id, req.user);
   }
 
   @Put(':id/report-template')

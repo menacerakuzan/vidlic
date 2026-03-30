@@ -412,6 +412,8 @@ export class AiProviderService {
       '17. Для кожного пункту "Виконана робота" додавай змістовне завершення у форматі: "що забезпечило/що дозволило/що дало змогу ...".',
       '18. Не використовуй надто короткі пункти. Кожен пункт має містити контекст дії та результат.',
       '19. Мінімум 5-7 змістовних пунктів у розділі "Виконана робота" для кожного джерела, якщо дані дозволяють.',
+      '20. У фінальному тексті для кожного відділу назва має з’являтися лише один раз.',
+      '21. Не вказуй ПІБ співробітників/відповідальних у тілі зведеного документа.',
       '',
       "ОБОВ'ЯЗКОВА СТРУКТУРА ДОКУМЕНТА:",
       '1. Заголовна частина:',
@@ -715,7 +717,7 @@ export class AiProviderService {
           String(parsed.bodyText),
         ),
       );
-      const cleanedBody = isAggregate ? this.stripAggregateIdentityLines(normalizedBody) : normalizedBody;
+      const cleanedBody = isAggregate ? this.normalizeAggregateBody(normalizedBody) : normalizedBody;
       return {
         documentTitle: parsed.documentTitle || 'ЗВІТ',
         headerLines: Array.isArray(parsed.headerLines) ? parsed.headerLines : [],
@@ -731,7 +733,7 @@ export class AiProviderService {
     if (!cleaned) return null;
 
     const normalizedFallback = this.deduplicateStructuredBody(this.normalizeBodySpacing(cleaned));
-    const cleanedFallback = isAggregate ? this.stripAggregateIdentityLines(normalizedFallback) : normalizedFallback;
+    const cleanedFallback = isAggregate ? this.normalizeAggregateBody(normalizedFallback) : normalizedFallback;
     return {
       documentTitle: 'ЗВІТ',
       headerLines: [
@@ -835,6 +837,42 @@ export class AiProviderService {
     }
 
     return cleaned.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  private normalizeAggregateBody(text: string): string {
+    const stripped = this.stripAggregateIdentityLines(text);
+    const lines = stripped.split('\n');
+    const result: string[] = [];
+    const seenDepartments = new Set<string>();
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) {
+        result.push(rawLine);
+        continue;
+      }
+
+      const deptMatch = line.match(/^(?:\d+\.\s*)?(?:відділ|сектор)\s*:\s*(.+)$/i);
+      if (deptMatch?.[1]) {
+        const deptKey = deptMatch[1].toLowerCase().replace(/\s+/g, ' ').trim();
+        if (seenDepartments.has(deptKey)) {
+          continue;
+        }
+        seenDepartments.add(deptKey);
+        // Keep only department title once, without employee names.
+        result.push(rawLine.replace(/^(?:\d+\.\s*)?/i, ''));
+        continue;
+      }
+
+      // Extra protection against name-bearing lines.
+      if (/^відповідальний\s*:/i.test(line) || /^виконавець\s*:/i.test(line)) {
+        continue;
+      }
+
+      result.push(rawLine);
+    }
+
+    return result.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
 
   private normalizePointText(value: string): string {

@@ -71,10 +71,13 @@ export default function DepartmentsPage() {
 
   const isAdmin = user?.role === 'admin'
   const isDirector = user?.role === 'director'
+  const isScopedReader = ['specialist', 'manager', 'clerk', 'director'].includes(user?.role || '')
   const visibleDepartments = useMemo(() => {
-    if (!isDirector || !user?.department?.id) return departments
-    return departments.filter((d) => d.id === user.department?.id || d.parentId === user.department?.id)
-  }, [departments, isDirector, user?.department?.id])
+    if (!isScopedReader || !user?.department?.id) return departments
+    const current = departments.find((d) => d.id === user.department?.id)
+    const rootId = current?.parentId || current?.id || user.department.id
+    return departments.filter((d) => d.id === rootId || d.parentId === rootId)
+  }, [departments, isScopedReader, user?.department?.id])
 
   const loadDepartments = async () => {
     if (!accessToken) return
@@ -87,11 +90,17 @@ export default function DepartmentsPage() {
     const data = await resp.json()
     setDepartments(data || [])
 
-    const directorVisible = isDirector
-      ? (data || []).filter((d: Department) => d.id === user?.department?.id || d.parentId === user?.department?.id)
+    const scopedVisible = isScopedReader && user?.department?.id
+      ? (data || []).filter((d: Department) => {
+          const current = (data || []).find((item: Department) => item.id === user.department?.id)
+          const rootId = current?.parentId || current?.id || user.department?.id
+          return d.id === rootId || d.parentId === rootId
+        })
       : data || []
-    const defaultDeptId = isDirector
-      ? (user?.department?.id && directorVisible.some((d: Department) => d.id === user?.department?.id) ? user?.department?.id : directorVisible?.[0]?.id || '')
+    const defaultDeptId = isScopedReader
+      ? (user?.department?.id && scopedVisible.some((d: Department) => d.id === user?.department?.id)
+          ? user?.department?.id
+          : scopedVisible?.[0]?.id || '')
       : (data?.[0]?.id || '')
     setSelectedDepartmentId(defaultDeptId)
     setLoading(false)
@@ -288,6 +297,34 @@ export default function DepartmentsPage() {
     }
     const err = await resp.json().catch(() => null)
     setActionError(err?.message || 'Не вдалося видалити співробітника')
+  }
+
+  const resetEmployeePassword = async (id: string, fullName: string) => {
+    if (!isAdmin || !accessToken) return
+    const nextPassword = window.prompt(`Новий пароль для ${fullName} (мінімум 12 символів):`, '')
+    if (!nextPassword) return
+    if (nextPassword.length < 12) {
+      setActionError('Пароль має містити щонайменше 12 символів')
+      return
+    }
+
+    setActionError('')
+    setActionSuccess('')
+    const resp = await fetch(`/api/v1/users/${id}/password`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ password: nextPassword }),
+    })
+
+    if (resp.ok) {
+      setActionSuccess('Пароль користувача змінено')
+      return
+    }
+    const err = await resp.json().catch(() => null)
+    setActionError(err?.message || 'Не вдалося змінити пароль')
   }
 
   const assignExistingEmployee = async () => {
@@ -516,7 +553,17 @@ export default function DepartmentsPage() {
                       )}
                     </div>
                     {canManageEmployees && member.role !== 'director' && member.role !== 'admin' && (
-                      <button onClick={() => deleteEmployee(member.id)} className="text-sm text-rose-600 hover:underline">Видалити</button>
+                      <div className="flex items-center gap-3">
+                        {isAdmin && (
+                          <button
+                            onClick={() => resetEmployeePassword(member.id, `${member.firstName} ${member.lastName}`)}
+                            className="text-sm text-amber-600 hover:underline"
+                          >
+                            Змінити пароль
+                          </button>
+                        )}
+                        <button onClick={() => deleteEmployee(member.id)} className="text-sm text-rose-600 hover:underline">Видалити</button>
+                      </div>
                     )}
                   </div>
                 ))}

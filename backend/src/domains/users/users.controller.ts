@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto, UpdateUserDto, UserQueryDto } from './dto/users.dto';
+import { CreateUserDto, UpdateUserDto, UserQueryDto, UpdateUserPasswordDto } from './dto/users.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, Permissions } from '../auth/decorators/roles.decorator';
@@ -46,6 +46,15 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'Користувач оновлений' })
   update(@Param('id') id: string, @Body() dto: UpdateUserDto, @Req() req: any) {
     return this.usersService.update(id, dto, req.user, req.ip);
+  }
+
+  @Put(':id/password')
+  @Roles('admin')
+  @Permissions('users:write')
+  @ApiOperation({ summary: 'Змінити пароль користувача (Admin)' })
+  @ApiResponse({ status: 200, description: 'Пароль оновлено' })
+  updatePassword(@Param('id') id: string, @Body() dto: UpdateUserPasswordDto, @Req() req: any) {
+    return this.usersService.updatePassword(id, dto, req.user, req.ip);
   }
 
   @Delete(':id')

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma.service';
-import { CreateUserDto, UpdateUserDto, UserQueryDto } from './dto/users.dto';
+import { CreateUserDto, UpdateUserDto, UserQueryDto, UpdateUserPasswordDto } from './dto/users.dto';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -180,6 +180,35 @@ export class UsersService {
       entityType: 'user',
       entityId: id,
       oldValue: { email: user.email, role: user.role },
+      ipAddress,
+    });
+
+    return { success: true };
+  }
+
+  async updatePassword(id: string, dto: UpdateUserPasswordDto, actor: any, ipAddress?: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('Користувача не знайдено');
+    }
+
+    if (actor?.role !== 'admin') {
+      throw new ForbiddenException('Лише адміністратор може змінювати пароль користувача');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    await this.prisma.user.update({
+      where: { id },
+      data: { passwordHash },
+    });
+
+    await this.auditService.log({
+      userId: actor.id,
+      action: AuditAction.update,
+      entityType: 'user',
+      entityId: id,
+      oldValue: { email: user.email },
+      newValue: { passwordChanged: true },
       ipAddress,
     });
 

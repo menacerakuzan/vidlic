@@ -11,8 +11,12 @@ export class DepartmentsService {
     private auditService: AuditService,
   ) {}
 
-  async findAll() {
+  async findAll(actor?: any) {
+    const visibleDepartmentIds = await this.resolveVisibleDepartmentIds(actor);
+    const where = visibleDepartmentIds ? { id: { in: visibleDepartmentIds } } : {};
+
     const departments = await this.prisma.department.findMany({
+      where,
       include: {
         parent: true,
         children: {
@@ -51,7 +55,8 @@ export class DepartmentsService {
     }));
   }
 
-  async findById(id: string) {
+  async findById(id: string, actor?: any) {
+    await this.assertDepartmentAccess(id, actor);
     const department = await this.prisma.department.findUnique({
       where: { id },
       include: {
@@ -243,7 +248,8 @@ export class DepartmentsService {
     return { success: true };
   }
 
-  async getTeam(departmentId: string) {
+  async getTeam(departmentId: string, actor?: any) {
+    await this.assertDepartmentAccess(departmentId, actor);
     const department = await this.prisma.department.findUnique({
       where: { id: departmentId },
       select: {
@@ -277,7 +283,8 @@ export class DepartmentsService {
     return users;
   }
 
-  async getReportTemplate(departmentId: string) {
+  async getReportTemplate(departmentId: string, actor?: any) {
+    await this.assertDepartmentAccess(departmentId, actor);
     const department = await this.prisma.department.findUnique({ where: { id: departmentId } });
     if (!department) throw new NotFoundException('Підрозділ не знайдено');
 
@@ -304,6 +311,7 @@ export class DepartmentsService {
   }
 
   async upsertReportTemplate(departmentId: string, dto: any, actor: any) {
+    await this.assertDepartmentAccess(departmentId, actor);
     const department = await this.prisma.department.findUnique({ where: { id: departmentId } });
     if (!department) throw new NotFoundException('Підрозділ не знайдено');
     if (actor.role === 'specialist') {
@@ -333,5 +341,33 @@ export class DepartmentsService {
     });
 
     return template;
+  }
+
+  private async resolveVisibleDepartmentIds(actor?: any): Promise<string[] | null> {
+    if (!actor || actor.role === 'admin') return null;
+    if (!actor.departmentId) return [];
+
+    const current = await this.prisma.department.findUnique({
+      where: { id: actor.departmentId },
+      select: { id: true, parentId: true },
+    });
+    if (!current) return [];
+
+    // Any non-admin user sees only own root department and its child sections.
+    const rootId = current.parentId || current.id;
+    const root = await this.prisma.department.findUnique({
+      where: { id: rootId },
+      select: { id: true, children: { select: { id: true } } },
+    });
+    if (!root) return [actor.departmentId];
+    return [root.id, ...(root.children || []).map((child) => child.id)];
+  }
+
+  private async assertDepartmentAccess(departmentId: string, actor?: any): Promise<void> {
+    const visibleDepartmentIds = await this.resolveVisibleDepartmentIds(actor);
+    if (!visibleDepartmentIds) return;
+    if (!visibleDepartmentIds.includes(departmentId)) {
+      throw new ForbiddenException('Немає доступу до цього підрозділу');
+    }
   }
 }
