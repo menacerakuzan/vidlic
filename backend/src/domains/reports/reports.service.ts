@@ -46,6 +46,21 @@ export class ReportsService {
             { status: 'pending_clerk' },
           ],
         },
+        {
+          AND: [
+            { departmentId: { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) } },
+            { status: 'approved' },
+            { author: { role: 'manager' } },
+          ],
+        },
+        {
+          AND: [
+            { departmentId: { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) } },
+            { status: 'approved' },
+            { author: { role: 'specialist' } },
+            { department: { managerId: null } },
+          ],
+        },
       ];
     } else if (user.role === 'manager' || user.role === 'director') {
       const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
@@ -901,7 +916,11 @@ export class ReportsService {
     if (user.role === 'clerk') {
       if (report.authorId === user.id) return true;
       const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
-      return report.status === 'pending_clerk' && scopedDepartmentIds.includes(report.departmentId);
+      if (!scopedDepartmentIds.includes(report.departmentId)) return false;
+      if (report.status === 'pending_clerk') return true;
+      if (report.status === 'approved' && report.author?.role === 'manager') return true;
+      if (report.status === 'approved' && report.author?.role === 'specialist' && !report.department?.managerId) return true;
+      return false;
     }
     if (user.role === 'manager' || user.role === 'director') {
       const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
@@ -1266,15 +1285,14 @@ export class ReportsService {
 
     if (report.author?.role === 'clerk') {
       const childDepartmentIds = (report.department?.children || []).map((d: any) => d.id);
-      if (!childDepartmentIds.length) {
-        throw new BadRequestException('У департаменті не налаштовано відділи для зведення діловода.');
-      }
+      // If the department has no explicit child sections, aggregate within own department.
+      const sourceDepartmentIds = childDepartmentIds.length ? childDepartmentIds : [report.departmentId];
 
       const [managerSourceReports, specialistFallbackReports] = await Promise.all([
         this.prisma.report.findMany({
           where: {
             ...periodFilter,
-            departmentId: { in: childDepartmentIds },
+            departmentId: { in: sourceDepartmentIds },
             author: { role: 'manager', isActive: true },
             status: { in: ['pending_clerk', 'pending_director', 'approved'] },
             id: { not: report.id },
@@ -1289,7 +1307,7 @@ export class ReportsService {
         this.prisma.report.findMany({
           where: {
             ...periodFilter,
-            departmentId: { in: childDepartmentIds },
+            departmentId: { in: sourceDepartmentIds },
             author: { role: 'specialist', isActive: true },
             status: { in: ['pending_clerk', 'approved'] },
             id: { not: report.id },
