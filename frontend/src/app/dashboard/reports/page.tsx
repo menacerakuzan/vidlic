@@ -52,7 +52,7 @@ export default function ReportsPage() {
       setLoading(true)
       setError('')
       const params = new URLSearchParams()
-      params.set('limit', '200')
+      params.set('limit', '100')
       if (statusFilter !== 'all') params.set('status', statusFilter)
       if (departmentFilter !== 'all') params.set('departmentId', departmentFilter)
       if (authorIdFilter !== 'all') params.set('authorId', authorIdFilter)
