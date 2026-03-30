@@ -1285,8 +1285,9 @@ export class ReportsService {
 
     if (report.author?.role === 'clerk') {
       const childDepartmentIds = (report.department?.children || []).map((d: any) => d.id);
-      // If the department has no explicit child sections, aggregate within own department.
-      const sourceDepartmentIds = childDepartmentIds.length ? childDepartmentIds : [report.departmentId];
+      // Always include own department + all child sections as potential sources.
+      // This prevents missing reports that were created on the root department level.
+      const sourceDepartmentIds = Array.from(new Set([report.departmentId, ...childDepartmentIds]));
 
       const [managerSourceReports, specialistFallbackReports] = await Promise.all([
         this.prisma.report.findMany({
