@@ -1284,10 +1284,18 @@ export class ReportsService {
     }
 
     if (report.author?.role === 'clerk') {
-      const childDepartmentIds = (report.department?.children || []).map((d: any) => d.id);
-      // Always include own department + all child sections as potential sources.
-      // This prevents missing reports that were created on the root department level.
-      const sourceDepartmentIds = Array.from(new Set([report.departmentId, ...childDepartmentIds]));
+      // Clerk may belong to a specific section, but should aggregate for the whole parent department.
+      const aggregationRootId = report.department?.parentId || report.departmentId;
+      const aggregationRoot = await this.prisma.department.findUnique({
+        where: { id: aggregationRootId },
+        select: {
+          id: true,
+          children: { select: { id: true } },
+        },
+      });
+      const childDepartmentIds = (aggregationRoot?.children || []).map((d: any) => d.id);
+      // Always include root department + all child sections.
+      const sourceDepartmentIds = Array.from(new Set([aggregationRootId, ...childDepartmentIds]));
 
       const [managerSourceReports, specialistFallbackReports] = await Promise.all([
         this.prisma.report.findMany({
