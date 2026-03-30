@@ -1353,9 +1353,16 @@ export class ReportsService {
         }),
       ]);
 
-      // Include specialist reports only for sections without a manager.
-      const managerlessSpecialistReports = specialistFallbackReports.filter((item) => !item.department?.managerId);
-      const sourceReports = [...managerSourceReports, ...managerlessSpecialistReports];
+      // If manager report exists for a section, use it as the section source.
+      // Otherwise include specialist reports from that section as fallback,
+      // so clerk aggregation does not silently lose section data.
+      const managerCoveredDepartmentIds = new Set(
+        managerSourceReports.map((item) => item.departmentId).filter(Boolean),
+      );
+      const fallbackSpecialistReports = specialistFallbackReports.filter(
+        (item) => !managerCoveredDepartmentIds.has(item.departmentId),
+      );
+      const sourceReports = [...managerSourceReports, ...fallbackSpecialistReports];
 
       const sourceReportsById = new Map<string, any>();
       sourceReports.forEach((item) => sourceReportsById.set(item.id, item));
