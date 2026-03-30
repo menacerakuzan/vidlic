@@ -15,6 +15,29 @@ type ReportSubmission = {
   }
 }
 
+const decodeEntities = (value: string) =>
+  value
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+
+const htmlToPlain = (value: string) =>
+  decodeEntities(
+    value
+      .replace(/\r/g, '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<\/div>/gi, '\n')
+      .replace(/<li>/gi, '• ')
+      .replace(/<\/li>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim(),
+  )
+
 export default function ReportPrintPage() {
   const params = useParams<{ id: string }>()
   const { user } = useAuthStore()
@@ -34,29 +57,6 @@ export default function ReportPrintPage() {
 
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
-  const decodeEntities = (value: string) =>
-    value
-      .replace(/&nbsp;/gi, ' ')
-      .replace(/&amp;/gi, '&')
-      .replace(/&lt;/gi, '<')
-      .replace(/&gt;/gi, '>')
-      .replace(/&quot;/gi, '"')
-      .replace(/&#39;/gi, "'")
-
-  const htmlToPlain = (value: string) =>
-    decodeEntities(
-      value
-        .replace(/\r/g, '')
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/p>/gi, '\n')
-        .replace(/<\/div>/gi, '\n')
-        .replace(/<li>/gi, '• ')
-        .replace(/<\/li>/gi, '\n')
-        .replace(/<[^>]+>/g, '')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim(),
-    )
-
   const applySubmissionToDraft = useCallback((submission: ReportSubmission | null) => {
     setDraftTitle(submission?.documentTitle || 'ЗВІТ')
     setDraftHeader(Array.isArray(submission?.headerLines) ? submission!.headerLines!.join('\n') : '')
@@ -65,7 +65,7 @@ export default function ReportPrintPage() {
     setDraftBodyText(looksLikeHtml ? htmlToPlain(bodyText) : bodyText)
     setFontFamily(submission?.style?.fontFamily || 'Times New Roman')
     setIsDirty(false)
-  }, [htmlToPlain])
+  }, [])
 
   const load = useCallback(async () => {
     if (!accessToken || !params?.id) return

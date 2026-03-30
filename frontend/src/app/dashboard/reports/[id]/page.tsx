@@ -83,10 +83,9 @@ export default function ReportDetailsPage() {
     setLoading(true)
     setError('')
 
-    const [reportResp, summaryResp] = await Promise.all([
-      fetch(`/api/v1/reports/${params.id}`, { headers: { Authorization: `Bearer ${accessToken}` } }),
-      fetch(`/api/v1/ai/reports/${params.id}/summary`, { headers: { Authorization: `Bearer ${accessToken}` } }),
-    ])
+    const reportResp = await fetch(`/api/v1/reports/${params.id}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
 
     if (reportResp.ok) {
       const data = await reportResp.json()
@@ -107,20 +106,25 @@ export default function ReportDetailsPage() {
       setLastSavedAt(new Date().toISOString())
       setFromVersion(Math.max(1, Number(data?.version || 1) - 1))
       setToVersion(Number(data?.version || 1))
+      setLoading(false)
     }
 
+    if (!reportResp.ok) {
+      setError('Не вдалося завантажити звіт')
+      setLoading(false)
+      return
+    }
+
+    // Load AI summary in background so report page opens faster.
+    const summaryResp = await fetch(`/api/v1/ai/reports/${params.id}/summary`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
     if (summaryResp.ok) {
       const data = await summaryResp.json()
       setAiSummary(data)
     } else {
       setAiSummary(null)
     }
-
-    if (!reportResp.ok) {
-      setError('Не вдалося завантажити звіт')
-    }
-
-    setLoading(false)
   }
 
   useEffect(() => {

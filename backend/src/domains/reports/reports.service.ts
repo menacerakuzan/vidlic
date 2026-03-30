@@ -1035,7 +1035,12 @@ export class ReportsService {
 
   private buildRoleAwareHeaderLines(report: any): string[] {
     const departmentName = report.department?.nameUk || report.department?.name || 'підрозділу';
+    const rootDepartmentName =
+      report.department?.parent?.nameUk ||
+      report.department?.parent?.name ||
+      departmentName;
     const role = report.author?.role;
+    const mode = this.getReportMode(report);
     if (role === 'specialist') {
       return [
         `Про виконання роботи спеціаліста відділу ${departmentName}`,
@@ -1049,8 +1054,14 @@ export class ReportsService {
       ];
     }
     if (role === 'clerk') {
+      if (mode === 'aggregate') {
+        return [
+          `Про виконання роботи ${rootDepartmentName}`,
+          this.buildPeriodLabel(report.periodStart, report.periodEnd),
+        ];
+      }
       return [
-        `Про виконання роботи діловода департаменту ${departmentName}`,
+        `Про виконання роботи діловода департаменту ${rootDepartmentName}`,
         this.buildPeriodLabel(report.periodStart, report.periodEnd),
       ];
     }
