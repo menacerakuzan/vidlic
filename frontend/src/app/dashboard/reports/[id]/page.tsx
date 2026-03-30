@@ -360,6 +360,18 @@ export default function ReportDetailsPage() {
     setActionLoading(false)
 
     if (resp.ok) {
+      const payload = await resp.json().catch(() => null)
+      const finalApprovedByClerk =
+        type === 'approve' &&
+        user?.role === 'clerk' &&
+        payload?.status === 'approved' &&
+        report?.author?.id !== user?.id
+
+      if (finalApprovedByClerk) {
+        router.push('/dashboard/reports')
+        return
+      }
+
       await loadData()
       return
     }

@@ -1,7 +1,7 @@
 import { IsString, IsOptional, IsEnum, IsDateString, IsObject, IsUUID, IsNumber, Min, Max, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ReportType, ReportStatus } from '@prisma/client';
+import { ReportType, ReportStatus, UserRole } from '@prisma/client';
 
 export class CreateReportDto {
   @ApiProperty({ enum: ReportType, example: 'weekly' })
@@ -89,6 +89,11 @@ export class ReportQueryDto {
   @IsOptional()
   @IsUUID()
   authorId?: string;
+
+  @ApiPropertyOptional({ enum: UserRole, description: 'Роль автора звіту' })
+  @IsOptional()
+  @IsEnum(UserRole)
+  authorRole?: UserRole;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -19,7 +19,7 @@ export class ReportsService {
   ) {}
 
   async findAll(query: ReportQueryDto, user: any) {
-    const { page = 1, limit = 20, status, type, departmentId, authorId, periodStart, periodEnd, search } = query;
+    const { page = 1, limit = 20, status, type, departmentId, authorId, authorRole, periodStart, periodEnd, search } = query;
     const skip = (page - 1) * limit;
 
     const where: any = {};
@@ -69,6 +69,7 @@ export class ReportsService {
       }
     }
     if (authorId) where.authorId = authorId;
+    if (authorRole) where.author = { ...(where.author || {}), role: authorRole };
     if (periodStart && periodEnd) {
       where.periodStart = { gte: new Date(periodStart) };
       where.periodEnd = { lte: new Date(periodEnd) };
@@ -94,7 +95,7 @@ export class ReportsService {
         skip,
         take: limit,
         include: {
-          author: { select: { id: true, firstName: true, lastName: true, email: true } },
+          author: { select: { id: true, firstName: true, lastName: true, email: true, role: true } },
           department: { select: { id: true, name: true, nameUk: true } },
           currentApprover: { select: { id: true, firstName: true, lastName: true } },
         },
@@ -924,6 +925,7 @@ export class ReportsService {
         firstName: report.author.firstName,
         lastName: report.author.lastName,
         email: report.author.email,
+        role: report.author.role,
       } : null,
       department: report.department ? {
         id: report.department.id,
