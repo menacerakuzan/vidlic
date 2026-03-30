@@ -40,6 +40,7 @@ export default function ActivitiesPage() {
   const [periodType, setPeriodType] = useState<'weekly' | 'monthly'>('monthly')
   const [period, setPeriod] = useState(currentMonth())
   const [loading, setLoading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
   const [plan, setPlan] = useState<ActivityPlanResponse | null>(null)
   const [plans, setPlans] = useState<ActivityPlanResponse[]>([])
@@ -133,6 +134,35 @@ export default function ActivitiesPage() {
     setPlan(data)
     setGoogleSheetUrl(data.googleSheetUrl || '')
     await loadPlansList()
+  }
+
+  const deletePlan = async () => {
+    if (!plan?.reportId || !accessToken || deleting) return
+    const isConfirmed = window.confirm('Видалити цей документ плану заходів? Дію не можна скасувати.')
+    if (!isConfirmed) return
+
+    setDeleting(true)
+    setError('')
+    const resp = await fetch(`/api/v1/reports/${encodeURIComponent(plan.reportId)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => null)
+      setError(data?.message || 'Не вдалося видалити документ плану заходів')
+      setDeleting(false)
+      return
+    }
+
+    setPlan(null)
+    setGoogleSheetUrl('')
+    setSelectedPlanId(null)
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', '/dashboard/activities')
+    }
+    await loadPlansList()
+    setDeleting(false)
   }
 
   useEffect(() => {
@@ -243,11 +273,25 @@ export default function ActivitiesPage() {
             {!loading && plan && (
               <>
                 <div className="rounded-xl border border-slate-200 bg-white p-3">
-                  <div className="mb-1 text-sm font-semibold text-slate-800">
-                    {plan.periodType === 'weekly' ? 'Тижневий' : 'Місячний'} документ: {plan.period}
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    {plan.department?.nameUk || 'Підрозділ'}
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="mb-1 text-sm font-semibold text-slate-800">
+                        {plan.periodType === 'weekly' ? 'Тижневий' : 'Місячний'} документ: {plan.period}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {plan.department?.nameUk || 'Підрозділ'}
+                      </div>
+                    </div>
+                    {canManageSheet && (
+                      <button
+                        type="button"
+                        onClick={deletePlan}
+                        disabled={deleting}
+                        className="h-9 rounded-lg border border-rose-300 px-3 text-sm text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {deleting ? 'Видалення...' : 'Видалити документ'}
+                      </button>
+                    )}
                   </div>
                 </div>
 

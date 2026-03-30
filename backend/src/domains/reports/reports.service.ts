@@ -855,13 +855,25 @@ export class ReportsService {
 
     const isAdmin = user?.role === 'admin';
     const isAuthor = report.authorId === user?.id;
+    const isActivitiesPlan = this.isActivityPlanReport(report);
 
-    if (!isAdmin && !isAuthor) {
-      throw new ForbiddenException('Немає доступу до видалення цього звіту');
-    }
-
-    if (!isAdmin && !['draft', 'rejected'].includes(report.status)) {
-      throw new BadRequestException('Можна видаляти лише звіти у статусі чернетки або повернені (rejected)');
+    if (isActivitiesPlan) {
+      if (!isAdmin && !['director', 'clerk'].includes(user?.role || '')) {
+        throw new ForbiddenException('Немає доступу до видалення документа плану заходів');
+      }
+      if (!isAdmin) {
+        const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user?.departmentId);
+        if (!scopedDepartmentIds.includes(report.departmentId)) {
+          throw new ForbiddenException('Немає доступу до видалення документа плану заходів');
+        }
+      }
+    } else {
+      if (!isAdmin && !isAuthor) {
+        throw new ForbiddenException('Немає доступу до видалення цього звіту');
+      }
+      if (!isAdmin && !['draft', 'rejected'].includes(report.status)) {
+        throw new BadRequestException('Можна видаляти лише звіти у статусі чернетки або повернені (rejected)');
+      }
     }
 
     await this.prisma.$transaction(async (tx) => {
