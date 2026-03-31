@@ -115,7 +115,7 @@ export default function DepartmentsPage() {
   const loadUsers = async () => {
     if (!accessToken || (!isAdmin && !isDirector)) return
     // Director can assign people from existing accounts, not only root department members.
-    const query = '/api/v1/users?limit=500'
+    const query = '/api/v1/users?limit=100'
     const resp = await fetch(query, { headers: { Authorization: `Bearer ${accessToken}` } })
     if (!resp.ok) return
     const data = await resp.json()

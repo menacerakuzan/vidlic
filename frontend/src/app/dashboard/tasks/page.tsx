@@ -76,9 +76,10 @@ export default function TasksPage() {
   const loadAll = async () => {
     if (!accessToken || !user) return
     setLoading(true)
+    setTaskActionError('')
 
     const taskParams = new URLSearchParams()
-    taskParams.set('limit', '500')
+    taskParams.set('limit', '100')
     if (filterDepartmentId) taskParams.set('departmentId', filterDepartmentId)
     if (filterAssigneeId) taskParams.set('assigneeId', filterAssigneeId)
     if (filterReporterId) taskParams.set('reporterId', filterReporterId)
@@ -89,7 +90,7 @@ export default function TasksPage() {
 
     const tasksReq = fetch(`/api/v1/tasks?${taskParams.toString()}`, { headers: { Authorization: `Bearer ${accessToken}` } })
     const departmentsReq = fetch('/api/v1/departments', { headers: { Authorization: `Bearer ${accessToken}` } })
-    const usersReq = fetch('/api/v1/users?limit=500', { headers: { Authorization: `Bearer ${accessToken}` } })
+    const usersReq = fetch('/api/v1/users?limit=100', { headers: { Authorization: `Bearer ${accessToken}` } })
     const transparencyReq = fetch('/api/v1/tasks/transparency', { headers: { Authorization: `Bearer ${accessToken}` } })
     const [tasksResp, departmentsResp, usersResp, transparencyResp] = await Promise.all([
       tasksReq,
@@ -101,6 +102,8 @@ export default function TasksPage() {
     if (tasksResp.ok) {
       const tasksData = await tasksResp.json()
       setTasks(tasksData.data || [])
+    } else {
+      setTaskActionError('Не вдалося завантажити задачі. Оновіть сторінку або спробуйте пізніше.')
     }
 
     if (departmentsResp.ok) {
@@ -120,6 +123,8 @@ export default function TasksPage() {
       }))
       setAssignableUsers(normalizedUsers)
       setTeam(normalizedUsers)
+    } else {
+      setTaskActionError('Не вдалося завантажити список співробітників для призначення задач.')
     }
 
     if (transparencyResp.ok) {
@@ -430,8 +435,28 @@ export default function TasksPage() {
 
   const filteredTransparency = useMemo(() => {
     if (!filterDepartmentId) return transparency
-    return transparency.filter((row) => row.departmentId === filterDepartmentId)
-  }, [transparency, filterDepartmentId])
+
+    const byId = new Map(departments.map((dep) => [dep.id, dep]))
+    const includeIds = new Set<string>([filterDepartmentId])
+
+    // If selected item is a parent department, include all nested child departments.
+    const queue: string[] = [filterDepartmentId]
+    while (queue.length > 0) {
+      const currentId = queue.shift()!
+      const children = departments.filter((dep) => dep.parentId === currentId)
+      for (const child of children) {
+        if (!includeIds.has(child.id)) {
+          includeIds.add(child.id)
+          queue.push(child.id)
+        }
+      }
+    }
+
+    // If selected item is a section, also include itself only.
+    if (!byId.has(filterDepartmentId)) return transparency
+
+    return transparency.filter((row) => includeIds.has(row.departmentId))
+  }, [transparency, filterDepartmentId, departments])
 
   return (
     <DashboardLayout>
