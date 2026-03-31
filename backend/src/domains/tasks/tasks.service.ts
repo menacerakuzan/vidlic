@@ -14,17 +14,17 @@ export class TasksService {
   async findAll(query: TaskQueryDto, user: any) {
     const { page = 1, limit = 50, status, priority, departmentId, assigneeId, reporterId, dueDateFrom, dueDateTo } = query;
     const skip = (page - 1) * limit;
-    const isLeadership = user.role === 'manager' || user.role === 'director';
+    const isLeadership = ['manager', 'director', 'deputy_director', 'deputy_head'].includes(user.role);
 
     const where: any = {};
 
-    if (user.role === 'specialist' || user.role === 'clerk') {
+    if (['specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
       where.OR = [
         { assigneeId: user.id },
         { reporterId: user.id },
       ];
-    } else if (user.role === 'manager' || user.role === 'director') {
-      const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+    } else if (['manager', 'director', 'deputy_director'].includes(user.role)) {
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
       where.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) };
       where.NOT = {
         OR: [
@@ -42,7 +42,17 @@ export class TasksService {
 
     if (status) where.status = status;
     if (priority) where.priority = priority;
-    if (departmentId && user.role !== 'specialist') where.departmentId = departmentId;
+    if (departmentId && user.role !== 'specialist') {
+      if (user.role === 'admin' || user.role === 'deputy_head') {
+        where.departmentId = departmentId;
+      } else {
+        const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+        if (!scopedDepartmentIds.includes(departmentId)) {
+          throw new ForbiddenException('Немає доступу до задач цього підрозділу');
+        }
+        where.departmentId = departmentId;
+      }
+    }
     if (assigneeId) where.assigneeId = assigneeId;
     if (reporterId) where.reporterId = reporterId;
     
@@ -82,13 +92,13 @@ export class TasksService {
   async getKanban(departmentId: string, user: any) {
     const where: any = {};
 
-    if (user.role === 'specialist' || user.role === 'clerk') {
+    if (['specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
       where.OR = [
         { assigneeId: user.id },
         { reporterId: user.id },
       ];
-    } else if (user.role === 'manager' || user.role === 'director') {
-      const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+    } else if (['manager', 'director', 'deputy_director'].includes(user.role)) {
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
       where.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) };
       where.NOT = {
         OR: [
@@ -149,7 +159,7 @@ export class TasksService {
       throw new NotFoundException('Задачу не знайдено');
     }
 
-    if (!this.canViewTask(task, user)) {
+    if (!(await this.canViewTask(task, user))) {
       throw new ForbiddenException('Немає доступу до задачі');
     }
 
@@ -173,6 +183,7 @@ export class TasksService {
       if (!assignee || assignee.departmentId !== targetDepartmentId) {
         throw new BadRequestException('Виконавець має бути з того ж підрозділу');
       }
+      this.assertTaskAssignmentAllowed(user, assignee.role);
     }
 
     const isPrivateSpecialistTask =
@@ -218,7 +229,7 @@ export class TasksService {
       throw new NotFoundException('Задачу не знайдено');
     }
 
-    if (!this.canManageTask(task, user)) {
+    if (!(await this.canManageTask(task, user))) {
       throw new ForbiddenException('Немає доступу до редагування задачі');
     }
 
@@ -227,6 +238,7 @@ export class TasksService {
       if (!assignee || assignee.departmentId !== (dto.departmentId ?? task.departmentId)) {
         throw new BadRequestException('Виконавець має бути з того ж підрозділу');
       }
+      this.assertTaskAssignmentAllowed(user, assignee.role);
     }
 
     const updated = await this.prisma.task.update({
@@ -267,7 +279,7 @@ export class TasksService {
       throw new NotFoundException('Задачу не знайдено');
     }
 
-    if (!this.canMoveTaskStatus(task, user)) {
+    if (!(await this.canMoveTaskStatus(task, user))) {
       throw new ForbiddenException('Немає доступу до зміни статусу задачі');
     }
 
@@ -343,7 +355,7 @@ export class TasksService {
       throw new NotFoundException('Задачу не знайдено');
     }
 
-    if (!this.canManageTask(task, user)) {
+    if (!(await this.canManageTask(task, user))) {
       throw new ForbiddenException('Немає доступу до видалення задачі');
     }
 
@@ -407,41 +419,69 @@ export class TasksService {
 
   private canCreateTaskInDepartment(user: any, departmentId: string) {
     if (user.role === 'admin') return true;
-    if (user.role === 'director' || user.role === 'manager' || user.role === 'specialist') {
+    if (user.role === 'deputy_head') return false;
+    if (['director', 'deputy_director'].includes(user.role)) {
+      return true;
+    }
+    if (user.role === 'manager' || user.role === 'specialist' || user.role === 'clerk') {
       return user.departmentId === departmentId;
     }
     return false;
   }
 
-  private canManageTask(task: any, user: any) {
+  private async canManageTask(task: any, user: any) {
     if (user.role === 'admin') return true;
+    if (user.role === 'deputy_head') return false;
     if (this.shouldHideFromLeadership(task, user) && task.reporterId !== user.id) return false;
-    if ((user.role === 'director' || user.role === 'manager') && task.departmentId === user.departmentId) return true;
+    if (user.role === 'director' || user.role === 'manager') {
+      const scoped = await this.resolveScopedDepartmentIdsForUser(user);
+      if (scoped.includes(task.departmentId)) return true;
+    }
+    if (user.role === 'deputy_director') {
+      const scoped = await this.resolveScopedDepartmentIdsForUser(user);
+      if (scoped.includes(task.departmentId)) return true;
+    }
     if (user.role === 'clerk' && (task.reporterId === user.id || task.assigneeId === user.id)) return true;
     if (user.role === 'specialist' && task.reporterId === user.id) return true;
     return false;
   }
 
-  private canMoveTaskStatus(task: any, user: any) {
+  private async canMoveTaskStatus(task: any, user: any) {
     if (user.role === 'admin') return true;
+    if (user.role === 'deputy_head') return false;
     if (this.shouldHideFromLeadership(task, user) && task.reporterId !== user.id) return false;
-    if ((user.role === 'director' || user.role === 'manager') && task.departmentId === user.departmentId) return true;
+    if (user.role === 'director' || user.role === 'manager') {
+      const scoped = await this.resolveScopedDepartmentIdsForUser(user);
+      if (scoped.includes(task.departmentId)) return true;
+    }
+    if (user.role === 'deputy_director') {
+      const scoped = await this.resolveScopedDepartmentIdsForUser(user);
+      if (scoped.includes(task.departmentId)) return true;
+    }
     if (user.role === 'clerk' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
     if (user.role === 'specialist' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
     return false;
   }
 
-  private canViewTask(task: any, user: any) {
+  private async canViewTask(task: any, user: any) {
     if (user.role === 'admin') return true;
+    if (user.role === 'deputy_head') return true;
     if (this.shouldHideFromLeadership(task, user) && task.reporterId !== user.id) return false;
-    if ((user.role === 'director' || user.role === 'manager') && task.departmentId === user.departmentId) return true;
+    if (user.role === 'director' || user.role === 'manager') {
+      const scoped = await this.resolveScopedDepartmentIdsForUser(user);
+      if (scoped.includes(task.departmentId)) return true;
+    }
+    if (user.role === 'deputy_director') {
+      const scoped = await this.resolveScopedDepartmentIdsForUser(user);
+      if (scoped.includes(task.departmentId)) return true;
+    }
     if (user.role === 'clerk' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
-    if (user.role === 'specialist' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
+    if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role) && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
     return false;
   }
 
   private shouldHideFromLeadership(task: any, user: any) {
-    if (!(user.role === 'director' || user.role === 'manager')) return false;
+    if (!(['director', 'deputy_director', 'manager'].includes(user.role))) return false;
     if (task.isPrivate) return true;
 
     const reporterRole = task?.reporter?.role;
@@ -458,8 +498,8 @@ export class TasksService {
       return [];
     }
     const where: any = { isPrivate: false };
-    if (user?.role !== 'admin') {
-      const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user?.departmentId);
+    if (!['admin', 'deputy_head'].includes(user?.role)) {
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
       where.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user?.departmentId].filter(Boolean) };
     }
 
@@ -522,5 +562,57 @@ export class TasksService {
     });
     if (!root) return [departmentId];
     return [root.id, ...(root.children || []).map((child) => child.id)];
+  }
+
+  private getScopedDepartmentIdsFromUserPayload(user: any): string[] {
+    if (Array.isArray(user?.scopeDepartmentIds) && user.scopeDepartmentIds.length > 0) {
+      return user.scopeDepartmentIds.filter(Boolean);
+    }
+    return [user?.departmentId].filter(Boolean);
+  }
+
+  private async resolveScopedDepartmentIdsForUser(user: any): Promise<string[]> {
+    if (!user?.departmentId) return [];
+    if (user.role === 'manager') return [user.departmentId];
+    if (user.role === 'director') {
+      return this.resolveDepartmentScopeIds(user.departmentId);
+    }
+    if (user.role === 'deputy_director') {
+      const configured = this.getScopedDepartmentIdsFromUserPayload(user);
+      if (configured.length > 0) {
+        const expanded = new Set<string>();
+        for (const depId of configured) {
+          expanded.add(depId);
+          const dep = await this.prisma.department.findUnique({
+            where: { id: depId },
+            select: { children: { select: { id: true } } },
+          });
+          for (const child of dep?.children || []) expanded.add(child.id);
+        }
+        return Array.from(expanded);
+      }
+      return this.resolveDepartmentScopeIds(user.departmentId);
+    }
+    return [user.departmentId];
+  }
+
+  private assertTaskAssignmentAllowed(actor: any, assigneeRole: string) {
+    if (actor?.role === 'admin') return;
+    if (actor?.role === 'director') {
+      if (['deputy_director', 'manager', 'specialist'].includes(assigneeRole)) return;
+      throw new ForbiddenException('Директор може призначати задачі лише заступнику директора, керівнику або спеціалісту');
+    }
+    if (actor?.role === 'deputy_director') {
+      if (['manager', 'specialist'].includes(assigneeRole)) return;
+      throw new ForbiddenException('Заступник директора може призначати задачі лише керівнику або спеціалісту');
+    }
+    if (actor?.role === 'manager') {
+      if (assigneeRole === 'specialist') return;
+      throw new ForbiddenException('Керівник може призначати задачі лише спеціалісту');
+    }
+    if (actor?.role === 'specialist' || actor?.role === 'clerk') {
+      if (!assigneeRole || assigneeRole === actor?.role) return;
+      throw new ForbiddenException('Недостатньо прав для призначення задачі іншому користувачу');
+    }
   }
 }

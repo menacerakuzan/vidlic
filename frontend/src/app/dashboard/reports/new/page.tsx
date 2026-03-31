@@ -62,7 +62,7 @@ function NewReportContent() {
     } else if (mode === 'aggregate') {
       if (user?.role === 'manager') setValue('title', 'Зведений звіт керівника відділу')
       if (user?.role === 'clerk') setValue('title', 'Зведений звіт діловода департаменту')
-      if (user?.role === 'director') setValue('title', 'Фінальний зведений звіт директора')
+      if (user?.role === 'director' || user?.role === 'deputy_director') setValue('title', 'Фінальний зведений звіт директора')
     }
   }, [searchParams, setValue, user?.role])
 

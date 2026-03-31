@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, IsOptional, IsEnum, IsBoolean } from 'class-validator';
+import { IsEmail, IsString, MinLength, IsOptional, IsEnum, IsBoolean, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -43,6 +43,12 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   positionId?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'Куровані підрозділи (для заступника директора)' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  scopeDepartmentIds?: string[];
 }
 
 export class UpdateUserDto {
@@ -75,6 +81,12 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   positionId?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'Куровані підрозділи (для заступника директора)' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  scopeDepartmentIds?: string[];
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()

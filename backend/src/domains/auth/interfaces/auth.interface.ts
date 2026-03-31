@@ -9,6 +9,7 @@ export interface UserResponse {
   patronymic?: string;
   role: UserRole;
   departmentId?: string | null;
+  scopeDepartmentIds?: string[] | null;
   department?: {
     id: string;
     name: string;
@@ -27,5 +28,6 @@ export interface TokenPayload {
   email: string;
   role: UserRole;
   departmentId?: string;
+  scopeDepartmentIds?: string[] | null;
   jti: string;
 }

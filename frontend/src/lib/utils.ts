@@ -77,6 +77,11 @@ export function getRoleLabel(role: string): string {
     manager: 'Керівник',
     clerk: 'Діловод',
     director: 'Директор',
+    deputy_head: 'Заступник голови',
+    deputy_director: 'Заступник директора',
+    lawyer: 'Юрист',
+    accountant: 'Бухгалтер',
+    hr: 'Кадровик',
     admin: 'Адмін',
   }
   return labels[role] || role

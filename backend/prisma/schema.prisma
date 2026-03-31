@@ -13,6 +13,11 @@ enum UserRole {
   manager
   clerk
   director
+  deputy_head
+  deputy_director
+  lawyer
+  accountant
+  hr
   admin
 }
 
@@ -114,6 +119,7 @@ model User {
   patronymic   String?
   passwordHash String
   role         UserRole @default(specialist)
+  scopeDepartmentIds Json?
   isActive     Boolean  @default(true)
   departmentId String?
   positionId   String?

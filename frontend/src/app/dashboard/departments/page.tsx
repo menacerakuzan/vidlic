@@ -36,6 +36,7 @@ type UserOption = {
   lastName: string
   role: string
   departmentId?: string | null
+  scopeDepartmentIds?: string[]
 }
 
 export default function DepartmentsPage() {
@@ -57,7 +58,9 @@ export default function DepartmentsPage() {
   const [newUserEmail, setNewUserEmail] = useState('')
   const [newUserFirstName, setNewUserFirstName] = useState('')
   const [newUserLastName, setNewUserLastName] = useState('')
-  const [newUserRole, setNewUserRole] = useState<'specialist' | 'manager' | 'clerk' | 'director'>('specialist')
+  const [newUserRole, setNewUserRole] = useState<
+    'specialist' | 'manager' | 'clerk' | 'director' | 'deputy_director' | 'lawyer' | 'accountant' | 'hr'
+  >('specialist')
   const [selectedExistingUserId, setSelectedExistingUserId] = useState('')
   const [assigningExistingUser, setAssigningExistingUser] = useState(false)
   const [templateTitlePattern, setTemplateTitlePattern] = useState('ЗВІТ')
@@ -65,13 +68,16 @@ export default function DepartmentsPage() {
   const [templateAiPrompt, setTemplateAiPrompt] = useState('')
   const [templateSectionsRaw, setTemplateSectionsRaw] = useState('[\n  {"key":"workDone","title":"Виконана робота","required":true},\n  {"key":"achievements","title":"Досягнення","required":false},\n  {"key":"problems","title":"Проблемні питання","required":false},\n  {"key":"nextWeekPlan","title":"План наступного періоду","required":true}\n]')
   const [savingTemplate, setSavingTemplate] = useState(false)
+  const [selectedDeputyId, setSelectedDeputyId] = useState('')
+  const [deputyScopeDepartmentIds, setDeputyScopeDepartmentIds] = useState<string[]>([])
+  const [savingDeputyScope, setSavingDeputyScope] = useState(false)
   const [actionError, setActionError] = useState('')
   const [actionSuccess, setActionSuccess] = useState('')
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const isAdmin = user?.role === 'admin'
-  const isDirector = user?.role === 'director'
-  const isScopedReader = ['specialist', 'manager', 'clerk', 'director'].includes(user?.role || '')
+  const isDirector = user?.role === 'director' || user?.role === 'deputy_director'
+  const isScopedReader = ['specialist', 'manager', 'clerk', 'director', 'deputy_director', 'lawyer', 'accountant', 'hr'].includes(user?.role || '')
   const visibleDepartments = useMemo(() => {
     if (!isScopedReader || !user?.department?.id) return departments
     const current = departments.find((d) => d.id === user.department?.id)
@@ -119,6 +125,7 @@ export default function DepartmentsPage() {
       lastName: u.lastName,
       role: u.role,
       departmentId: u.department?.id || null,
+      scopeDepartmentIds: Array.isArray(u.scopeDepartmentIds) ? u.scopeDepartmentIds : [],
     })))
   }
 
@@ -162,11 +169,16 @@ export default function DepartmentsPage() {
     () => usersOptions.filter((userOption) => userOption.role === 'clerk'),
     [usersOptions],
   )
+  const deputyDirectors = useMemo(
+    () => usersOptions.filter((userOption) => userOption.role === 'deputy_director'),
+    [usersOptions],
+  )
   const transferableUsers = useMemo(() => {
     if (!selectedDepartmentId) return []
     const teamIds = new Set(team.map((member) => member.id))
     return usersOptions.filter((u) =>
       u.role !== 'admin' &&
+      u.role !== 'deputy_head' &&
       u.role !== 'director' &&
       !teamIds.has(u.id) &&
       u.departmentId !== selectedDepartmentId,
@@ -179,6 +191,11 @@ export default function DepartmentsPage() {
     setSelectedManagerId(selectedDepartment.manager?.id || '')
     setSelectedClerkId(selectedDepartment.clerk?.id || '')
   }, [selectedDepartment])
+
+  useEffect(() => {
+    const deputy = deputyDirectors.find((d) => d.id === selectedDeputyId)
+    setDeputyScopeDepartmentIds(Array.isArray(deputy?.scopeDepartmentIds) ? deputy!.scopeDepartmentIds! : [])
+  }, [selectedDeputyId, deputyDirectors])
 
   const canManageEmployees = isDirector || isAdmin
   const canEditTemplate = isAdmin || isDirector || user?.role === 'manager'
@@ -401,6 +418,31 @@ export default function DepartmentsPage() {
     setActionError(err?.message || 'Не вдалося зберегти шаблон')
   }
 
+  const saveDeputyScope = async () => {
+    if (!accessToken || !selectedDeputyId || (!isAdmin && !isDirector)) return
+    setActionError('')
+    setActionSuccess('')
+    setSavingDeputyScope(true)
+    const resp = await fetch(`/api/v1/users/${selectedDeputyId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        scopeDepartmentIds: deputyScopeDepartmentIds,
+      }),
+    })
+    setSavingDeputyScope(false)
+    if (resp.ok) {
+      await loadUsers()
+      setActionSuccess('Зони курації заступника директора оновлено')
+      return
+    }
+    const err = await resp.json().catch(() => null)
+    setActionError(err?.message || 'Не вдалося оновити зони курації')
+  }
+
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto space-y-6">
@@ -500,15 +542,80 @@ export default function DepartmentsPage() {
                 </div>
               )}
 
+              {(isAdmin || isDirector) && (
+                <div className="p-4 border-b border-slate-100 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-800/40 space-y-3">
+                  <p className="text-sm font-semibold">Курація заступника директора</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <select
+                      className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      value={selectedDeputyId}
+                      onChange={(e) => setSelectedDeputyId(e.target.value)}
+                    >
+                      <option value="">Оберіть заступника директора</option>
+                      {deputyDirectors.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.firstName} {d.lastName}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="md:col-span-2 text-xs text-slate-500 dark:text-slate-400 flex items-center">
+                      Виберіть підрозділи, які курує заступник. Жорсткий ліміт по кількості не застосовується.
+                    </div>
+                  </div>
+                  {selectedDeputyId && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {visibleDepartments.map((dep) => {
+                          const checked = deputyScopeDepartmentIds.includes(dep.id)
+                          return (
+                            <label key={dep.id} className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  setDeputyScopeDepartmentIds((prev) =>
+                                    e.target.checked ? Array.from(new Set([...prev, dep.id])) : prev.filter((id) => id !== dep.id),
+                                  )
+                                }}
+                              />
+                              <span>{dep.nameUk || dep.name || dep.id}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                      <button
+                        onClick={saveDeputyScope}
+                        disabled={savingDeputyScope}
+                        className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium disabled:opacity-60 dark:border-slate-600"
+                      >
+                        {savingDeputyScope ? 'Збереження...' : 'Зберегти зони курації'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {canManageEmployees && selectedDepartmentId && (
                 <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-3 border-b border-slate-100 dark:border-slate-700">
                   <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="Email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} />
                   <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="Ім'я" value={newUserFirstName} onChange={(e) => setNewUserFirstName(e.target.value)} />
                   <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="Прізвище" value={newUserLastName} onChange={(e) => setNewUserLastName(e.target.value)} />
-                  <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as 'specialist' | 'manager' | 'clerk' | 'director')}>
+                  <select
+                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    value={newUserRole}
+                    onChange={(e) =>
+                      setNewUserRole(
+                        e.target.value as 'specialist' | 'manager' | 'clerk' | 'director' | 'deputy_director' | 'lawyer' | 'accountant' | 'hr',
+                      )
+                    }
+                  >
                     <option value="specialist">{getRoleLabel('specialist')}</option>
                     <option value="manager">{getRoleLabel('manager')}</option>
                     <option value="clerk">{getRoleLabel('clerk')}</option>
+                    <option value="lawyer">{getRoleLabel('lawyer')}</option>
+                    <option value="accountant">{getRoleLabel('accountant')}</option>
+                    <option value="hr">{getRoleLabel('hr')}</option>
+                    {isAdmin && <option value="deputy_director">{getRoleLabel('deputy_director')}</option>}
                     {isAdmin && <option value="director">{getRoleLabel('director')}</option>}
                   </select>
                   <button onClick={addEmployee} className="md:col-span-4 h-10 rounded-lg bg-primary text-white text-sm font-medium">Додати співробітника</button>
@@ -552,7 +659,7 @@ export default function DepartmentsPage() {
                         </p>
                       )}
                     </div>
-                    {canManageEmployees && member.role !== 'director' && member.role !== 'admin' && (
+                    {canManageEmployees && member.role !== 'director' && member.role !== 'deputy_head' && member.role !== 'admin' && (
                       <div className="flex items-center gap-3">
                         {isAdmin && (
                           <button

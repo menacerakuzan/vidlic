@@ -12,6 +12,15 @@ type ActivityPlanResponse = {
   department?: { id: string; nameUk: string }
   googleSheetUrl?: string | null
   googleSheetEmbedUrl?: string | null
+  entryDeadlineAt?: string | null
+  activityLog?: Array<{
+    id: string
+    action: string
+    details: string
+    actorName?: string | null
+    actorRole?: string | null
+    createdAt: string
+  }>
   isLocked?: boolean
   updatedAt: string
 }
@@ -33,6 +42,18 @@ function currentWeek() {
   return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`
 }
 
+function toLocalDateTimeInput(value?: string | null) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const yyyy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  const hh = String(date.getHours()).padStart(2, '0')
+  const min = String(date.getMinutes()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`
+}
+
 export default function ActivitiesPage() {
   const { isAuthenticated, user } = useAuthStore()
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
@@ -45,6 +66,7 @@ export default function ActivitiesPage() {
   const [plan, setPlan] = useState<ActivityPlanResponse | null>(null)
   const [plans, setPlans] = useState<ActivityPlanResponse[]>([])
   const [googleSheetUrl, setGoogleSheetUrl] = useState('')
+  const [entryDeadlineAt, setEntryDeadlineAt] = useState('')
 
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
   const canWork = useMemo(() => !!accessToken && isAuthenticated, [accessToken, isAuthenticated])
@@ -76,6 +98,7 @@ export default function ActivitiesPage() {
     const data = (await resp.json()) as ActivityPlanResponse
     setPlan(data)
     setGoogleSheetUrl(data.googleSheetUrl || '')
+    setEntryDeadlineAt(toLocalDateTimeInput(data.entryDeadlineAt || null))
     setLoading(false)
   }
 
@@ -96,6 +119,7 @@ export default function ActivitiesPage() {
     const data = (await resp.json()) as ActivityPlanResponse
     setPlan(data)
     setGoogleSheetUrl(data.googleSheetUrl || '')
+    setEntryDeadlineAt(toLocalDateTimeInput(data.entryDeadlineAt || null))
     if (typeof window !== 'undefined') {
       const url = `/dashboard/activities?planId=${encodeURIComponent(data.reportId)}`
       window.history.replaceState(null, '', url)
@@ -123,7 +147,10 @@ export default function ActivitiesPage() {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ googleSheetUrl: googleSheetUrl.trim() || null }),
+      body: JSON.stringify({
+        googleSheetUrl: googleSheetUrl.trim() || null,
+        entryDeadlineAt: entryDeadlineAt ? new Date(entryDeadlineAt).toISOString() : null,
+      }),
     })
     if (!resp.ok) {
       const data = await resp.json().catch(() => null)
@@ -133,6 +160,7 @@ export default function ActivitiesPage() {
     const data = (await resp.json()) as ActivityPlanResponse
     setPlan(data)
     setGoogleSheetUrl(data.googleSheetUrl || '')
+    setEntryDeadlineAt(toLocalDateTimeInput(data.entryDeadlineAt || null))
     await loadPlansList()
   }
 
@@ -305,6 +333,13 @@ export default function ActivitiesPage() {
                         placeholder="https://docs.google.com/document/d/.../edit або https://docs.google.com/spreadsheets/d/.../edit"
                         className="h-10 min-w-[320px] flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
                       />
+                      <input
+                        type="datetime-local"
+                        value={entryDeadlineAt}
+                        onChange={(e) => setEntryDeadlineAt(e.target.value)}
+                        className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                        title="Дедлайн внесення заходів"
+                      />
                       <button
                         type="button"
                         onClick={saveGoogleSheetLink}
@@ -332,6 +367,25 @@ export default function ActivitiesPage() {
                     {canManageSheet ? ' Додай посилання вище.' : ' Звернись до діловода/директора.'}
                   </div>
                 )}
+
+                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                  <div className="mb-2 text-sm font-medium text-slate-800">Історія змін у CRM</div>
+                  {plan.activityLog && plan.activityLog.length > 0 ? (
+                    <div className="max-h-56 space-y-2 overflow-auto pr-1 text-xs text-slate-600">
+                      {plan.activityLog.slice().reverse().map((entry) => (
+                        <div key={entry.id} className="rounded border border-slate-200 px-2 py-1">
+                          <div className="font-medium text-slate-700">{entry.details}</div>
+                          <div>
+                            {entry.actorName || 'Невідомо'} {entry.actorRole ? `(${entry.actorRole})` : ''} ·{' '}
+                            {new Date(entry.createdAt).toLocaleString('uk-UA')}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-500">Змін поки немає.</div>
+                  )}
+                </div>
 
                 {plan.googleSheetEmbedUrl && (
                   <div className="rounded-2xl border border-slate-200 bg-white p-2">

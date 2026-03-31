@@ -9,6 +9,7 @@ import { getPriorityLabel } from '@/lib/utils'
 type Task = {
   id: string
   title: string
+  description?: string
   status: 'todo' | 'in_progress' | 'done'
   priority: string
   dueDate?: string
@@ -16,6 +17,8 @@ type Task = {
   isPrivate?: boolean
   assignee?: { id: string; firstName: string; lastName: string }
   reporter?: { id: string; firstName: string; lastName: string }
+  department?: { id: string; name?: string }
+  createdAt?: string
 }
 
 type TeamUser = {
@@ -23,6 +26,18 @@ type TeamUser = {
   firstName: string
   lastName: string
   role: string
+  department?: {
+    id: string
+    nameUk?: string
+    name?: string
+  } | null
+}
+
+type DepartmentOption = {
+  id: string
+  nameUk?: string
+  name?: string
+  parentId?: string | null
 }
 
 export default function TasksPage() {
@@ -32,7 +47,15 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [filterAssigneeId, setFilterAssigneeId] = useState('')
+  const [filterReporterId, setFilterReporterId] = useState('')
+  const [filterDepartmentId, setFilterDepartmentId] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [filterPriority, setFilterPriority] = useState('')
+  const [filterDueFrom, setFilterDueFrom] = useState('')
+  const [filterDueTo, setFilterDueTo] = useState('')
+  const [createDepartmentId, setCreateDepartmentId] = useState('')
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
   const [priority, setPriority] = useState('medium')
   const [assigneeId, setAssigneeId] = useState('')
   const [dueDate, setDueDate] = useState('')
@@ -43,6 +66,10 @@ export default function TasksPage() {
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
   const [deletingTaskId, setDeletingTaskId] = useState('')
   const [transparency, setTransparency] = useState<any[]>([])
+  const [departments, setDepartments] = useState<DepartmentOption[]>([])
+  const [assignableUsers, setAssignableUsers] = useState<TeamUser[]>([])
+  const [reassigningTaskId, setReassigningTaskId] = useState('')
+  const [reassignToUserId, setReassignToUserId] = useState<Record<string, string>>({})
   const [taskActionError, setTaskActionError] = useState('')
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
@@ -50,25 +77,49 @@ export default function TasksPage() {
     if (!accessToken || !user) return
     setLoading(true)
 
-    const tasksQuery = user?.department?.id && (user.role === 'manager' || user.role === 'director')
-      ? `/api/v1/tasks?limit=200&departmentId=${user.department.id}`
-      : '/api/v1/tasks?limit=200'
-    const tasksReq = fetch(tasksQuery, { headers: { Authorization: `Bearer ${accessToken}` } })
-    const teamReq = user.department?.id
-      ? fetch(`/api/v1/departments/${user.department.id}/team`, { headers: { Authorization: `Bearer ${accessToken}` } })
-      : Promise.resolve(null as any)
+    const taskParams = new URLSearchParams()
+    taskParams.set('limit', '500')
+    if (filterDepartmentId) taskParams.set('departmentId', filterDepartmentId)
+    if (filterAssigneeId) taskParams.set('assigneeId', filterAssigneeId)
+    if (filterReporterId) taskParams.set('reporterId', filterReporterId)
+    if (filterStatus) taskParams.set('status', filterStatus)
+    if (filterPriority) taskParams.set('priority', filterPriority)
+    if (filterDueFrom) taskParams.set('dueDateFrom', filterDueFrom)
+    if (filterDueTo) taskParams.set('dueDateTo', filterDueTo)
 
+    const tasksReq = fetch(`/api/v1/tasks?${taskParams.toString()}`, { headers: { Authorization: `Bearer ${accessToken}` } })
+    const departmentsReq = fetch('/api/v1/departments', { headers: { Authorization: `Bearer ${accessToken}` } })
+    const usersReq = fetch('/api/v1/users?limit=500', { headers: { Authorization: `Bearer ${accessToken}` } })
     const transparencyReq = fetch('/api/v1/tasks/transparency', { headers: { Authorization: `Bearer ${accessToken}` } })
-    const [tasksResp, teamResp, transparencyResp] = await Promise.all([tasksReq, teamReq, transparencyReq])
+    const [tasksResp, departmentsResp, usersResp, transparencyResp] = await Promise.all([
+      tasksReq,
+      departmentsReq,
+      usersReq,
+      transparencyReq,
+    ])
 
     if (tasksResp.ok) {
       const tasksData = await tasksResp.json()
       setTasks(tasksData.data || [])
     }
 
-    if (teamResp && teamResp.ok) {
-      const teamData = await teamResp.json()
-      setTeam(teamData || [])
+    if (departmentsResp.ok) {
+      const departmentsData = await departmentsResp.json()
+      setDepartments(Array.isArray(departmentsData) ? departmentsData : [])
+    }
+
+    if (usersResp.ok) {
+      const usersData = await usersResp.json()
+      const usersList = Array.isArray(usersData?.data) ? usersData.data : []
+      const normalizedUsers: TeamUser[] = usersList.map((u: any) => ({
+        id: u.id,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        role: u.role,
+        department: u.department || null,
+      }))
+      setAssignableUsers(normalizedUsers)
+      setTeam(normalizedUsers)
     }
 
     if (transparencyResp.ok) {
@@ -82,7 +133,17 @@ export default function TasksPage() {
   useEffect(() => {
     loadAll()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, user?.id])
+  }, [
+    accessToken,
+    user?.id,
+    filterAssigneeId,
+    filterReporterId,
+    filterDepartmentId,
+    filterStatus,
+    filterPriority,
+    filterDueFrom,
+    filterDueTo,
+  ])
 
   useEffect(() => {
     if (!selectedTaskId && tasks.length > 0) {
@@ -101,21 +162,52 @@ export default function TasksPage() {
   }, [tasks])
 
   const availableSorted = useMemo(() => {
-    return [...team].sort((a, b) => (loads[a.id] || 0) - (loads[b.id] || 0))
-  }, [team, loads])
+    return [...assignableUsers].sort((a, b) => (loads[a.id] || 0) - (loads[b.id] || 0))
+  }, [assignableUsers, loads])
 
-  const canAssign = user?.role === 'director' || user?.role === 'manager'
-  const canFilterByEmployee = user?.role === 'director' || user?.role === 'manager'
+  const canAssign = user?.role === 'director' || user?.role === 'deputy_director' || user?.role === 'manager'
+  const canFilterByEmployee = ['director', 'deputy_director', 'manager', 'deputy_head'].includes(user?.role || '')
+
+  const visibleDepartmentOptions = useMemo(() => {
+    const idsFromTasks = new Set(tasks.map((t) => t.department?.id).filter(Boolean) as string[])
+    const fromServer = departments.filter((dep) => idsFromTasks.has(dep.id))
+    if (fromServer.length) return fromServer
+    return departments
+  }, [departments, tasks])
+
+  const reporterOptions = useMemo(() => {
+    const map = new Map<string, TeamUser>()
+    tasks.forEach((task) => {
+      if (!task.reporter?.id) return
+      const candidate = assignableUsers.find((u) => u.id === task.reporter?.id)
+      map.set(task.reporter.id, candidate || {
+        id: task.reporter.id,
+        firstName: task.reporter.firstName,
+        lastName: task.reporter.lastName,
+        role: '',
+      })
+    })
+    return Array.from(map.values()).sort((a, b) =>
+      `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, 'uk'),
+    )
+  }, [tasks, assignableUsers])
 
   const createTask = async () => {
     if (!accessToken || !title.trim()) return
     setCreating(true)
 
+    const selectedAssignee = availableSorted.find((member) => member.id === assigneeId)
+    const targetDepartmentId =
+      createDepartmentId ||
+      selectedAssignee?.department?.id ||
+      user?.department?.id
+
     const payload: any = {
       title: title.trim(),
       priority,
-      departmentId: user?.department?.id,
+      departmentId: targetDepartmentId,
     }
+    if (description.trim()) payload.description = description.trim()
 
     if (canAssign && assigneeId) {
       payload.assigneeId = assigneeId
@@ -136,7 +228,9 @@ export default function TasksPage() {
 
     if (resp.ok) {
       setTitle('')
+      setDescription('')
       setAssigneeId('')
+      setCreateDepartmentId('')
       setDueDate('')
       setExecutionHours('')
       await loadAll()
@@ -176,6 +270,31 @@ export default function TasksPage() {
     }
     const err = await resp.json().catch(() => null)
     setTaskActionError(err?.message || 'Не вдалося видалити задачу')
+  }
+
+  const reassignTask = async (task: Task) => {
+    if (!accessToken) return
+    const targetUserId = reassignToUserId[task.id]
+    if (!targetUserId) return
+    setTaskActionError('')
+    setReassigningTaskId(task.id)
+    const resp = await fetch(`/api/v1/tasks/${task.id}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        assigneeId: targetUserId,
+      }),
+    })
+    setReassigningTaskId('')
+    if (resp.ok) {
+      await loadAll()
+      return
+    }
+    const err = await resp.json().catch(() => null)
+    setTaskActionError(err?.message || 'Не вдалося перенаправити задачу')
   }
 
   const loadTaskAttachments = async (taskId: string) => {
@@ -248,11 +367,28 @@ export default function TasksPage() {
     window.URL.revokeObjectURL(url)
   }
 
-  const filteredTasks = filterAssigneeId
-    ? tasks.filter((task) => task.assignee?.id === filterAssigneeId)
-    : tasks
+  const filteredTasks = tasks
 
-  const kanbanTasks: KanbanTask[] = filteredTasks.map((task) => ({
+  const priorityWeight: Record<string, number> = {
+    critical: 4,
+    high: 3,
+    medium: 2,
+    low: 1,
+  }
+
+  const sortedFilteredTasks = [...filteredTasks].sort((a, b) => {
+    const aDue = a.dueDate ? new Date(a.dueDate).getTime() : Number.POSITIVE_INFINITY
+    const bDue = b.dueDate ? new Date(b.dueDate).getTime() : Number.POSITIVE_INFINITY
+    if (a.status !== 'done' && b.status !== 'done' && aDue !== bDue) return aDue - bDue
+    if (a.status !== b.status) return a.status === 'done' ? 1 : -1
+    const pDiff = (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0)
+    if (pDiff !== 0) return pDiff
+    const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0
+    const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0
+    return bCreated - aCreated
+  })
+
+  const kanbanTasks: KanbanTask[] = sortedFilteredTasks.map((task) => ({
     id: task.id,
     title: task.title,
     status: task.status,
@@ -273,6 +409,30 @@ export default function TasksPage() {
     return tasks.filter((task) => task.reporter?.id === user.id)
   }, [tasks, user?.id])
 
+  const workloadByUser = useMemo(() => {
+    const map = new Map<string, { userId: string; name: string; active: number; overdue: number; critical: number }>()
+    tasks.forEach((task) => {
+      if (!task.assignee?.id || task.status === 'done') return
+      const current = map.get(task.assignee.id) || {
+        userId: task.assignee.id,
+        name: `${task.assignee.firstName} ${task.assignee.lastName}`.trim(),
+        active: 0,
+        overdue: 0,
+        critical: 0,
+      }
+      current.active += 1
+      if (task.priority === 'critical') current.critical += 1
+      if (task.dueDate && new Date(task.dueDate).getTime() < Date.now()) current.overdue += 1
+      map.set(task.assignee.id, current)
+    })
+    return Array.from(map.values()).sort((a, b) => b.active - a.active)
+  }, [tasks])
+
+  const filteredTransparency = useMemo(() => {
+    if (!filterDepartmentId) return transparency
+    return transparency.filter((row) => row.departmentId === filterDepartmentId)
+  }, [transparency, filterDepartmentId])
+
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto space-y-6">
@@ -288,15 +448,62 @@ export default function TasksPage() {
 
         {canFilterByEmployee && (
           <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-            <p className="text-sm font-medium mb-2">Перегляд задач співробітника</p>
-            <select value={filterAssigneeId} onChange={(e) => setFilterAssigneeId(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm min-w-[300px] bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
-              <option value="">Усі співробітники підрозділу</option>
-              {availableSorted.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.firstName} {member.lastName}
-                </option>
-              ))}
-            </select>
+            <p className="text-sm font-medium mb-3">Фільтри задач</p>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <select value={filterDepartmentId} onChange={(e) => setFilterDepartmentId(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
+                <option value="">Усі управління/відділи</option>
+                {visibleDepartmentOptions.map((dep) => (
+                  <option key={dep.id} value={dep.id}>
+                    {dep.nameUk || dep.name || dep.id}
+                  </option>
+                ))}
+              </select>
+              <select value={filterAssigneeId} onChange={(e) => setFilterAssigneeId(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
+                <option value="">Усі виконавці</option>
+                {availableSorted.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.firstName} {member.lastName}
+                  </option>
+                ))}
+              </select>
+              <select value={filterReporterId} onChange={(e) => setFilterReporterId(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
+                <option value="">Усі автори</option>
+                {reporterOptions.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.firstName} {member.lastName}
+                  </option>
+                ))}
+              </select>
+              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
+                <option value="">Усі статуси</option>
+                <option value="todo">Заплановано</option>
+                <option value="in_progress">В роботі</option>
+                <option value="done">Виконано</option>
+              </select>
+              <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
+                <option value="">Усі пріоритети</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+              <input type="date" value={filterDueFrom} onChange={(e) => setFilterDueFrom(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />
+              <input type="date" value={filterDueTo} onChange={(e) => setFilterDueTo(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />
+              <button
+                onClick={() => {
+                  setFilterDepartmentId('')
+                  setFilterAssigneeId('')
+                  setFilterReporterId('')
+                  setFilterStatus('')
+                  setFilterPriority('')
+                  setFilterDueFrom('')
+                  setFilterDueTo('')
+                }}
+                className="h-10 rounded-lg border border-slate-300 text-sm font-medium dark:border-slate-600"
+              >
+                Скинути фільтри
+              </button>
+            </div>
           </div>
         )}
 
@@ -307,11 +514,25 @@ export default function TasksPage() {
             className="md:col-span-2 h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             placeholder="Назва задачі"
           />
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="md:col-span-2 h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            placeholder="Опис задачі"
+          />
           <select value={priority} onChange={(e) => setPriority(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
             <option value="low">{getPriorityLabel('low')}</option>
             <option value="medium">{getPriorityLabel('medium')}</option>
             <option value="high">{getPriorityLabel('high')}</option>
             <option value="critical">{getPriorityLabel('critical')}</option>
+          </select>
+          <select value={createDepartmentId} onChange={(e) => setCreateDepartmentId(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
+            <option value="">Підрозділ за замовчуванням</option>
+            {visibleDepartmentOptions.map((dep) => (
+              <option key={dep.id} value={dep.id}>
+                {dep.nameUk || dep.name || dep.id}
+              </option>
+            ))}
           </select>
           {canAssign ? (
             <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
@@ -326,7 +547,7 @@ export default function TasksPage() {
             <div className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 flex items-center dark:border-slate-700 dark:text-slate-400">Призначення: через керівника/директора</div>
           )}
           <input
-            type="date"
+            type="datetime-local"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
             className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
@@ -346,18 +567,31 @@ export default function TasksPage() {
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-          <h2 className="text-lg font-semibold mb-3">Прозорість між підрозділами</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {transparency.map((row) => (
-              <div key={row.departmentId || row.departmentCode} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700 dark:bg-slate-800/70">
+          <h2 className="text-base font-semibold mb-3">Загруженість співробітників</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {workloadByUser.map((row) => (
+              <div key={row.userId} className="rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800/70">
+                <p className="text-sm font-semibold">{row.name}</p>
+                <p className="text-xs text-slate-600 dark:text-slate-300">
+                  Активні: <b>{row.active}</b> · Прострочені: {row.overdue} · Critical: {row.critical}
+                </p>
+              </div>
+            ))}
+            {workloadByUser.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">Дані поки відсутні.</p>}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+          <h2 className="text-base font-semibold mb-3">Прозорість між підрозділами</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {filteredTransparency.map((row) => (
+              <div key={row.departmentId || row.departmentCode} className="rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800/70">
                 <p className="text-sm font-semibold">{row.departmentName}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{row.departmentCode}</p>
-                <p className="text-sm mt-2">Всього: <b>{row.total}</b></p>
-                <p className="text-xs text-slate-600 dark:text-slate-300">Todo: {row.todo} · In Progress: {row.inProgress} · Done: {row.done}</p>
+                <p className="text-xs text-slate-600 dark:text-slate-300">Всього: <b>{row.total}</b> · Активні: {row.todo + row.inProgress} · Done: {row.done}</p>
                 <p className="text-xs text-slate-600 dark:text-slate-300">Critical: {row.critical} · High: {row.high} · Medium: {row.medium} · Low: {row.low}</p>
               </div>
             ))}
-            {transparency.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">Дані поки відсутні.</p>}
+            {filteredTransparency.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">Дані поки відсутні.</p>}
           </div>
         </div>
 
@@ -406,6 +640,31 @@ export default function TasksPage() {
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     Статус: {task.status} {task.assignee ? `· Виконавець: ${task.assignee.firstName} ${task.assignee.lastName}` : ''}
                   </p>
+                  {canAssign && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <select
+                        value={reassignToUserId[task.id] || ''}
+                        onChange={(e) => setReassignToUserId((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                        className="h-8 rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      >
+                        <option value="">Перенаправити на...</option>
+                        {availableSorted
+                          .filter((member) => !task.department?.id || member.department?.id === task.department.id)
+                          .map((member) => (
+                            <option key={member.id} value={member.id}>
+                              {member.firstName} {member.lastName}
+                            </option>
+                          ))}
+                      </select>
+                      <button
+                        onClick={() => reassignTask(task)}
+                        disabled={reassigningTaskId === task.id || !(reassignToUserId[task.id] || '')}
+                        className="rounded border border-primary px-2 py-1 text-xs text-primary disabled:opacity-60"
+                      >
+                        {reassigningTaskId === task.id ? '...' : 'Перенаправити'}
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={() => deleteTask(task.id)}

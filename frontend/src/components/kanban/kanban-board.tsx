@@ -24,15 +24,16 @@ interface KanbanBoardProps {
 }
 
 const columns: { id: KanbanTask['status']; label: string; className: string }[] = [
-  { id: 'todo', label: 'Заплановано', className: 'bg-slate-50 border-slate-200 dark:bg-slate-900/50 dark:border-slate-700' },
-  { id: 'in_progress', label: 'В роботі', className: 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/60' },
+  { id: 'todo', label: 'Активні', className: 'bg-slate-50 border-slate-200 dark:bg-slate-900/50 dark:border-slate-700' },
   { id: 'done', label: 'Виконано', className: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800/60' },
 ]
 
 export function KanbanBoard({ tasks, onStatusChange }: KanbanBoardProps) {
   const grouped = useMemo(() => {
     return columns.reduce((acc, col) => {
-      acc[col.id] = tasks.filter(task => task.status === col.id)
+      acc[col.id] = col.id === 'todo'
+        ? tasks.filter(task => task.status === 'todo' || task.status === 'in_progress')
+        : tasks.filter(task => task.status === col.id)
       return acc
     }, {} as Record<KanbanTask['status'], KanbanTask[]>)
   }, [tasks])
@@ -54,7 +55,7 @@ export function KanbanBoard({ tasks, onStatusChange }: KanbanBoardProps) {
 
   return (
     <DndContext onDragEnd={handleDragEnd}>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {columns.map((column) => (
           <KanbanColumn key={column.id} status={column.id} title={column.label} className={column.className} tasks={grouped[column.id]} />
         ))}
@@ -120,7 +121,7 @@ function KanbanCard({ task }: { task: KanbanTask }) {
         {task.executionHours ? ` · ${task.executionHours} год` : ''}
       </p>
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Термін: {task.dueDate ? new Date(task.dueDate).toLocaleDateString('uk-UA') : 'не вказано'}
+        Термін: {task.dueDate ? new Date(task.dueDate).toLocaleString('uk-UA') : 'не вказано'}
         {task.isPrivate ? ' · Приватна' : ''}
       </p>
     </div>

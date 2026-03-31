@@ -7,7 +7,8 @@ export interface User {
   firstName: string
   lastName: string
   patronymic?: string
-  role: 'specialist' | 'manager' | 'clerk' | 'director' | 'admin'
+  role: 'specialist' | 'manager' | 'clerk' | 'director' | 'deputy_head' | 'deputy_director' | 'lawyer' | 'accountant' | 'hr' | 'admin'
+  scopeDepartmentIds?: string[] | null
   department?: {
     id: string
     name: string

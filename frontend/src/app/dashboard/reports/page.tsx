@@ -102,13 +102,13 @@ export default function ReportsPage() {
 
   const canCreate = useMemo(() => !!user, [user])
   const canCreateAggregate = useMemo(
-    () => ['manager', 'clerk', 'director'].includes(user?.role || ''),
+    () => ['manager', 'clerk', 'director', 'deputy_director'].includes(user?.role || ''),
     [user?.role],
   )
   const aggregateTitle = useMemo(() => {
     if (user?.role === 'manager') return 'Зведений звіт керівника відділу'
     if (user?.role === 'clerk') return 'Зведений звіт діловода департаменту'
-    if (user?.role === 'director') return 'Фінальний зведений звіт директора'
+    if (user?.role === 'director' || user?.role === 'deputy_director') return 'Фінальний зведений звіт директора'
     return 'Зведений звіт'
   }, [user?.role])
   const createDraftLabel = useMemo(() => {
@@ -118,7 +118,7 @@ export default function ReportsPage() {
   const aggregateButtonLabel = useMemo(() => {
     if (user?.role === 'manager') return 'Створити зведений звіт'
     if (user?.role === 'clerk') return 'Створити зведення департаменту'
-    if (user?.role === 'director') return 'Створити фінальне зведення'
+    if (user?.role === 'director' || user?.role === 'deputy_director') return 'Створити фінальне зведення'
     return 'Створити зведений звіт'
   }, [user?.role])
 
@@ -161,7 +161,11 @@ export default function ReportsPage() {
               <option value="manager">Від керівників</option>
               <option value="clerk">Від діловода</option>
               <option value="director">Від директора</option>
+              <option value="deputy_director">Від заступника директора</option>
               <option value="specialist">Від спеціалістів</option>
+              <option value="lawyer">Від юриста</option>
+              <option value="accountant">Від бухгалтера</option>
+              <option value="hr">Від кадровика</option>
             </select>
 
             <select

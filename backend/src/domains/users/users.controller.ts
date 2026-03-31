@@ -31,7 +31,7 @@ export class UsersController {
   }
 
   @Post()
-  @Roles('admin', 'director')
+  @Roles('admin', 'director', 'deputy_director')
   @Permissions('users:write')
   @ApiOperation({ summary: 'Створити користувача (Admin)' })
   @ApiResponse({ status: 201, description: 'Користувач створений' })
@@ -40,7 +40,7 @@ export class UsersController {
   }
 
   @Put(':id')
-  @Roles('admin', 'director')
+  @Roles('admin', 'director', 'deputy_director')
   @Permissions('users:write')
   @ApiOperation({ summary: 'Оновити користувача (Admin)' })
   @ApiResponse({ status: 200, description: 'Користувач оновлений' })
@@ -58,7 +58,7 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @Roles('admin', 'director')
+  @Roles('admin', 'director', 'deputy_director')
   @Permissions('users:write')
   @ApiOperation({ summary: 'Видалити користувача (Admin)' })
   @ApiResponse({ status: 200, description: 'Користувач видалений' })

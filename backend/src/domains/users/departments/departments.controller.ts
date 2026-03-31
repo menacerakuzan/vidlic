@@ -53,7 +53,7 @@ export class DepartmentsController {
   }
 
   @Post()
-  @Roles('admin', 'director')
+  @Roles('admin', 'director', 'deputy_director')
   @Permissions('departments:write')
   @ApiOperation({ summary: 'Створити підрозділ (Admin)' })
   @ApiResponse({ status: 201, description: 'Підрозділ створений' })
@@ -62,7 +62,7 @@ export class DepartmentsController {
   }
 
   @Put(':id')
-  @Roles('admin', 'director')
+  @Roles('admin', 'director', 'deputy_director')
   @Permissions('departments:write')
   @ApiOperation({ summary: 'Оновити підрозділ (Admin/Director)' })
   @ApiResponse({ status: 200, description: 'Підрозділ оновлений' })

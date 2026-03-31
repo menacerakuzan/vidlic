@@ -77,7 +77,7 @@ export class UsersService {
       throw new ConflictException('Email вже використовується');
     }
 
-    if (actor.role === 'director') {
+    if (actor.role === 'director' || actor.role === 'deputy_director') {
       await this.assertDirectorScope(actor, dto.departmentId, dto.role);
     }
 
@@ -94,6 +94,7 @@ export class UsersService {
         role: dto.role,
         departmentId: dto.departmentId,
         positionId: dto.positionId,
+        scopeDepartmentIds: Array.isArray(dto.scopeDepartmentIds) ? dto.scopeDepartmentIds : undefined,
       },
       include: { department: true, position: true },
     });
@@ -117,7 +118,7 @@ export class UsersService {
       throw new NotFoundException('Користувача не знайдено');
     }
 
-    if (actor.role === 'director') {
+    if (actor.role === 'director' || actor.role === 'deputy_director') {
       await this.assertDirectorScope(actor, dto.departmentId ?? user.departmentId, dto.role ?? user.role);
       if (user.role === 'director' || user.role === 'admin') {
         throw new ForbiddenException('Директор не може змінювати директора або адміністратора');
@@ -140,6 +141,7 @@ export class UsersService {
         role: dto.role ?? user.role,
         departmentId: dto.departmentId ?? user.departmentId,
         positionId: dto.positionId ?? user.positionId,
+        scopeDepartmentIds: Array.isArray(dto.scopeDepartmentIds) ? dto.scopeDepartmentIds : user.scopeDepartmentIds,
         isActive: dto.isActive ?? user.isActive,
       },
       include: { department: true, position: true },
@@ -165,7 +167,7 @@ export class UsersService {
       throw new NotFoundException('Користувача не знайдено');
     }
 
-    if (actor.role === 'director') {
+    if (actor.role === 'director' || actor.role === 'deputy_director') {
       await this.assertDirectorScope(actor, user.departmentId, user.role);
       if (user.role === 'director' || user.role === 'admin') {
         throw new ForbiddenException('Директор не може видаляти директора або адміністратора');
@@ -246,14 +248,15 @@ export class UsersService {
         title: user.position.title,
         titleUk: user.position.titleUk,
       } : null,
+      scopeDepartmentIds: Array.isArray(user.scopeDepartmentIds) ? user.scopeDepartmentIds : [],
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
   }
 
   private async assertDirectorScope(actor: any, departmentId?: string | null, role?: UserRole) {
-    if (!departmentId || !actor?.departmentId) {
-      throw new ForbiddenException('Директор може працювати тільки зі своїм підрозділом');
+    if (!departmentId) {
+      throw new ForbiddenException('Не визначено цільовий підрозділ');
     }
 
     const targetDepartment = await this.prisma.department.findUnique({
@@ -264,14 +267,29 @@ export class UsersService {
       throw new ForbiddenException('Цільовий підрозділ не знайдено');
     }
 
-    const isOwnDepartment = targetDepartment.id === actor.departmentId;
-    const isOwnChildDepartment = targetDepartment.parentId === actor.departmentId;
-    if (!isOwnDepartment && !isOwnChildDepartment) {
-      throw new ForbiddenException('Директор може працювати тільки зі своїм департаментом або його відділами');
+    let allowedDepartmentIds: string[] = [];
+    if (actor.role === 'deputy_director') {
+      const configured = Array.isArray(actor.scopeDepartmentIds) ? actor.scopeDepartmentIds.filter(Boolean) : [];
+      if (configured.length) {
+        allowedDepartmentIds = configured;
+      } else if (actor.departmentId) {
+        allowedDepartmentIds = [actor.departmentId];
+      }
+    } else {
+      if (!actor?.departmentId) {
+        throw new ForbiddenException('Директор може працювати тільки зі своїм підрозділом');
+      }
+      allowedDepartmentIds = [actor.departmentId];
     }
 
-    if (role && (role === 'admin' || role === 'director')) {
-      throw new ForbiddenException('Директор не може призначати адміністратора або директора');
+    const isOwnDepartment = allowedDepartmentIds.includes(targetDepartment.id);
+    const isOwnChildDepartment = targetDepartment.parentId ? allowedDepartmentIds.includes(targetDepartment.parentId) : false;
+    if (!isOwnDepartment && !isOwnChildDepartment) {
+      throw new ForbiddenException('Доступ дозволено лише до курованих підрозділів');
+    }
+
+    if (role && (role === 'admin' || role === 'director' || role === 'deputy_head')) {
+      throw new ForbiddenException('Директор не може призначати адміністратора, директора або заступника голови');
     }
   }
 }

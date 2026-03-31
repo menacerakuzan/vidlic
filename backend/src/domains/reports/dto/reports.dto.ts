@@ -67,7 +67,7 @@ export class ReportQueryDto {
   @Type(() => Number)
   @IsNumber()
   @Min(1)
-  @Max(100)
+  @Max(500)
   limit?: number = 20;
 
   @ApiPropertyOptional({ enum: ReportStatus })
@@ -195,4 +195,9 @@ export class UpdateActivitiesGoogleSheetDto {
   @IsOptional()
   @IsString()
   googleSheetUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Дедлайн внесення заходів (ISO datetime)', example: '2026-04-10T18:00:00.000Z' })
+  @IsOptional()
+  @IsString()
+  entryDeadlineAt?: string | null;
 }

@@ -36,7 +36,26 @@ export class RolesGuard implements CanActivate {
     if (requiredPermissions) {
       const rolePermissions: Record<string, string[]> = {
         admin: ['*'],
+        deputy_head: [
+          'reports:read',
+          'tasks:read',
+          'analytics:read', 'analytics:view',
+          'departments:read',
+          'users:read',
+          'notifications:read',
+          'ai:read', 'ui:read',
+        ],
         director: [
+          'reports:read', 'reports:write', 'reports:approve',
+          'tasks:read', 'tasks:write', 'tasks:approve',
+          'analytics:read', 'analytics:view',
+          'departments:read', 'departments:write',
+          'users:read',
+          'users:write',
+          'notifications:read', 'notifications:write',
+          'ai:read', 'ui:read',
+        ],
+        deputy_director: [
           'reports:read', 'reports:write', 'reports:approve',
           'tasks:read', 'tasks:write', 'tasks:approve',
           'analytics:read', 'analytics:view',
@@ -65,6 +84,24 @@ export class RolesGuard implements CanActivate {
         specialist: [
           'reports:read', 'reports:write',
           'tasks:read', 'tasks:write',
+          'notifications:read', 'notifications:write',
+          'ai:read', 'ui:read',
+        ],
+        lawyer: [
+          'reports:read', 'reports:write',
+          'tasks:read',
+          'notifications:read', 'notifications:write',
+          'ai:read', 'ui:read',
+        ],
+        accountant: [
+          'reports:read', 'reports:write',
+          'tasks:read',
+          'notifications:read', 'notifications:write',
+          'ai:read', 'ui:read',
+        ],
+        hr: [
+          'reports:read', 'reports:write',
+          'tasks:read',
           'notifications:read', 'notifications:write',
           'ai:read', 'ui:read',
         ],

@@ -217,7 +217,10 @@ export default function ReportDetailsPage() {
     () => report?.status === 'draft' && report?.author?.id === user?.id,
     [report, user],
   )
-  const canComment = useMemo(() => ['manager', 'clerk', 'director', 'admin'].includes(user?.role || ''), [user?.role])
+  const canComment = useMemo(
+    () => ['manager', 'clerk', 'director', 'deputy_director', 'admin'].includes(user?.role || ''),
+    [user?.role],
+  )
 
   const canDelete = useMemo(() => {
     if (!report || !user) return false
@@ -240,19 +243,19 @@ export default function ReportDetailsPage() {
     if (user.role === 'clerk') {
       return report.status === 'pending_clerk' && report.currentApprover?.id === user.id
     }
-    if (user.role === 'director') {
+    if (user.role === 'director' || user.role === 'deputy_director') {
       return report.status === 'pending_director' && report.currentApprover?.id === user.id
     }
     return false
   }, [report, user])
   const canCreateAggregateDraft = useMemo(
-    () => !!report && ['manager', 'clerk', 'director'].includes(user?.role || '') && !canEditSubmission,
+    () => !!report && ['manager', 'clerk', 'director', 'deputy_director'].includes(user?.role || '') && !canEditSubmission,
     [report, user?.role, canEditSubmission],
   )
   const aggregateCreateLabel = useMemo(() => {
     if (user?.role === 'manager') return 'Створити зведений звіт відділу'
     if (user?.role === 'clerk') return 'Створити зведений звіт департаменту'
-    if (user?.role === 'director') return 'Створити фінальний зведений звіт'
+    if (user?.role === 'director' || user?.role === 'deputy_director') return 'Створити фінальний зведений звіт'
     return 'Створити зведений звіт'
   }, [user?.role])
   const aggregateDraftHint = useMemo(() => {
@@ -262,7 +265,7 @@ export default function ReportDetailsPage() {
     if (user?.role === 'clerk') {
       return 'Ви переглядаєте звіт керівника. Для склейки по департаменту створіть власну чернетку за цей період і натисніть "Згенерувати AI-чернетку".'
     }
-    if (user?.role === 'director') {
+    if (user?.role === 'director' || user?.role === 'deputy_director') {
       return 'Для фінального зведення створіть власну чернетку за цей період і натисніть "Згенерувати AI-чернетку".'
     }
     return ''
@@ -284,13 +287,13 @@ export default function ReportDetailsPage() {
     if (user.role === 'clerk') {
       return 'AI зведе звіти керівників відділів вашого департаменту за обраний період у консолідований документ діловода.'
     }
-    if (user.role === 'director') {
+    if (user.role === 'director' || user.role === 'deputy_director') {
       return 'AI сформує фінальне зведення директора на основі консолідованих документів діловода за обраний період.'
     }
     return 'AI сформує офіційний документ для погодження за обраний період.'
   }, [user])
   const canAggregateBySources = useMemo(
-    () => canEditSubmission && isAggregateReport && ['manager', 'clerk', 'director'].includes(user?.role || ''),
+    () => canEditSubmission && isAggregateReport && ['manager', 'clerk', 'director', 'deputy_director'].includes(user?.role || ''),
     [canEditSubmission, user?.role, isAggregateReport],
   )
   const sourceDepartmentOptions = useMemo(() => {

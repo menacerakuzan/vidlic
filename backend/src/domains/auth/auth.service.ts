@@ -172,6 +172,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       departmentId: user.departmentId,
+      scopeDepartmentIds: Array.isArray(user.scopeDepartmentIds) ? user.scopeDepartmentIds : [],
       jti,
     };
 
@@ -210,6 +211,7 @@ export class AuthService {
       patronymic: user.patronymic,
       role: user.role,
       departmentId: user.departmentId,
+      scopeDepartmentIds: Array.isArray(user.scopeDepartmentIds) ? user.scopeDepartmentIds : [],
       department: user.department ? {
         id: user.department.id,
         name: user.department.name,

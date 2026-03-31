@@ -115,7 +115,7 @@ export class DepartmentsService {
 
   async create(dto: CreateDepartmentDto, actor: any, ipAddress?: string) {
     const isAdmin = actor?.role === 'admin';
-    const isDirector = actor?.role === 'director';
+    const isDirector = actor?.role === 'director' || actor?.role === 'deputy_director';
     if (!isAdmin && !isDirector) {
       throw new ForbiddenException('Недостатньо прав для створення підрозділу');
     }
@@ -172,7 +172,7 @@ export class DepartmentsService {
     }
 
     const isAdmin = actor?.role === 'admin';
-    const isDirector = actor?.role === 'director';
+    const isDirector = actor?.role === 'director' || actor?.role === 'deputy_director';
     if (!isAdmin && !isDirector) {
       throw new ForbiddenException('Недостатньо прав для оновлення підрозділу');
     }
@@ -317,7 +317,7 @@ export class DepartmentsService {
     if (actor.role === 'specialist') {
       throw new ForbiddenException('Недостатньо прав для редагування шаблону');
     }
-    if ((actor.role === 'manager' || actor.role === 'director') && actor.departmentId !== departmentId) {
+    if ((actor.role === 'manager' || actor.role === 'director' || actor.role === 'deputy_director') && actor.departmentId !== departmentId) {
       throw new ForbiddenException('Можна редагувати шаблон лише свого підрозділу');
     }
 
@@ -344,8 +344,24 @@ export class DepartmentsService {
   }
 
   private async resolveVisibleDepartmentIds(actor?: any): Promise<string[] | null> {
-    if (!actor || actor.role === 'admin') return null;
+    if (!actor || actor.role === 'admin' || actor.role === 'deputy_head') return null;
     if (!actor.departmentId) return [];
+
+    if (actor.role === 'deputy_director') {
+      const configured = Array.isArray(actor.scopeDepartmentIds) ? actor.scopeDepartmentIds.filter(Boolean) : [];
+      if (configured.length) {
+        const expanded = new Set<string>();
+        for (const depId of configured) {
+          expanded.add(depId);
+          const dep = await this.prisma.department.findUnique({
+            where: { id: depId },
+            select: { children: { select: { id: true } } },
+          });
+          for (const child of dep?.children || []) expanded.add(child.id);
+        }
+        return Array.from(expanded);
+      }
+    }
 
     const current = await this.prisma.department.findUnique({
       where: { id: actor.departmentId },

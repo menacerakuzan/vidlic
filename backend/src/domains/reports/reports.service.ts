@@ -33,7 +33,7 @@ export class ReportsService {
       },
     ];
 
-    if (user.role === 'specialist') {
+    if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
       where.authorId = user.id;
     } else if (user.role === 'clerk') {
       const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
@@ -46,24 +46,9 @@ export class ReportsService {
             { status: 'pending_clerk' },
           ],
         },
-        {
-          AND: [
-            { departmentId: { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) } },
-            { status: 'approved' },
-            { author: { role: 'manager' } },
-          ],
-        },
-        {
-          AND: [
-            { departmentId: { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) } },
-            { status: 'approved' },
-            { author: { role: 'specialist' } },
-            { department: { managerId: null } },
-          ],
-        },
       ];
-    } else if (user.role === 'manager' || user.role === 'director') {
-      const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+    } else if (user.role === 'manager' || user.role === 'director' || user.role === 'deputy_director') {
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
       where.OR = [
         { authorId: user.id },
         { departmentId: { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) } },
@@ -73,9 +58,11 @@ export class ReportsService {
 
     if (status) where.status = status;
     if (type) where.reportType = type;
-    if (departmentId && user.role !== 'specialist') {
-      if (user.role === 'manager' || user.role === 'clerk' || user.role === 'director') {
-        const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+    if (departmentId && !['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
+      if (user.role === 'manager' || user.role === 'clerk' || user.role === 'director' || user.role === 'deputy_director') {
+        const scopedDepartmentIds = user.role === 'clerk'
+          ? await this.resolveDepartmentScopeIds(user.departmentId)
+          : await this.resolveScopedDepartmentIdsForUser(user);
         where.departmentId = scopedDepartmentIds.includes(departmentId)
           ? departmentId
           : '00000000-0000-0000-0000-000000000000';
@@ -288,6 +275,8 @@ export class ReportsService {
       flowSteps = managerId
         ? [{ order: 1, role: 'manager' }]
         : [{ order: 1, role: 'clerk' }];
+    } else if (['lawyer', 'accountant', 'hr'].includes(report.author?.role || '')) {
+      flowSteps = [{ order: 1, role: 'director' }];
     } else if (report.author?.role === 'manager') {
       if (reportMode !== 'aggregate') {
         const updated = await this.prisma.report.update({
@@ -559,7 +548,7 @@ export class ReportsService {
       throw new BadRequestException('Звіт не очікує узгодження діловода');
     }
 
-    if (user.role === 'director' && report.status !== 'pending_director') {
+    if ((user.role === 'director' || user.role === 'deputy_director') && report.status !== 'pending_director') {
       throw new BadRequestException('Звіт не очікує фінального погодження');
     }
 
@@ -923,7 +912,7 @@ export class ReportsService {
   }
 
   private async canViewReport(report: any, user: any): Promise<boolean> {
-    if (user.role === 'admin') return true;
+    if (user.role === 'admin' || user.role === 'deputy_head') return true;
     if (report.currentApproverId && report.currentApproverId === user.id) return true;
     if (user.role === 'clerk') {
       if (report.authorId === user.id) return true;
@@ -934,10 +923,11 @@ export class ReportsService {
       if (report.status === 'approved' && report.author?.role === 'specialist' && !report.department?.managerId) return true;
       return false;
     }
-    if (user.role === 'manager' || user.role === 'director') {
-      const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+    if (user.role === 'manager' || user.role === 'director' || user.role === 'deputy_director') {
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
       if (scopedDepartmentIds.includes(report.departmentId)) return true;
     }
+    if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role) && report.authorId === user.id) return true;
     if (report.authorId === user.id) return true;
     return false;
   }
@@ -1083,6 +1073,18 @@ export class ReportsService {
         this.buildPeriodLabel(report.periodStart, report.periodEnd),
       ];
     }
+    if (role === 'deputy_director') {
+      return [
+        `Про виконання роботи заступника директора департаменту ${departmentName}`,
+        this.buildPeriodLabel(report.periodStart, report.periodEnd),
+      ];
+    }
+    if (role === 'deputy_head') {
+      return [
+        `Про виконання роботи заступника голови`,
+        this.buildPeriodLabel(report.periodStart, report.periodEnd),
+      ];
+    }
     return [
       `Про виконання роботи ${departmentName}`,
       this.buildPeriodLabel(report.periodStart, report.periodEnd),
@@ -1117,6 +1119,33 @@ export class ReportsService {
     return [root.id, ...(root.children || []).map((child) => child.id)];
   }
 
+  private async resolveScopedDepartmentIdsForUser(user: any): Promise<string[]> {
+    if (!user?.departmentId) return [];
+    if (user.role === 'manager') return [user.departmentId];
+    if (user.role === 'director') {
+      return this.resolveDepartmentScopeIds(user.departmentId);
+    }
+    if (user.role === 'deputy_director') {
+      const configured = Array.isArray(user.scopeDepartmentIds)
+        ? user.scopeDepartmentIds.filter(Boolean)
+        : [];
+      if (!configured.length) {
+        return this.resolveDepartmentScopeIds(user.departmentId);
+      }
+      const expanded = new Set<string>();
+      for (const depId of configured) {
+        expanded.add(depId);
+        const dep = await this.prisma.department.findUnique({
+          where: { id: depId },
+          select: { children: { select: { id: true } } },
+        });
+        for (const child of dep?.children || []) expanded.add(child.id);
+      }
+      return Array.from(expanded);
+    }
+    return this.resolveDepartmentScopeIds(user.departmentId);
+  }
+
   private resolveAuthorName(author: any): string {
     const fullName = `${author?.firstName || ''} ${author?.lastName || ''}`.trim();
     if (fullName) return fullName;
@@ -1138,6 +1167,16 @@ export class ReportsService {
         return 'директор департаменту';
       case 'admin':
         return 'адміністратор';
+      case 'deputy_head':
+        return 'заступник голови';
+      case 'deputy_director':
+        return 'заступник директора';
+      case 'lawyer':
+        return 'юрист';
+      case 'accountant':
+        return 'бухгалтер';
+      case 'hr':
+        return 'кадровик';
       default:
         return 'посада не вказана';
     }
@@ -1479,6 +1518,10 @@ export class ReportsService {
               reminderSentAt: null,
               googleSheetUrl: null,
               googleSheetEmbedUrl: null,
+              entryDeadlineAt: null,
+              activityLog: [
+                this.makeActivitiesLogEntry(user, 'plan_created', `Створено план заходів за період ${normalizedPeriod}`),
+              ],
             },
           },
         },
@@ -1544,6 +1587,7 @@ export class ReportsService {
 
     const content = this.ensureObject(report.content);
     const plan = this.ensureObject(content.activityPlan);
+    this.assertActivitiesEntryWindow(plan, user);
     if (plan.lockedAt) {
       throw new BadRequestException('Документ плану заходів заблоковано діловодом');
     }
@@ -1565,6 +1609,7 @@ export class ReportsService {
         schedule: dto.schedule?.trim() || '',
         responsible: dto.responsible?.trim() || '',
         updatedById: user.id,
+        updatedByName: this.resolveAuthorName(user),
         updatedAt: now,
       };
     } else {
@@ -1575,11 +1620,21 @@ export class ReportsService {
         schedule: dto.schedule?.trim() || '',
         responsible: dto.responsible?.trim() || '',
         createdById: user.id,
+        createdByName: this.resolveAuthorName(user),
         updatedById: user.id,
+        updatedByName: this.resolveAuthorName(user),
         createdAt: now,
         updatedAt: now,
       });
     }
+    const activityLog = this.appendActivitiesLog(
+      plan,
+      this.makeActivitiesLogEntry(
+        user,
+        dto.id ? 'row_updated' : 'row_created',
+        `Рядок заходу ${dto.id ? 'оновлено' : 'додано'}: ${(dto.title || '').trim() || 'Без назви'}`,
+      ),
+    );
 
     const updated = await this.prisma.report.update({
       where: { id: report.id },
@@ -1589,6 +1644,7 @@ export class ReportsService {
           activityPlan: {
             ...plan,
             rows,
+            activityLog,
           },
         },
         version: report.version + 1,
@@ -1617,6 +1673,7 @@ export class ReportsService {
 
     const content = this.ensureObject(report.content);
     const plan = this.ensureObject(content.activityPlan);
+    this.assertActivitiesEntryWindow(plan, user);
     if (plan.lockedAt) {
       throw new BadRequestException('Документ плану заходів заблоковано діловодом');
     }
@@ -1628,6 +1685,14 @@ export class ReportsService {
     if (!targetRow) return { success: true };
     this.assertCanEditActivitiesRow(targetRow, user);
     const nextRows = rows.filter((row: any) => row?.id !== rowId);
+    const activityLog = this.appendActivitiesLog(
+      plan,
+      this.makeActivitiesLogEntry(
+        user,
+        'row_deleted',
+        `Рядок заходу видалено: ${targetRow?.title || 'Без назви'}`,
+      ),
+    );
 
     await this.prisma.report.update({
       where: { id: report.id },
@@ -1637,6 +1702,7 @@ export class ReportsService {
           activityPlan: {
             ...plan,
             rows: nextRows,
+            activityLog,
           },
         },
         version: report.version + 1,
@@ -1773,6 +1839,10 @@ export class ReportsService {
 
     const content = this.ensureObject(report.content);
     const plan = this.ensureObject(content.activityPlan);
+    const activityLog = this.appendActivitiesLog(
+      plan,
+      this.makeActivitiesLogEntry(user, 'plan_locked', 'План заходів заблоковано'),
+    );
     const updated = await this.prisma.report.update({
       where: { id: reportId },
       data: {
@@ -1782,6 +1852,7 @@ export class ReportsService {
             ...plan,
             lockedAt: new Date().toISOString(),
             lockedById: user.id,
+            activityLog,
           },
         },
         version: report.version + 1,
@@ -1801,6 +1872,10 @@ export class ReportsService {
 
     const content = this.ensureObject(report.content);
     const plan = this.ensureObject(content.activityPlan);
+    const activityLog = this.appendActivitiesLog(
+      plan,
+      this.makeActivitiesLogEntry(user, 'plan_unlocked', 'План заходів розблоковано'),
+    );
     const updated = await this.prisma.report.update({
       where: { id: reportId },
       data: {
@@ -1810,6 +1885,7 @@ export class ReportsService {
             ...plan,
             lockedAt: null,
             lockedById: null,
+            activityLog,
           },
         },
         version: report.version + 1,
@@ -1863,6 +1939,10 @@ export class ReportsService {
           activityPlan: {
             ...plan,
             reminderSentAt: new Date().toISOString(),
+            activityLog: this.appendActivitiesLog(
+              plan,
+              this.makeActivitiesLogEntry(user, 'reminder_sent', `Надіслано нагадування: ${targets.length}`),
+            ),
           },
         },
       },
@@ -1885,6 +1965,15 @@ export class ReportsService {
     const content = this.ensureObject(report.content);
     const plan = this.ensureObject(content.activityPlan);
     const normalizedUrl = this.normalizeGoogleSheetUrl(dto.googleSheetUrl);
+    const normalizedDeadline = this.normalizeActivitiesDeadline(dto.entryDeadlineAt);
+    const activityLog = this.appendActivitiesLog(
+      plan,
+      this.makeActivitiesLogEntry(
+        user,
+        'settings_updated',
+        `Оновлено параметри плану (${normalizedUrl ? 'Google Docs/Sheets підключено' : 'Google Docs/Sheets відключено'}; дедлайн: ${normalizedDeadline || 'не вказано'})`,
+      ),
+    );
     const updated = await this.prisma.report.update({
       where: { id: reportId },
       data: {
@@ -1894,7 +1983,9 @@ export class ReportsService {
             ...plan,
             googleSheetUrl: normalizedUrl,
             googleSheetEmbedUrl: this.toGoogleSheetEmbedUrl(normalizedUrl),
+            entryDeadlineAt: normalizedDeadline,
             updatedAt: new Date().toISOString(),
+            activityLog,
           },
         },
         version: report.version + 1,
@@ -1967,15 +2058,60 @@ export class ReportsService {
         schedule: row.schedule || '',
         responsible: row.responsible || '',
         createdById: row.createdById || null,
+        createdByName: row.createdByName || null,
+        updatedById: row.updatedById || null,
+        updatedByName: row.updatedByName || null,
+        createdAt: row.createdAt || null,
+        updatedAt: row.updatedAt || null,
       })),
       isLocked: Boolean(plan.lockedAt),
       lockedAt: plan.lockedAt || null,
       lockedById: plan.lockedById || null,
       googleSheetUrl: typeof plan.googleSheetUrl === 'string' ? plan.googleSheetUrl : null,
       googleSheetEmbedUrl: typeof plan.googleSheetEmbedUrl === 'string' ? plan.googleSheetEmbedUrl : null,
+      entryDeadlineAt: typeof plan.entryDeadlineAt === 'string' ? plan.entryDeadlineAt : null,
+      activityLog: Array.isArray(plan.activityLog) ? plan.activityLog.slice(-50) : [],
       version: report.version,
       updatedAt: report.updatedAt,
     };
+  }
+
+  private normalizeActivitiesDeadline(value?: string | null): string | null {
+    const raw = (value || '').trim();
+    if (!raw) return null;
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException('Некоректна дата/час дедлайну для плану заходів');
+    }
+    return date.toISOString();
+  }
+
+  private makeActivitiesLogEntry(user: any, action: string, details: string) {
+    return {
+      id: uuidv4(),
+      action,
+      details,
+      actorId: user?.id || null,
+      actorName: this.resolveAuthorName(user),
+      actorRole: user?.role || null,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  private appendActivitiesLog(plan: Record<string, any>, entry: Record<string, any>) {
+    const prev = Array.isArray(plan.activityLog) ? plan.activityLog : [];
+    return [...prev, entry].slice(-200);
+  }
+
+  private assertActivitiesEntryWindow(plan: Record<string, any>, user: any) {
+    if (['admin', 'director', 'clerk'].includes(user?.role || '')) return;
+    const deadlineRaw = typeof plan.entryDeadlineAt === 'string' ? plan.entryDeadlineAt : '';
+    if (!deadlineRaw) return;
+    const deadline = new Date(deadlineRaw);
+    if (Number.isNaN(deadline.getTime())) return;
+    if (new Date() > deadline) {
+      throw new BadRequestException('Термін внесення заходів завершено. Редагування закрито.');
+    }
   }
 
   private normalizeGoogleSheetUrl(value?: string | null): string | null {
@@ -2191,48 +2327,50 @@ export class ReportsService {
   ): string {
     const lines: string[] = [];
     sources.forEach((source, index) => {
-      const department = source.departmentName || 'Невідомий підрозділ';
-      const author = source.authorName || 'Невідомий автор';
-      lines.push(`${index + 1}. Звіт джерела #${index + 1}`);
-      lines.push(`Відділ: ${department}`);
-      lines.push(`Відповідальний: ${author}`);
+      lines.push(`${index + 1}. Джерело #${index + 1}`);
       if (source.periodStart && source.periodEnd) {
         lines.push(`Період: ${this.formatDate(new Date(source.periodStart))} - ${this.formatDate(new Date(source.periodEnd))}`);
       }
 
-      const structured = this.extractSectionsFromManagerSubmission(source.managerSubmissionBodyText);
-      lines.push(`${index + 1}.1. Виконана робота`);
-      const done = (structured.workDone.length
-        ? structured.workDone
-        : this.extractSectionPoints(source.content || {}, ['workDone', 'achievements', 'summary'])).slice(0, 20);
-      if (!done.length) {
-        lines.push(`${index + 1}.1.1. Дані по виконаних роботах надано у вільній формі.`);
+      const preparedBody = this.prepareManagerSubmissionBodyForAggregation(source.managerSubmissionBodyText);
+      if (preparedBody) {
+        lines.push(preparedBody);
       } else {
-        done.forEach((item, i) => lines.push(`${index + 1}.1.${i + 1}. ${item}`));
-      }
-
-      lines.push(`${index + 1}.2. Проблеми/ризики`);
-      const risks = (structured.problems.length
-        ? structured.problems
-        : this.extractSectionPoints(source.content || {}, ['problems'])).slice(0, 14);
-      if (!risks.length) {
-        lines.push(`${index + 1}.2.1. Критичних ризиків за звітний період не зафіксовано.`);
-      } else {
-        risks.forEach((item, i) => lines.push(`${index + 1}.2.${i + 1}. ${item}`));
-      }
-
-      lines.push(`${index + 1}.3. Наступні кроки`);
-      const next = (structured.nextSteps.length
-        ? structured.nextSteps
-        : this.extractSectionPoints(source.content || {}, ['nextWeekPlan'])).slice(0, 14);
-      if (!next.length) {
-        lines.push(`${index + 1}.3.1. Продовжити виконання планових завдань за напрямом.`);
-      } else {
-        next.forEach((item, i) => lines.push(`${index + 1}.3.${i + 1}. ${item}`));
+        const done = this.extractSectionPoints(source.content || {}, ['workDone', 'achievements', 'summary']);
+        const risks = this.extractSectionPoints(source.content || {}, ['problems']);
+        const next = this.extractSectionPoints(source.content || {}, ['nextWeekPlan']);
+        lines.push('Виконана робота:');
+        if (done.length) done.forEach((item, i) => lines.push(`${i + 1}. ${item}`));
+        else lines.push('1. Дані по виконаних роботах надано у вільній формі.');
+        lines.push('Проблеми/ризики:');
+        if (risks.length) risks.forEach((item, i) => lines.push(`${i + 1}. ${item}`));
+        else lines.push('1. Критичних ризиків за звітний період не зафіксовано.');
+        lines.push('Наступні кроки:');
+        if (next.length) next.forEach((item, i) => lines.push(`${i + 1}. ${item}`));
+        else lines.push('1. Продовжити виконання планових завдань за напрямом.');
       }
 
       lines.push('');
     });
+
+    return lines.join('\n').trim();
+  }
+
+  private prepareManagerSubmissionBodyForAggregation(bodyText?: string): string {
+    if (!bodyText || typeof bodyText !== 'string') return '';
+
+    const lines = bodyText
+      .replace(/\r/g, '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => !/^ЗВІТ$/i.test(line))
+      .filter((line) => !/^Про виконання роботи\s+/i.test(line))
+      .filter((line) => !/^\d{4}\s*\(станом на\s*\d{2}\.\d{2}\.\d{4}\)\s*$/i.test(line))
+      .filter((line) => !/^Виконавець\s*:/i.test(line))
+      .filter((line) => !/^Відділ\s*:/i.test(line))
+      .filter((line) => !/^Відповідальний\s*:/i.test(line))
+      .filter((line) => !/^\d+\.\s*(Відділ|Сектор)\s*:/i.test(line));
 
     return lines.join('\n').trim();
   }

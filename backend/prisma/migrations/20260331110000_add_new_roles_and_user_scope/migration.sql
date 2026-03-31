@@ -1,0 +1,8 @@
+ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'deputy_head';
+ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'deputy_director';
+ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'lawyer';
+ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'accountant';
+ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'hr';
+
+ALTER TABLE "users"
+  ADD COLUMN IF NOT EXISTS "scopeDepartmentIds" JSONB;

@@ -30,9 +30,9 @@ const navigation = [
   { name: 'Звіти', href: '/dashboard/reports', icon: FileText },
   { name: 'Заходи', href: '/dashboard/activities', icon: CalendarDays },
   { name: 'Задачі', href: '/dashboard/tasks', icon: CheckSquare },
-  { name: 'Аналітика', href: '/dashboard/analytics', icon: BarChart3, roles: ['manager', 'clerk', 'director'] },
+  { name: 'Аналітика', href: '/dashboard/analytics', icon: BarChart3, roles: ['manager', 'clerk', 'director', 'deputy_director', 'deputy_head'] },
   { name: 'Сповіщення', href: '/dashboard/notifications', icon: Bell },
-  { name: 'Підрозділи', href: '/dashboard/departments', icon: Users, roles: ['specialist', 'manager', 'director', 'admin', 'clerk'] },
+  { name: 'Підрозділи', href: '/dashboard/departments', icon: Users, roles: ['specialist', 'manager', 'director', 'deputy_director', 'deputy_head', 'admin', 'clerk', 'lawyer', 'accountant', 'hr'] },
   { name: 'Конструктор', href: '/dashboard/layouts', icon: Settings, roles: ['admin'] },
   { name: 'Налаштування', href: '/dashboard/settings', icon: Settings, roles: ['admin'] },
 ]
@@ -164,12 +164,22 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const roleTitle =
     user?.role === 'admin'
       ? 'Адмін'
+      : user?.role === 'deputy_head'
+      ? 'Заступник голови'
+      : user?.role === 'deputy_director'
+      ? 'Заступник директора'
       : user?.role === 'director'
       ? 'Директор'
       : user?.role === 'clerk'
       ? 'Діловод'
       : user?.role === 'manager'
       ? 'Керівник'
+      : user?.role === 'lawyer'
+      ? 'Юрист'
+      : user?.role === 'accountant'
+      ? 'Бухгалтер'
+      : user?.role === 'hr'
+      ? 'Кадровик'
       : 'Спеціаліст'
 
   const toggleTheme = () => {
