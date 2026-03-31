@@ -32,7 +32,7 @@ export class SearchService {
       ],
     };
 
-    if (user.role === 'specialist') {
+    if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
       reportWhere.authorId = user.id;
       taskWhere.OR = [
         ...(taskWhere.OR || []),
@@ -40,10 +40,12 @@ export class SearchService {
         { reporterId: user.id },
       ];
       usersWhere.id = user.id;
-    } else if (user.role === 'manager') {
-      reportWhere.departmentId = user.departmentId;
-      taskWhere.departmentId = user.departmentId;
-      usersWhere.departmentId = user.departmentId;
+    } else if (['manager', 'clerk', 'director', 'deputy_director'].includes(user.role)) {
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      const safeIds = scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean);
+      reportWhere.departmentId = { in: safeIds };
+      taskWhere.departmentId = { in: safeIds };
+      usersWhere.departmentId = { in: safeIds };
     }
 
     const [reports, tasks, users] = await Promise.all([
@@ -99,5 +101,32 @@ export class SearchService {
         departmentName: item.department?.nameUk || '',
       })),
     };
+  }
+
+  private async resolveDepartmentScopeIds(departmentId?: string | null): Promise<string[]> {
+    if (!departmentId) return [];
+    const current = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+      select: { id: true, parentId: true },
+    });
+    if (!current) return [];
+
+    const rootId = current.parentId || current.id;
+    const root = await this.prisma.department.findUnique({
+      where: { id: rootId },
+      select: { id: true, children: { select: { id: true } } },
+    });
+    if (!root) return [departmentId];
+    return [root.id, ...(root.children || []).map((child) => child.id)];
+  }
+
+  private async resolveScopedDepartmentIdsForUser(user: any): Promise<string[]> {
+    if (!user?.departmentId) return [];
+    if (user.role === 'manager') return [user.departmentId];
+    if (user.role === 'deputy_director') {
+      const configured = Array.isArray(user.scopeDepartmentIds) ? user.scopeDepartmentIds.filter(Boolean) : [];
+      if (configured.length > 0) return configured;
+    }
+    return this.resolveDepartmentScopeIds(user.departmentId);
   }
 }

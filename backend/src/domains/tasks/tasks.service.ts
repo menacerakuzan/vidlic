@@ -174,7 +174,7 @@ export class TasksService {
       throw new BadRequestException('Підрозділ не визначено для задачі');
     }
 
-    if (!this.canCreateTaskInDepartment(user, targetDepartmentId)) {
+    if (!(await this.canCreateTaskInDepartment(user, targetDepartmentId))) {
       throw new ForbiddenException('Немає доступу до створення задачі в цьому підрозділі');
     }
 
@@ -231,6 +231,11 @@ export class TasksService {
 
     if (!(await this.canManageTask(task, user))) {
       throw new ForbiddenException('Немає доступу до редагування задачі');
+    }
+
+    const targetDepartmentId = dto.departmentId ?? task.departmentId;
+    if (!(await this.canCreateTaskInDepartment(user, targetDepartmentId))) {
+      throw new ForbiddenException('Немає доступу до цільового підрозділу задачі');
     }
 
     if (dto.assigneeId) {
@@ -321,6 +326,14 @@ export class TasksService {
 
     if (!task) {
       throw new NotFoundException('Задачу не знайдено');
+    }
+
+    const actor = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, departmentId: true, scopeDepartmentIds: true },
+    });
+    if (!actor || !(await this.canViewTask(task, actor))) {
+      throw new ForbiddenException('Немає доступу до задачі');
     }
 
     const comment = await this.prisma.taskComment.create({
@@ -417,11 +430,16 @@ export class TasksService {
     };
   }
 
-  private canCreateTaskInDepartment(user: any, departmentId: string) {
+  private async canCreateTaskInDepartment(user: any, departmentId: string) {
     if (user.role === 'admin') return true;
-    if (user.role === 'deputy_head') return false;
-    if (['director', 'deputy_director'].includes(user.role)) {
-      return true;
+    if (user.role === 'deputy_head') return true;
+    if (user.role === 'director') {
+      const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+      return scopedDepartmentIds.includes(departmentId);
+    }
+    if (user.role === 'deputy_director') {
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      return scopedDepartmentIds.includes(departmentId);
     }
     if (user.role === 'manager' || user.role === 'specialist' || user.role === 'clerk') {
       return user.departmentId === departmentId;

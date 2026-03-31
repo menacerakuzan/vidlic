@@ -1,6 +1,7 @@
-import { IsString, IsOptional, IsEnum, IsDateString, IsUUID, IsInt, Min } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsDateString, IsUUID, IsInt, Min, Max, IsNumber } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TaskStatus, TaskPriority } from '@prisma/client';
+import { Type } from 'class-transformer';
 
 export class CreateTaskDto {
   @ApiProperty({ example: 'Підготувати звіт' })
@@ -90,10 +91,17 @@ export class UpdateTaskDto {
 export class TaskQueryDto {
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
   page?: number = 1;
 
   @ApiPropertyOptional({ default: 50 })
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(100)
   limit?: number = 50;
 
   @ApiPropertyOptional({ enum: TaskStatus })

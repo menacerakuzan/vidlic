@@ -3,6 +3,8 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto, RefreshTokenDto, LogoutDto, MeDto } from './dto/auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
+import { Roles } from './decorators/roles.decorator';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -19,6 +21,9 @@ export class AuthController {
   }
 
   @Post('register')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Реєстрація нового користувача (Admin)' })
   @ApiResponse({ status: 201, description: 'Користувач створений' })
   @ApiResponse({ status: 409, description: 'Email вже існує' })

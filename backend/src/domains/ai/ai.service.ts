@@ -201,12 +201,16 @@ export class AiService {
 
   private async canAccessReport(report: any, user: any): Promise<boolean> {
     if (!user) return false;
-    if (user.role === 'admin') return true;
+    if (user.role === 'admin' || user.role === 'deputy_head') return true;
     if (report.author?.id === user.id) return true;
     if (report.currentApprover?.id === user.id) return true;
-    if (!['manager', 'clerk', 'director'].includes(user.role)) return false;
+    if (!['manager', 'clerk', 'director', 'deputy_director'].includes(user.role)) return false;
 
-    const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+    const scopedDepartmentIds = user.role === 'deputy_director'
+      ? (Array.isArray(user.scopeDepartmentIds) && user.scopeDepartmentIds.length > 0
+        ? user.scopeDepartmentIds.filter(Boolean)
+        : await this.resolveDepartmentScopeIds(user.departmentId))
+      : await this.resolveDepartmentScopeIds(user.departmentId);
     return scopedDepartmentIds.includes(report.department?.id);
   }
 

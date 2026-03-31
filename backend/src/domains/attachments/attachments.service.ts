@@ -103,23 +103,57 @@ export class AttachmentsService {
     mode: 'read' | 'write',
   ) {
     if (entityType === 'report') {
-      const report = await this.prisma.report.findUnique({ where: { id: reportId } });
+      const report = await this.prisma.report.findUnique({
+        where: { id: reportId },
+        include: { department: { select: { id: true, parentId: true } } },
+      });
       if (!report) throw new NotFoundException('Звіт не знайдено');
-      if (user.role === 'admin' || user.role === 'director') return report;
-      if (user.role === 'manager' && report.departmentId === user.departmentId) return report;
+      if (user.role === 'admin' || user.role === 'deputy_head') return report;
       if (report.authorId === user.id) return report;
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      if (['director', 'deputy_director', 'clerk'].includes(user.role) && scopedDepartmentIds.includes(report.departmentId)) return report;
+      if (user.role === 'manager' && user.departmentId === report.departmentId) return report;
       throw new ForbiddenException('Немає доступу до цього звіту');
     }
 
     const task = await this.prisma.task.findUnique({ where: { id: taskId } });
     if (!task) throw new NotFoundException('Задачу не знайдено');
-    if (user.role === 'admin') return task;
-    if ((user.role === 'director' || user.role === 'manager') && task.departmentId === user.departmentId) return task;
-    if (user.role === 'specialist') {
+    if (user.role === 'admin' || user.role === 'deputy_head') return task;
+    if (['director', 'deputy_director', 'manager', 'clerk'].includes(user.role)) {
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      if (scopedDepartmentIds.includes(task.departmentId)) return task;
+    }
+    if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
       if (mode === 'read' && (task.assigneeId === user.id || task.reporterId === user.id)) return task;
       if (mode === 'write' && task.reporterId === user.id) return task;
     }
     throw new ForbiddenException('Немає доступу до цієї задачі');
+  }
+
+  private async resolveDepartmentScopeIds(departmentId?: string | null): Promise<string[]> {
+    if (!departmentId) return [];
+    const current = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+      select: { id: true, parentId: true },
+    });
+    if (!current) return [];
+    const rootId = current.parentId || current.id;
+    const root = await this.prisma.department.findUnique({
+      where: { id: rootId },
+      select: { id: true, children: { select: { id: true } } },
+    });
+    if (!root) return [departmentId];
+    return [root.id, ...(root.children || []).map((item) => item.id)];
+  }
+
+  private async resolveScopedDepartmentIdsForUser(user: any): Promise<string[]> {
+    if (!user?.departmentId) return [];
+    if (user.role === 'manager') return [user.departmentId];
+    if (user.role === 'deputy_director') {
+      const configured = Array.isArray(user.scopeDepartmentIds) ? user.scopeDepartmentIds.filter(Boolean) : [];
+      if (configured.length > 0) return configured;
+    }
+    return this.resolveDepartmentScopeIds(user.departmentId);
   }
 
   private safeFileName(value: string) {

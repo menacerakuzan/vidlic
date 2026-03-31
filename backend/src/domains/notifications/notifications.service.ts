@@ -19,13 +19,15 @@ export class NotificationsService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(userId: string, page = 1, limit = 20) {
-    const skip = (page - 1) * limit;
+    const safePage = Number.isFinite(page) ? Math.max(1, Math.floor(page)) : 1;
+    const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(100, Math.floor(limit))) : 20;
+    const skip = (safePage - 1) * safeLimit;
 
     const [notifications, total, unreadCount] = await Promise.all([
       this.prisma.notification.findMany({
         where: { userId },
         skip,
-        take: limit,
+        take: safeLimit,
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.notification.count({ where: { userId } }),
@@ -35,7 +37,7 @@ export class NotificationsService {
     return {
       data: notifications.map(this.mapNotification),
       unreadCount,
-      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      meta: { page: safePage, limit: safeLimit, total, totalPages: Math.ceil(total / safeLimit) },
     };
   }
 

@@ -12,13 +12,21 @@ export class UsersService {
     private auditService: AuditService,
   ) {}
 
-  async findAll(query: UserQueryDto) {
+  async findAll(query: UserQueryDto, actor: any) {
     const { page = 1, limit = 20, departmentId, role, search } = query;
     const skip = (page - 1) * limit;
 
     const where: any = {};
+    const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForActor(actor);
+
+    if (scopedDepartmentIds) {
+      where.departmentId = { in: scopedDepartmentIds };
+    }
     
     if (departmentId) {
+      if (scopedDepartmentIds && !scopedDepartmentIds.includes(departmentId)) {
+        throw new ForbiddenException('Немає доступу до користувачів цього підрозділу');
+      }
       where.departmentId = departmentId;
     }
     
@@ -55,7 +63,7 @@ export class UsersService {
     };
   }
 
-  async findById(id: string) {
+  async findById(id: string, actor: any) {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: { department: true, position: true },
@@ -65,6 +73,7 @@ export class UsersService {
       throw new NotFoundException('Користувача не знайдено');
     }
 
+    await this.assertCanAccessUser(actor, user);
     return this.mapUser(user);
   }
 
@@ -79,6 +88,14 @@ export class UsersService {
 
     if (actor.role === 'director' || actor.role === 'deputy_director') {
       await this.assertDirectorScope(actor, dto.departmentId, dto.role);
+    }
+
+    if (dto.role !== 'deputy_director' && dto.scopeDepartmentIds && dto.scopeDepartmentIds.length > 0) {
+      throw new ForbiddenException('scopeDepartmentIds можна задавати лише для заступника директора');
+    }
+    if (dto.role === 'deputy_director') {
+      const validatedScope = await this.validateScopeDepartmentIds(actor, dto.scopeDepartmentIds || [], dto.departmentId);
+      dto.scopeDepartmentIds = validatedScope;
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
@@ -123,6 +140,17 @@ export class UsersService {
       if (user.role === 'director' || user.role === 'admin') {
         throw new ForbiddenException('Директор не може змінювати директора або адміністратора');
       }
+    }
+
+    if ((dto.role ?? user.role) !== 'deputy_director' && dto.scopeDepartmentIds !== undefined) {
+      throw new ForbiddenException('scopeDepartmentIds можна змінювати лише для заступника директора');
+    }
+    if ((dto.role ?? user.role) === 'deputy_director' && dto.scopeDepartmentIds !== undefined) {
+      dto.scopeDepartmentIds = await this.validateScopeDepartmentIds(
+        actor,
+        dto.scopeDepartmentIds || [],
+        dto.departmentId ?? user.departmentId,
+      );
     }
 
     const oldValue = { 
@@ -291,5 +319,62 @@ export class UsersService {
     if (role && (role === 'admin' || role === 'director' || role === 'deputy_head')) {
       throw new ForbiddenException('Директор не може призначати адміністратора, директора або заступника голови');
     }
+  }
+
+  private async resolveDepartmentScopeIds(departmentId?: string | null): Promise<string[]> {
+    if (!departmentId) return [];
+    const current = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+      select: { id: true, parentId: true },
+    });
+    if (!current) return [];
+
+    const rootId = current.parentId || current.id;
+    const root = await this.prisma.department.findUnique({
+      where: { id: rootId },
+      select: {
+        id: true,
+        children: { select: { id: true } },
+      },
+    });
+    if (!root) return [departmentId];
+    return [root.id, ...(root.children || []).map((child) => child.id)];
+  }
+
+  private async resolveScopedDepartmentIdsForActor(actor: any): Promise<string[] | null> {
+    if (!actor || actor.role === 'admin' || actor.role === 'deputy_head') return null;
+    if (!actor.departmentId) return [];
+    if (actor.role === 'director') return this.resolveDepartmentScopeIds(actor.departmentId);
+    if (actor.role === 'deputy_director') {
+      const configured = Array.isArray(actor.scopeDepartmentIds) ? actor.scopeDepartmentIds.filter(Boolean) : [];
+      if (configured.length > 0) return configured;
+      return this.resolveDepartmentScopeIds(actor.departmentId);
+    }
+    return [actor.departmentId];
+  }
+
+  private async assertCanAccessUser(actor: any, targetUser: any) {
+    if (!actor || actor.role === 'admin' || actor.role === 'deputy_head') return;
+    if (targetUser.id === actor.id) return;
+    const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForActor(actor);
+    if (!scopedDepartmentIds || scopedDepartmentIds.includes(targetUser.departmentId)) return;
+    throw new ForbiddenException('Немає доступу до цього користувача');
+  }
+
+  private async validateScopeDepartmentIds(actor: any, scopeDepartmentIds: string[], defaultDepartmentId?: string | null) {
+    const normalized = Array.from(new Set((scopeDepartmentIds || []).filter(Boolean)));
+    if (actor?.role === 'admin') return normalized;
+    if (!['director', 'deputy_director'].includes(actor?.role)) {
+      throw new ForbiddenException('Недостатньо прав для встановлення scopeDepartmentIds');
+    }
+
+    const actorScope = await this.resolveDepartmentScopeIds(actor.departmentId);
+    const fallback = defaultDepartmentId ? [defaultDepartmentId] : [];
+    const candidate = normalized.length > 0 ? normalized : fallback;
+    const invalid = candidate.filter((id) => !actorScope.includes(id));
+    if (invalid.length > 0) {
+      throw new ForbiddenException('Можна задавати scopeDepartmentIds лише в межах вашого департаменту');
+    }
+    return candidate;
   }
 }

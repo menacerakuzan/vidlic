@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Param, UseGuards, Req, Res } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, UseGuards, Req, Res, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
 import * as fs from 'fs';
@@ -28,7 +28,15 @@ export class ExportController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Завантажити експортований файл' })
   @ApiResponse({ status: 200, description: 'Файл' })
-  download(@Param('fileName') fileName: string, @Res() res: Response) {
+  async download(@Param('fileName') fileName: string, @Req() req: any, @Res() res: Response) {
+    const exportJob = await this.exportService.findByFileName(fileName);
+    if (!exportJob) {
+      return res.status(404).json({ error: 'Файл не знайдено' });
+    }
+    if (req.user?.role !== 'admin' && exportJob.userId !== req.user?.id) {
+      throw new ForbiddenException('Немає доступу до цього файлу');
+    }
+
     const filePath = path.join(process.cwd(), 'exports', fileName);
     
     if (!fs.existsSync(filePath)) {

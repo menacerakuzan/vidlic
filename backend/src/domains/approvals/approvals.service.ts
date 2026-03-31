@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma.service';
 import { ApprovalActionType, ApprovalEntityType, ApprovalStatus, UserRole } from '@prisma/client';
 
@@ -153,6 +153,12 @@ export class ApprovalsService {
     if (!instance) {
       throw new BadRequestException('Approval instance not found');
     }
+    if (instance.status !== ApprovalStatus.pending) {
+      throw new BadRequestException('Approval instance is not pending');
+    }
+    if (instance.currentApproverId && instance.currentApproverId !== actorId) {
+      throw new ForbiddenException('Current actor is not assigned approver');
+    }
 
     const sortedSteps = instance.flow.steps.sort((a, b) => a.stepOrder - b.stepOrder);
     const currentIndex = sortedSteps.findIndex(s => s.stepOrder === instance.currentStepOrder);
@@ -195,6 +201,12 @@ export class ApprovalsService {
 
     if (!instance) {
       throw new BadRequestException('Approval instance not found');
+    }
+    if (instance.status !== ApprovalStatus.pending) {
+      throw new BadRequestException('Approval instance is not pending');
+    }
+    if (instance.currentApproverId && instance.currentApproverId !== actorId) {
+      throw new ForbiddenException('Current actor is not assigned approver');
     }
 
     const updated = await this.prisma.approvalInstance.update({

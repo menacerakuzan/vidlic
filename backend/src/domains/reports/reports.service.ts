@@ -149,6 +149,10 @@ export class ReportsService {
     if (!departmentId) {
       throw new BadRequestException('Департамент не визначено. Зверніться до адміністратора.');
     }
+
+    if (!(await this.canCreateReportInDepartment(user, departmentId))) {
+      throw new ForbiddenException('Немає доступу до створення звіту в цьому підрозділі');
+    }
     
     const report = await this.prisma.report.create({
       data: {
@@ -565,6 +569,18 @@ export class ReportsService {
         }
       }
     }
+    if (user.role === 'director' || user.role === 'deputy_director') {
+      if (report.currentApproverId && report.currentApproverId !== user.id) {
+        throw new ForbiddenException('Ви не є погоджувачем цього звіту');
+      }
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      if (!scopedDepartmentIds.includes(report.departmentId)) {
+        throw new ForbiddenException('Немає доступу до цього звіту');
+      }
+      if (!report.currentApproverId && routing.directorId !== user.id) {
+        throw new ForbiddenException('Ви не є погоджувачем цього звіту');
+      }
+    }
 
     const approvalResult = await this.approvalsService.approve({
       entityType: ApprovalEntityType.report,
@@ -625,7 +641,10 @@ export class ReportsService {
   }
 
   async reject(id: string, dto: RejectReportDto, user: any) {
-    const report = await this.prisma.report.findUnique({ where: { id } });
+    const report = await this.prisma.report.findUnique({
+      where: { id },
+      include: { department: { include: { parent: true } } },
+    });
 
     if (!report) {
       throw new NotFoundException('Звіт не знайдено');
@@ -637,6 +656,22 @@ export class ReportsService {
 
     if (!dto.comment) {
       throw new BadRequestException('При відхиленні обов\'язковий коментар');
+    }
+
+    if (report.currentApproverId && report.currentApproverId !== user.id) {
+      throw new ForbiddenException('Ви не є погоджувачем цього звіту');
+    }
+    const routing = await this.getApprovalRoutingContext(report.departmentId);
+    if (!report.currentApproverId) {
+      const expectedApproverId =
+        report.status === 'pending_manager'
+          ? routing.managerId
+          : report.status === 'pending_clerk'
+          ? routing.clerkId
+          : routing.directorId;
+      if (expectedApproverId !== user.id) {
+        throw new ForbiddenException('Ви не є погоджувачем цього звіту');
+      }
     }
 
     await this.approvalsService.reject({
@@ -666,10 +701,16 @@ export class ReportsService {
   }
 
   async getHistory(id: string, user: any) {
-    const report = await this.prisma.report.findUnique({ where: { id } });
+    const report = await this.prisma.report.findUnique({
+      where: { id },
+      include: { department: { select: { parentId: true } }, author: { select: { id: true, role: true } } },
+    });
 
     if (!report) {
       throw new NotFoundException('Звіт не знайдено');
+    }
+    if (!(await this.canViewReport(report, user))) {
+      throw new ForbiddenException('Немає доступу до цього звіту');
     }
 
     const history = await this.prisma.reportStatusHistory.findMany({
@@ -1144,6 +1185,19 @@ export class ReportsService {
       return Array.from(expanded);
     }
     return this.resolveDepartmentScopeIds(user.departmentId);
+  }
+
+  private async canCreateReportInDepartment(user: any, departmentId: string): Promise<boolean> {
+    if (!user || !departmentId) return false;
+    if (user.role === 'admin' || user.role === 'deputy_head') return true;
+    if (['specialist', 'lawyer', 'accountant', 'hr', 'manager', 'clerk'].includes(user.role)) {
+      return user.departmentId === departmentId;
+    }
+    if (user.role === 'director' || user.role === 'deputy_director') {
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      return scopedDepartmentIds.includes(departmentId);
+    }
+    return false;
   }
 
   private resolveAuthorName(author: any): string {
@@ -1999,8 +2053,11 @@ export class ReportsService {
   }
 
   private async ensureCanAccessActivitiesPlan(report: any, user: any) {
-    if (user?.role === 'admin') return;
-    const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user?.departmentId);
+    if (user?.role === 'admin' || user?.role === 'deputy_head') return;
+    const scopedDepartmentIds = ['director', 'deputy_director', 'manager']
+      .includes(user?.role)
+      ? await this.resolveScopedDepartmentIdsForUser(user)
+      : await this.resolveDepartmentScopeIds(user?.departmentId);
     if (!scopedDepartmentIds.includes(report.departmentId)) {
       throw new ForbiddenException('Немає доступу до цього плану заходів');
     }

@@ -30,7 +30,11 @@ export class AnalyticsController {
     @Req() req: any,
   ) {
     const dept = departmentId || req.user.departmentId;
-    return this.analyticsService.getReportsStats(dept, new Date(dateFrom || Date.now() - 30 * 24 * 60 * 60 * 1000));
+    return this.analyticsService.getReportsStats(
+      req.user,
+      dept,
+      new Date(dateFrom || Date.now() - 30 * 24 * 60 * 60 * 1000),
+    );
   }
 
   @Get('tasks-stats')
@@ -39,7 +43,7 @@ export class AnalyticsController {
   @ApiResponse({ status: 200, description: 'Статистика задач' })
   getTasksStats(@Query('departmentId') departmentId: string, @Req() req: any) {
     const dept = departmentId || req.user.departmentId;
-    return this.analyticsService.getTasksStats(dept);
+    return this.analyticsService.getTasksStats(req.user, dept);
   }
 
   @Get('department-performance')
@@ -50,8 +54,10 @@ export class AnalyticsController {
     @Query('departmentId') departmentId: string,
     @Query('dateFrom') dateFrom: string,
     @Query('dateTo') dateTo: string,
+    @Req() req: any,
   ) {
     return this.analyticsService.getDepartmentPerformance(
+      req.user,
       departmentId,
       new Date(dateFrom || Date.now() - 30 * 24 * 60 * 60 * 1000),
       new Date(dateTo || Date.now()),

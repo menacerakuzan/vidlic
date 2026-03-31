@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { ForbiddenException, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -33,11 +33,11 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
       overdueTasks,
       recentReports,
     ] = await Promise.all([
-      this.getReportsStats(departmentId, dateFrom),
-      this.getTasksStats(departmentId),
+      this.getReportsStats(user, departmentId, dateFrom),
+      this.getTasksStats(user, departmentId),
       this.getPendingApprovals(user),
-      this.getOverdueTasks(departmentId),
-      this.getRecentReports(departmentId),
+      this.getOverdueTasks(user, departmentId),
+      this.getRecentReports(user, departmentId),
     ]);
 
     return {
@@ -49,7 +49,8 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async getReportsStats(departmentId: string | null, dateFrom: Date) {
+  async getReportsStats(user: any, departmentId: string | null, dateFrom: Date) {
+    await this.assertDepartmentAccess(user, departmentId);
     const where: any = {
       createdAt: { gte: dateFrom },
     };
@@ -79,7 +80,8 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async getTasksStats(departmentId: string | null) {
+  async getTasksStats(user: any, departmentId: string | null) {
+    await this.assertDepartmentAccess(user, departmentId);
     const where: any = {};
 
     if (departmentId) {
@@ -124,10 +126,11 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
       where.currentApproverId = user.id;
     } else if (user.role === 'clerk') {
       where.currentApproverId = user.id;
-    } else if (user.role === 'director') {
+    } else if (user.role === 'director' || user.role === 'deputy_director') {
       where.status = 'pending_director';
-      if (user.departmentId) {
-        where.departmentId = user.departmentId;
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      if (scopedDepartmentIds.length) {
+        where.departmentId = { in: scopedDepartmentIds };
       }
     } else if (user.role === 'specialist') {
       return { total: 0, items: [] };
@@ -156,7 +159,8 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async getOverdueTasks(departmentId: string | null) {
+  async getOverdueTasks(user: any, departmentId: string | null) {
+    await this.assertDepartmentAccess(user, departmentId);
     const where: any = {
       status: { not: 'done' },
       dueDate: { lt: new Date() },
@@ -183,7 +187,8 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     }));
   }
 
-  async getRecentReports(departmentId: string | null) {
+  async getRecentReports(user: any, departmentId: string | null) {
+    await this.assertDepartmentAccess(user, departmentId);
     const where: any = {};
 
     if (departmentId) {
@@ -209,7 +214,8 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     }));
   }
 
-  async getDepartmentPerformance(departmentId: string, dateFrom: Date, dateTo: Date) {
+  async getDepartmentPerformance(user: any, departmentId: string, dateFrom: Date, dateTo: Date) {
+    await this.assertDepartmentAccess(user, departmentId);
     const reports = await this.prisma.report.findMany({
       where: {
         departmentId,
@@ -237,9 +243,14 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
 
   async getWorkload(user: any, departmentId?: string) {
     const deptId = departmentId || user.departmentId || null;
+    await this.assertDepartmentAccess(user, deptId);
     const whereUser: any = { isActive: true };
-    if (user.role === 'manager' || user.role === 'director') {
+    if (user.role === 'manager') {
       whereUser.departmentId = deptId;
+    }
+    if (user.role === 'director' || user.role === 'deputy_director') {
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      whereUser.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [deptId].filter(Boolean) };
     }
     if (user.role === 'specialist') {
       whereUser.id = user.id;
@@ -404,5 +415,43 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
 
   private isSameDay(a: Date, b: Date) {
     return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  }
+
+  private async assertDepartmentAccess(user: any, departmentId: string | null | undefined) {
+    if (!departmentId) return;
+    if (user?.role === 'admin' || user?.role === 'deputy_head') return;
+    const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+    if (!scopedDepartmentIds.includes(departmentId)) {
+      throw new ForbiddenException('Немає доступу до аналітики цього підрозділу');
+    }
+  }
+
+  private async resolveDepartmentScopeIds(departmentId?: string | null): Promise<string[]> {
+    if (!departmentId) return [];
+    const current = await this.prisma.department.findUnique({
+      where: { id: departmentId },
+      select: { id: true, parentId: true },
+    });
+    if (!current) return [];
+    const rootId = current.parentId || current.id;
+    const root = await this.prisma.department.findUnique({
+      where: { id: rootId },
+      select: { id: true, children: { select: { id: true } } },
+    });
+    if (!root) return [departmentId];
+    return [root.id, ...(root.children || []).map((item) => item.id)];
+  }
+
+  private async resolveScopedDepartmentIdsForUser(user: any): Promise<string[]> {
+    if (!user?.departmentId) return [];
+    if (user.role === 'manager') return [user.departmentId];
+    if (user.role === 'deputy_director') {
+      const configured = Array.isArray(user.scopeDepartmentIds) ? user.scopeDepartmentIds.filter(Boolean) : [];
+      if (configured.length > 0) return configured;
+    }
+    if (['director', 'clerk', 'deputy_director', 'lawyer', 'accountant', 'hr', 'specialist'].includes(user.role)) {
+      return this.resolveDepartmentScopeIds(user.departmentId);
+    }
+    return [user.departmentId];
   }
 }

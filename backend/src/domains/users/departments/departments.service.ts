@@ -124,7 +124,9 @@ export class DepartmentsService {
       if (!actor.departmentId) {
         throw new ForbiddenException('Для директора не визначено базовий підрозділ');
       }
-      if (dto.parentId !== actor.departmentId) {
+      const managedDepartmentIds = await this.resolveVisibleDepartmentIds(actor);
+      const allowedParentIds = new Set((managedDepartmentIds || []).filter(Boolean));
+      if (!dto.parentId || !allowedParentIds.has(dto.parentId)) {
         throw new ForbiddenException('Директор може створювати відділи лише у своєму департаменті');
       }
       if (dto.directorId && dto.directorId !== actor.id) {
@@ -177,9 +179,8 @@ export class DepartmentsService {
       throw new ForbiddenException('Недостатньо прав для оновлення підрозділу');
     }
     if (isDirector) {
-      const canManageOwnDepartment = department.id === actor.departmentId;
-      const canManageOwnChild = department.parentId === actor.departmentId;
-      if (!canManageOwnDepartment && !canManageOwnChild) {
+      const managedDepartmentIds = await this.resolveVisibleDepartmentIds(actor);
+      if (!managedDepartmentIds || !managedDepartmentIds.includes(department.id)) {
         throw new ForbiddenException('Директор може змінювати тільки свій департамент або його відділи');
       }
       if (dto.directorId && dto.directorId !== actor.id) {
@@ -317,8 +318,11 @@ export class DepartmentsService {
     if (actor.role === 'specialist') {
       throw new ForbiddenException('Недостатньо прав для редагування шаблону');
     }
-    if ((actor.role === 'manager' || actor.role === 'director' || actor.role === 'deputy_director') && actor.departmentId !== departmentId) {
-      throw new ForbiddenException('Можна редагувати шаблон лише свого підрозділу');
+    if (actor.role === 'manager' || actor.role === 'director' || actor.role === 'deputy_director') {
+      const visibleDepartmentIds = await this.resolveVisibleDepartmentIds(actor);
+      if (visibleDepartmentIds && !visibleDepartmentIds.includes(departmentId)) {
+        throw new ForbiddenException('Можна редагувати шаблон лише в межах свого підрозділу');
+      }
     }
 
     const template = await this.prisma.departmentReportTemplate.upsert({

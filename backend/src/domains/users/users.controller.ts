@@ -17,8 +17,8 @@ export class UsersController {
   @Permissions('users:read')
   @ApiOperation({ summary: 'Отримати список користувачів' })
   @ApiResponse({ status: 200, description: 'Список користувачів' })
-  findAll(@Query() query: UserQueryDto) {
-    return this.usersService.findAll(query);
+  findAll(@Query() query: UserQueryDto, @Req() req: any) {
+    return this.usersService.findAll(query, req.user);
   }
 
   @Get(':id')
@@ -26,8 +26,8 @@ export class UsersController {
   @ApiOperation({ summary: 'Отримати користувача за ID' })
   @ApiResponse({ status: 200, description: 'Дані користувача' })
   @ApiResponse({ status: 404, description: 'Користувача не знайдено' })
-  findById(@Param('id') id: string) {
-    return this.usersService.findById(id);
+  findById(@Param('id') id: string, @Req() req: any) {
+    return this.usersService.findById(id, req.user);
   }
 
   @Post()

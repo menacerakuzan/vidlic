@@ -2,7 +2,6 @@ import { Controller, Delete, Get, Param, Post, Query, Req, Res, UseGuards, Body 
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { AttachmentEntityType } from '@prisma/client';
-import { Permissions } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { CreateAttachmentDto } from './dto/attachments.dto';
@@ -16,7 +15,6 @@ export class AttachmentsController {
   constructor(private readonly attachmentsService: AttachmentsService) {}
 
   @Post()
-  @Permissions('tasks:write')
   @ApiOperation({ summary: 'Завантажити вкладення до звіту або задачі' })
   @ApiResponse({ status: 201, description: 'Вкладення створено' })
   create(@Body() dto: CreateAttachmentDto, @Req() req: any) {
@@ -24,14 +22,12 @@ export class AttachmentsController {
   }
 
   @Get()
-  @Permissions('tasks:read')
   @ApiOperation({ summary: 'Список вкладень по сутності' })
   list(@Query('entityType') entityType: AttachmentEntityType, @Query('entityId') entityId: string, @Req() req: any) {
     return this.attachmentsService.list(entityType, entityId, req.user);
   }
 
   @Get(':id/download')
-  @Permissions('tasks:read')
   @ApiOperation({ summary: 'Завантажити файл вкладення' })
   async download(@Param('id') id: string, @Req() req: any, @Res() res: Response) {
     const data = await this.attachmentsService.readFile(id, req.user);
@@ -41,7 +37,6 @@ export class AttachmentsController {
   }
 
   @Delete(':id')
-  @Permissions('tasks:write')
   @ApiOperation({ summary: 'Видалити вкладення' })
   remove(@Param('id') id: string, @Req() req: any) {
     return this.attachmentsService.delete(id, req.user);

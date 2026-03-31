@@ -16,6 +16,22 @@ export interface ExportDto {
 export class ExportService {
   constructor(private prisma: PrismaService) {}
 
+  async findByFileName(fileName: string) {
+    const normalized = path.join(process.cwd(), 'exports', fileName);
+    return this.prisma.exportJob.findFirst({
+      where: {
+        filePath: normalized,
+        status: 'completed',
+      },
+      select: {
+        id: true,
+        userId: true,
+        entityType: true,
+        entityId: true,
+      },
+    });
+  }
+
   async export(dto: ExportDto, userId: string) {
     const { entityType, entityId, format } = dto;
 
