@@ -233,6 +233,23 @@ export class TasksService {
       throw new ForbiddenException('Немає доступу до редагування задачі');
     }
 
+    const actorIsAssignee = task.assigneeId === user.id;
+    const actorIsReporter = task.reporterId === user.id;
+    const actorIsLeader = ['admin', 'director', 'deputy_director', 'manager'].includes(user.role);
+    const assigneeOnlyUpdate =
+      dto.assigneeId !== undefined &&
+      dto.title === undefined &&
+      dto.description === undefined &&
+      dto.priority === undefined &&
+      dto.executionHours === undefined &&
+      dto.departmentId === undefined &&
+      dto.dueDate === undefined;
+
+    // Assignees can only forward tasks assigned to them; full edit is reserved for creator/leadership.
+    if (actorIsAssignee && !actorIsReporter && !actorIsLeader && !assigneeOnlyUpdate) {
+      throw new ForbiddenException('Ви можете лише перенаправити задачу, яку вам призначили');
+    }
+
     const targetDepartmentId = dto.departmentId ?? task.departmentId;
     if (!(await this.canCreateTaskInDepartment(user, targetDepartmentId))) {
       throw new ForbiddenException('Немає доступу до цільового підрозділу задачі');
@@ -243,7 +260,14 @@ export class TasksService {
       if (!assignee || assignee.departmentId !== (dto.departmentId ?? task.departmentId)) {
         throw new BadRequestException('Виконавець має бути з того ж підрозділу');
       }
-      this.assertTaskAssignmentAllowed(user, assignee.role);
+      const isActorReassigningOwnedTask = actorIsAssignee && dto.assigneeId !== task.assigneeId;
+      if (isActorReassigningOwnedTask) {
+        if (assignee.role === 'director') {
+          throw new ForbiddenException('Задачу не можна перенаправити директору');
+        }
+      } else {
+        this.assertTaskAssignmentAllowed(user, assignee.role);
+      }
     }
 
     const updated = await this.prisma.task.update({
@@ -432,7 +456,7 @@ export class TasksService {
 
   private async canCreateTaskInDepartment(user: any, departmentId: string) {
     if (user.role === 'admin') return true;
-    if (user.role === 'deputy_head') return true;
+    if (user.role === 'deputy_head') return false;
     if (user.role === 'director') {
       const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
       return scopedDepartmentIds.includes(departmentId);
@@ -460,7 +484,7 @@ export class TasksService {
       if (scoped.includes(task.departmentId)) return true;
     }
     if (user.role === 'clerk' && (task.reporterId === user.id || task.assigneeId === user.id)) return true;
-    if (user.role === 'specialist' && task.reporterId === user.id) return true;
+    if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role) && (task.reporterId === user.id || task.assigneeId === user.id)) return true;
     return false;
   }
 

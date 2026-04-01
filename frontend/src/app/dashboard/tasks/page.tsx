@@ -124,7 +124,31 @@ export default function TasksPage() {
       setAssignableUsers(normalizedUsers)
       setTeam(normalizedUsers)
     } else {
-      setTaskActionError('Не вдалося завантажити список співробітників для призначення задач.')
+      let loadedFallback = false
+      const departmentId = user?.department?.id
+      if (departmentId) {
+        const teamResp = await fetch(`/api/v1/departments/${departmentId}/team`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        if (teamResp.ok) {
+          const teamData = await teamResp.json()
+          const normalizedUsers: TeamUser[] = Array.isArray(teamData)
+            ? teamData.map((u: any) => ({
+                id: u.id,
+                firstName: u.firstName,
+                lastName: u.lastName,
+                role: u.role,
+                department: u.department || null,
+              }))
+            : []
+          setAssignableUsers(normalizedUsers)
+          setTeam(normalizedUsers)
+          loadedFallback = true
+        }
+      }
+      if (!loadedFallback) {
+        setTaskActionError('Не вдалося завантажити список співробітників для призначення задач.')
+      }
     }
 
     if (transparencyResp.ok) {
@@ -413,6 +437,11 @@ export default function TasksPage() {
     if (!user?.id) return []
     return tasks.filter((task) => task.reporter?.id === user.id)
   }, [tasks, user?.id])
+  const assignedToMeTasks = useMemo(() => {
+    if (!user?.id) return []
+    return tasks.filter((task) => task.assignee?.id === user.id)
+  }, [tasks, user?.id])
+  const canManageVisibleTasks = ['admin', 'director', 'deputy_director', 'manager', 'deputy_head'].includes(user?.role || '')
 
   const workloadByUser = useMemo(() => {
     const map = new Map<string, { userId: string; name: string; active: number; overdue: number; critical: number }>()
@@ -674,6 +703,7 @@ export default function TasksPage() {
                       >
                         <option value="">Перенаправити на...</option>
                         {availableSorted
+                          .filter((member) => member.role !== 'director')
                           .filter((member) => !task.department?.id || member.department?.id === task.department.id)
                           .map((member) => (
                             <option key={member.id} value={member.id}>
@@ -690,6 +720,73 @@ export default function TasksPage() {
                       </button>
                     </div>
                   )}
+                </div>
+                <button
+                  onClick={() => deleteTask(task.id)}
+                  disabled={deletingTaskId === task.id}
+                  className="rounded border border-rose-300 px-3 py-1.5 text-xs text-rose-700 disabled:opacity-60"
+                >
+                  {deletingTaskId === task.id ? 'Видалення...' : 'Видалити'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
+          <h2 className="text-lg font-semibold">Задачі, призначені мені</h2>
+          {assignedToMeTasks.length === 0 && (
+            <p className="text-sm text-slate-500 dark:text-slate-400">Наразі призначених задач немає.</p>
+          )}
+          {assignedToMeTasks.map((task) => (
+            <div key={task.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+              <div>
+                <p className="text-sm font-medium">{task.title}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Статус: {task.status} · Автор: {task.reporter ? `${task.reporter.firstName} ${task.reporter.lastName}` : '—'}
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <select
+                    value={reassignToUserId[task.id] || ''}
+                    onChange={(e) => setReassignToUserId((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                    className="h-8 rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  >
+                    <option value="">Перенаправити на...</option>
+                    {availableSorted
+                      .filter((member) => member.role !== 'director')
+                      .filter((member) => !task.department?.id || member.department?.id === task.department.id)
+                      .map((member) => (
+                        <option key={member.id} value={member.id}>
+                          {member.firstName} {member.lastName}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    onClick={() => reassignTask(task)}
+                    disabled={reassigningTaskId === task.id || !(reassignToUserId[task.id] || '')}
+                    className="rounded border border-primary px-2 py-1 text-xs text-primary disabled:opacity-60"
+                  >
+                    {reassigningTaskId === task.id ? '...' : 'Перенаправити'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {canManageVisibleTasks && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
+            <h2 className="text-lg font-semibold">Керування видимими задачами</h2>
+            {tasks.length === 0 && (
+              <p className="text-sm text-slate-500 dark:text-slate-400">Задач для керування немає.</p>
+            )}
+            {tasks.map((task) => (
+              <div key={task.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                <div>
+                  <p className="text-sm font-medium">{task.title}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Статус: {task.status} {task.assignee ? `· Виконавець: ${task.assignee.firstName} ${task.assignee.lastName}` : ''}
+                  </p>
                 </div>
                 <button
                   onClick={() => deleteTask(task.id)}
