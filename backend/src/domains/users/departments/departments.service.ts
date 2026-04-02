@@ -348,10 +348,26 @@ export class DepartmentsService {
   }
 
   private async resolveVisibleDepartmentIds(actor?: any): Promise<string[] | null> {
-    if (!actor || actor.role === 'admin' || actor.role === 'deputy_head') return null;
+    if (!actor || actor.role === 'admin') return null;
     if (!actor.departmentId) return [];
 
     if (actor.role === 'deputy_director') {
+      const configured = Array.isArray(actor.scopeDepartmentIds) ? actor.scopeDepartmentIds.filter(Boolean) : [];
+      if (configured.length) {
+        const expanded = new Set<string>();
+        for (const depId of configured) {
+          expanded.add(depId);
+          const dep = await this.prisma.department.findUnique({
+            where: { id: depId },
+            select: { children: { select: { id: true } } },
+          });
+          for (const child of dep?.children || []) expanded.add(child.id);
+        }
+        return Array.from(expanded);
+      }
+    }
+
+    if (actor.role === 'deputy_head') {
       const configured = Array.isArray(actor.scopeDepartmentIds) ? actor.scopeDepartmentIds.filter(Boolean) : [];
       if (configured.length) {
         const expanded = new Set<string>();

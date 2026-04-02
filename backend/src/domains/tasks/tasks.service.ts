@@ -23,7 +23,7 @@ export class TasksService {
         { assigneeId: user.id },
         { reporterId: user.id },
       ];
-    } else if (['manager', 'director', 'deputy_director'].includes(user.role)) {
+    } else if (['manager', 'director', 'deputy_director', 'deputy_head'].includes(user.role)) {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
       where.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) };
       where.NOT = {
@@ -97,7 +97,7 @@ export class TasksService {
         { assigneeId: user.id },
         { reporterId: user.id },
       ];
-    } else if (['manager', 'director', 'deputy_director'].includes(user.role)) {
+    } else if (['manager', 'director', 'deputy_director', 'deputy_head'].includes(user.role)) {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
       where.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) };
       where.NOT = {
@@ -507,9 +507,8 @@ export class TasksService {
 
   private async canViewTask(task: any, user: any) {
     if (user.role === 'admin') return true;
-    if (user.role === 'deputy_head') return true;
     if (this.shouldHideFromLeadership(task, user) && task.reporterId !== user.id) return false;
-    if (user.role === 'director' || user.role === 'manager') {
+    if (user.role === 'director' || user.role === 'manager' || user.role === 'deputy_head') {
       const scoped = await this.resolveScopedDepartmentIdsForUser(user);
       if (scoped.includes(task.departmentId)) return true;
     }
@@ -523,7 +522,7 @@ export class TasksService {
   }
 
   private shouldHideFromLeadership(task: any, user: any) {
-    if (!(['director', 'deputy_director', 'manager'].includes(user.role))) return false;
+    if (!(['director', 'deputy_director', 'manager', 'deputy_head'].includes(user.role))) return false;
     if (task.isPrivate) return true;
 
     const reporterRole = task?.reporter?.role;
@@ -620,6 +619,22 @@ export class TasksService {
       return this.resolveDepartmentScopeIds(user.departmentId);
     }
     if (user.role === 'deputy_director') {
+      const configured = this.getScopedDepartmentIdsFromUserPayload(user);
+      if (configured.length > 0) {
+        const expanded = new Set<string>();
+        for (const depId of configured) {
+          expanded.add(depId);
+          const dep = await this.prisma.department.findUnique({
+            where: { id: depId },
+            select: { children: { select: { id: true } } },
+          });
+          for (const child of dep?.children || []) expanded.add(child.id);
+        }
+        return Array.from(expanded);
+      }
+      return this.resolveDepartmentScopeIds(user.departmentId);
+    }
+    if (user.role === 'deputy_head') {
       const configured = this.getScopedDepartmentIdsFromUserPayload(user);
       if (configured.length > 0) {
         const expanded = new Set<string>();

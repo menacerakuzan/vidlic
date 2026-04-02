@@ -71,6 +71,7 @@ export default function TasksPage() {
   const [reassigningTaskId, setReassigningTaskId] = useState('')
   const [reassignToUserId, setReassignToUserId] = useState<Record<string, string>>({})
   const [taskActionError, setTaskActionError] = useState('')
+  const [selectedAssignDepartmentId, setSelectedAssignDepartmentId] = useState('')
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const loadAll = async () => {
@@ -195,6 +196,7 @@ export default function TasksPage() {
   }, [assignableUsers, loads])
 
   const canAssign = user?.role === 'director' || user?.role === 'deputy_director' || user?.role === 'manager'
+  const isDirectorMode = user?.role === 'director' || user?.role === 'deputy_director'
   const canFilterByEmployee = ['director', 'deputy_director', 'manager', 'deputy_head'].includes(user?.role || '')
 
   const visibleDepartmentOptions = useMemo(() => {
@@ -221,12 +223,38 @@ export default function TasksPage() {
     )
   }, [tasks, assignableUsers])
 
+  const assignDepartmentOptions = useMemo(() => {
+    if (!isDirectorMode) return visibleDepartmentOptions
+    const sections = visibleDepartmentOptions.filter((dep) => dep.parentId)
+    return sections.length > 0 ? sections : visibleDepartmentOptions
+  }, [isDirectorMode, visibleDepartmentOptions])
+
+  useEffect(() => {
+    if (!canAssign) return
+    if (selectedAssignDepartmentId) return
+    if (user?.role === 'manager' && user?.department?.id) {
+      setSelectedAssignDepartmentId(user.department.id)
+      return
+    }
+    if (assignDepartmentOptions.length > 0) {
+      setSelectedAssignDepartmentId(assignDepartmentOptions[0].id)
+    }
+  }, [canAssign, selectedAssignDepartmentId, user?.role, user?.department?.id, assignDepartmentOptions])
+
+  const availableForAssignment = useMemo(() => {
+    if (!canAssign) return []
+    const targetDepartmentId = selectedAssignDepartmentId || createDepartmentId
+    if (!targetDepartmentId) return availableSorted
+    return availableSorted.filter((member) => member.department?.id === targetDepartmentId)
+  }, [canAssign, selectedAssignDepartmentId, createDepartmentId, availableSorted])
+
   const createTask = async () => {
     if (!accessToken || !title.trim()) return
     setCreating(true)
 
-    const selectedAssignee = availableSorted.find((member) => member.id === assigneeId)
+    const selectedAssignee = availableForAssignment.find((member) => member.id === assigneeId)
     const targetDepartmentId =
+      selectedAssignDepartmentId ||
       createDepartmentId ||
       selectedAssignee?.department?.id ||
       user?.department?.id
@@ -260,6 +288,9 @@ export default function TasksPage() {
       setDescription('')
       setAssigneeId('')
       setCreateDepartmentId('')
+      if (isDirectorMode && assignDepartmentOptions.length > 0) {
+        setSelectedAssignDepartmentId(assignDepartmentOptions[0].id)
+      }
       setDueDate('')
       setExecutionHours('')
       await loadAll()
@@ -561,6 +592,41 @@ export default function TasksPage() {
           </div>
         )}
 
+        {isDirectorMode && assignDepartmentOptions.length > 0 && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
+            <p className="text-sm font-semibold">Вибір відділу для роботи з задачами</p>
+            <div className="flex flex-wrap gap-2">
+              {assignDepartmentOptions.map((dep) => (
+                <button
+                  key={dep.id}
+                  onClick={() => setSelectedAssignDepartmentId(dep.id)}
+                  className={`rounded-lg border px-3 py-2 text-xs ${
+                    selectedAssignDepartmentId === dep.id
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-200'
+                  }`}
+                >
+                  {dep.nameUk || dep.name || dep.id}
+                </button>
+              ))}
+            </div>
+            {selectedAssignDepartmentId && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                {availableSorted
+                  .filter((member) => member.department?.id === selectedAssignDepartmentId)
+                  .map((member) => (
+                    <div key={member.id} className="rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800/70">
+                      <p className="text-sm font-semibold">{member.firstName} {member.lastName}</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-300">
+                        Активні: <b>{loads[member.id] || 0}</b>
+                      </p>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-4 gap-3 dark:border-slate-700 dark:bg-slate-900">
           <input
             value={title}
@@ -580,9 +646,16 @@ export default function TasksPage() {
             <option value="high">{getPriorityLabel('high')}</option>
             <option value="critical">{getPriorityLabel('critical')}</option>
           </select>
-          <select value={createDepartmentId} onChange={(e) => setCreateDepartmentId(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
-            <option value="">Підрозділ за замовчуванням</option>
-            {visibleDepartmentOptions.map((dep) => (
+          <select
+            value={selectedAssignDepartmentId || createDepartmentId}
+            onChange={(e) => {
+              setSelectedAssignDepartmentId(e.target.value)
+              setCreateDepartmentId(e.target.value)
+            }}
+            className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          >
+            <option value="">Підрозділ для задачі</option>
+            {(isDirectorMode ? assignDepartmentOptions : visibleDepartmentOptions).map((dep) => (
               <option key={dep.id} value={dep.id}>
                 {dep.nameUk || dep.name || dep.id}
               </option>
@@ -591,7 +664,7 @@ export default function TasksPage() {
           {canAssign ? (
             <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
               <option value="">Без виконавця</option>
-              {availableSorted.map((member) => (
+              {availableForAssignment.map((member) => (
                 <option key={member.id} value={member.id}>
                   {member.firstName} {member.lastName} ({loads[member.id] || 0})
                 </option>

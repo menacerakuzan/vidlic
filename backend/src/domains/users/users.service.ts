@@ -90,10 +90,10 @@ export class UsersService {
       await this.assertDirectorScope(actor, dto.departmentId, dto.role);
     }
 
-    if (dto.role !== 'deputy_director' && dto.scopeDepartmentIds && dto.scopeDepartmentIds.length > 0) {
-      throw new ForbiddenException('scopeDepartmentIds можна задавати лише для заступника директора');
+    if (!['deputy_director', 'deputy_head'].includes(dto.role) && dto.scopeDepartmentIds && dto.scopeDepartmentIds.length > 0) {
+      throw new ForbiddenException('scopeDepartmentIds можна задавати лише для заступника директора або заступника голови');
     }
-    if (dto.role === 'deputy_director') {
+    if (['deputy_director', 'deputy_head'].includes(dto.role)) {
       const validatedScope = await this.validateScopeDepartmentIds(actor, dto.scopeDepartmentIds || [], dto.departmentId);
       dto.scopeDepartmentIds = validatedScope;
     }
@@ -142,10 +142,10 @@ export class UsersService {
       }
     }
 
-    if ((dto.role ?? user.role) !== 'deputy_director' && dto.scopeDepartmentIds !== undefined) {
-      throw new ForbiddenException('scopeDepartmentIds можна змінювати лише для заступника директора');
+    if (!['deputy_director', 'deputy_head'].includes(dto.role ?? user.role) && dto.scopeDepartmentIds !== undefined) {
+      throw new ForbiddenException('scopeDepartmentIds можна змінювати лише для заступника директора або заступника голови');
     }
-    if ((dto.role ?? user.role) === 'deputy_director' && dto.scopeDepartmentIds !== undefined) {
+    if (['deputy_director', 'deputy_head'].includes(dto.role ?? user.role) && dto.scopeDepartmentIds !== undefined) {
       dto.scopeDepartmentIds = await this.validateScopeDepartmentIds(
         actor,
         dto.scopeDepartmentIds || [],
@@ -316,8 +316,8 @@ export class UsersService {
       throw new ForbiddenException('Доступ дозволено лише до курованих підрозділів');
     }
 
-    if (role && (role === 'admin' || role === 'director' || role === 'deputy_head')) {
-      throw new ForbiddenException('Директор не може призначати адміністратора, директора або заступника голови');
+    if (role && (role === 'admin' || role === 'director')) {
+      throw new ForbiddenException('Директор не може призначати адміністратора або директора');
     }
   }
 
@@ -342,10 +342,15 @@ export class UsersService {
   }
 
   private async resolveScopedDepartmentIdsForActor(actor: any): Promise<string[] | null> {
-    if (!actor || actor.role === 'admin' || actor.role === 'deputy_head') return null;
+    if (!actor || actor.role === 'admin') return null;
     if (!actor.departmentId) return [];
     if (actor.role === 'director') return this.resolveDepartmentScopeIds(actor.departmentId);
     if (actor.role === 'deputy_director') {
+      const configured = Array.isArray(actor.scopeDepartmentIds) ? actor.scopeDepartmentIds.filter(Boolean) : [];
+      if (configured.length > 0) return configured;
+      return this.resolveDepartmentScopeIds(actor.departmentId);
+    }
+    if (actor.role === 'deputy_head') {
       const configured = Array.isArray(actor.scopeDepartmentIds) ? actor.scopeDepartmentIds.filter(Boolean) : [];
       if (configured.length > 0) return configured;
       return this.resolveDepartmentScopeIds(actor.departmentId);
@@ -354,7 +359,7 @@ export class UsersService {
   }
 
   private async assertCanAccessUser(actor: any, targetUser: any) {
-    if (!actor || actor.role === 'admin' || actor.role === 'deputy_head') return;
+    if (!actor || actor.role === 'admin') return;
     if (targetUser.id === actor.id) return;
     const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForActor(actor);
     if (!scopedDepartmentIds || scopedDepartmentIds.includes(targetUser.departmentId)) return;
