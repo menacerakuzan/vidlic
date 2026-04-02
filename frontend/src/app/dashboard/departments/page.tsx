@@ -45,11 +45,14 @@ export default function DepartmentsPage() {
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('')
   const [team, setTeam] = useState<TeamUser[]>([])
   const [loading, setLoading] = useState(true)
-  const [newDepartmentName, setNewDepartmentName] = useState('')
-  const [newDepartmentCode, setNewDepartmentCode] = useState('')
-  const [newDepartmentDirectorId, setNewDepartmentDirectorId] = useState('')
-  const [newDepartmentManagerId, setNewDepartmentManagerId] = useState('')
-  const [newDepartmentClerkId, setNewDepartmentClerkId] = useState('')
+  const [newRootDepartmentName, setNewRootDepartmentName] = useState('')
+  const [newRootDepartmentCode, setNewRootDepartmentCode] = useState('')
+  const [newRootDepartmentDirectorId, setNewRootDepartmentDirectorId] = useState('')
+  const [newSectionName, setNewSectionName] = useState('')
+  const [newSectionCode, setNewSectionCode] = useState('')
+  const [newSectionParentId, setNewSectionParentId] = useState('')
+  const [newSectionManagerId, setNewSectionManagerId] = useState('')
+  const [newSectionClerkId, setNewSectionClerkId] = useState('')
   const [usersOptions, setUsersOptions] = useState<UserOption[]>([])
   const [selectedDirectorId, setSelectedDirectorId] = useState('')
   const [selectedManagerId, setSelectedManagerId] = useState('')
@@ -111,6 +114,19 @@ export default function DepartmentsPage() {
     () => departments.find((d) => d.id === selectedRootDepartmentId),
     [departments, selectedRootDepartmentId],
   )
+  const deputyDirectorCandidates = useMemo(() => {
+    if (!selectedRootDepartmentId) return []
+    const rootAndChildren = new Set<string>([
+      selectedRootDepartmentId,
+      ...(childDepartmentsMap.get(selectedRootDepartmentId) || []).map((d) => d.id),
+    ])
+    return usersOptions
+      .filter((candidate) => {
+        if (!candidate.departmentId || !rootAndChildren.has(candidate.departmentId)) return false
+        return !['admin', 'director', 'deputy_head'].includes(candidate.role)
+      })
+      .sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, 'uk'))
+  }, [selectedRootDepartmentId, childDepartmentsMap, usersOptions])
 
   const loadDepartments = async () => {
     if (!accessToken) return
@@ -228,6 +244,21 @@ export default function DepartmentsPage() {
   }, [selectedRootDepartment])
 
   useEffect(() => {
+    if (!isAdmin && !isDirector) return
+    if (isDirector) {
+      setNewSectionParentId(user?.department?.id || '')
+      return
+    }
+    if (selectedRootDepartmentId) {
+      setNewSectionParentId(selectedRootDepartmentId)
+      return
+    }
+    if (rootDepartments.length > 0) {
+      setNewSectionParentId(rootDepartments[0].id)
+    }
+  }, [isAdmin, isDirector, selectedRootDepartmentId, rootDepartments, user?.department?.id])
+
+  useEffect(() => {
     if (!selectedRootDepartmentId) {
       setSelectedDeputyDirectorIds([])
       setSelectedDeputyHeadId('')
@@ -237,7 +268,8 @@ export default function DepartmentsPage() {
       selectedRootDepartmentId,
       ...(childDepartmentsMap.get(selectedRootDepartmentId) || []).map((d) => d.id),
     ])
-    const scopedDeputies = deputyDirectors
+    const scopedDeputies = usersOptions
+      .filter((u) => u.role === 'deputy_director')
       .filter((d) => {
         const scope = Array.isArray(d.scopeDepartmentIds) ? d.scopeDepartmentIds : []
         return scope.some((id) => rootAndChildren.has(id))
@@ -251,23 +283,20 @@ export default function DepartmentsPage() {
       return scope.some((id) => rootAndChildren.has(id))
     })
     setSelectedDeputyHeadId(scopedHead?.id || '')
-  }, [selectedRootDepartmentId, deputyDirectors, childDepartmentsMap, usersOptions])
+  }, [selectedRootDepartmentId, childDepartmentsMap, usersOptions])
 
   const canManageEmployees = isDirector || isAdmin
   const canEditTemplate = isAdmin || isDirector || user?.role === 'manager'
 
-  const createDepartment = async () => {
-    if ((!isAdmin && !isDirector) || !accessToken || !newDepartmentName.trim() || !newDepartmentCode.trim()) return
+  const createRootDepartment = async () => {
+    if (!isAdmin || !accessToken || !newRootDepartmentName.trim() || !newRootDepartmentCode.trim()) return
     setActionError('')
     setActionSuccess('')
     const payload = {
-      name: newDepartmentName.trim(),
-      nameUk: newDepartmentName.trim(),
-      code: newDepartmentCode.trim().toUpperCase(),
-      parentId: isDirector ? (user?.department?.id || undefined) : undefined,
-      directorId: isDirector ? user?.id : (newDepartmentDirectorId || undefined),
-      managerId: newDepartmentManagerId || undefined,
-      clerkId: newDepartmentClerkId || undefined,
+      name: newRootDepartmentName.trim(),
+      nameUk: newRootDepartmentName.trim(),
+      code: newRootDepartmentCode.trim().toUpperCase(),
+      directorId: newRootDepartmentDirectorId || undefined,
     }
     const resp = await fetch('/api/v1/departments', {
       method: 'POST',
@@ -278,17 +307,56 @@ export default function DepartmentsPage() {
       body: JSON.stringify(payload),
     })
     if (resp.ok) {
-      setNewDepartmentName('')
-      setNewDepartmentCode('')
-      setNewDepartmentDirectorId('')
-      setNewDepartmentManagerId('')
-      setNewDepartmentClerkId('')
+      setNewRootDepartmentName('')
+      setNewRootDepartmentCode('')
+      setNewRootDepartmentDirectorId('')
       await loadDepartments()
-      setActionSuccess(isDirector ? 'Відділ створено у межах департаменту' : 'Підрозділ створено')
+      setActionSuccess('Департамент створено')
       return
     }
     const err = await resp.json().catch(() => null)
-    setActionError(err?.message || 'Не вдалося створити підрозділ')
+    setActionError(err?.message || 'Не вдалося створити департамент')
+  }
+
+  const createSection = async () => {
+    if ((!isAdmin && !isDirector) || !accessToken || !newSectionName.trim() || !newSectionCode.trim()) return
+    const parentId = isDirector ? (user?.department?.id || '') : newSectionParentId
+    if (!parentId) {
+      setActionError('Спочатку оберіть департамент для створення відділу')
+      return
+    }
+
+    setActionError('')
+    setActionSuccess('')
+    const payload = {
+      name: newSectionName.trim(),
+      nameUk: newSectionName.trim(),
+      code: newSectionCode.trim().toUpperCase(),
+      parentId,
+      directorId: isDirector ? user?.id : undefined,
+      managerId: newSectionManagerId || undefined,
+      clerkId: newSectionClerkId || undefined,
+    }
+
+    const resp = await fetch('/api/v1/departments', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+    if (resp.ok) {
+      setNewSectionName('')
+      setNewSectionCode('')
+      setNewSectionManagerId('')
+      setNewSectionClerkId('')
+      await loadDepartments()
+      setActionSuccess('Відділ створено всередині департаменту')
+      return
+    }
+    const err = await resp.json().catch(() => null)
+    setActionError(err?.message || 'Не вдалося створити відділ')
   }
 
   const saveDepartmentLeads = async () => {
@@ -501,19 +569,27 @@ export default function DepartmentsPage() {
     }
 
     const deputyDirectorSet = new Set(selectedDeputyDirectorIds)
-    const deputyUpdates = deputyDirectors
-      .filter((d) => d.departmentId === selectedRootDepartmentId || deputyDirectorSet.has(d.id))
-      .map((d) => {
-        const selected = deputyDirectorSet.has(d.id)
-        return fetch(`/api/v1/users/${d.id}`, {
+    const usersById = new Map(usersOptions.map((option) => [option.id, option]))
+    const deputyCandidateIds = new Set<string>([
+      ...deputyDirectorCandidates.map((candidate) => candidate.id),
+      ...selectedDeputyDirectorIds,
+    ])
+    const deputyUpdates = Array.from(deputyCandidateIds)
+      .map((id) => usersById.get(id))
+      .filter(Boolean)
+      .map((candidate) => {
+        const selected = deputyDirectorSet.has(candidate!.id)
+        const currentScope = Array.isArray(candidate!.scopeDepartmentIds) ? candidate!.scopeDepartmentIds : []
+        return fetch(`/api/v1/users/${candidate!.id}`, {
           method: 'PUT',
           headers: {
             Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            departmentId: selected ? selectedRootDepartmentId : d.departmentId,
-            scopeDepartmentIds: selected ? scopeIds : [],
+            role: selected ? 'deputy_director' : candidate!.role,
+            departmentId: candidate!.departmentId || selectedRootDepartmentId,
+            scopeDepartmentIds: selected ? scopeIds : currentScope,
           }),
         })
       })
@@ -560,34 +636,98 @@ export default function DepartmentsPage() {
         </div>
 
         {(isAdmin || isDirector) && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-6 gap-3 dark:border-slate-700 dark:bg-slate-900">
-            <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder={isDirector ? 'Назва відділу' : 'Назва підрозділу'} value={newDepartmentName} onChange={(e) => setNewDepartmentName(e.target.value)} />
-            <input className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="Код (напр. IT)" value={newDepartmentCode} onChange={(e) => setNewDepartmentCode(e.target.value)} />
-            {isAdmin ? (
-              <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={newDepartmentDirectorId} onChange={(e) => setNewDepartmentDirectorId(e.target.value)}>
-                <option value="">Директор (опційно)</option>
-                {directors.map((d) => (
-                  <option key={d.id} value={d.id}>{d.firstName} {d.lastName}</option>
-                ))}
-              </select>
-            ) : (
-              <div className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 flex items-center dark:border-slate-700 dark:text-slate-400">
-                Директор відділу: {user?.firstName} {user?.lastName}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {isAdmin && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
+                <p className="text-sm font-semibold">Створити департамент</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <input
+                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    placeholder="Назва департаменту"
+                    value={newRootDepartmentName}
+                    onChange={(e) => setNewRootDepartmentName(e.target.value)}
+                  />
+                  <input
+                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    placeholder="Код (напр. DEP-IT)"
+                    value={newRootDepartmentCode}
+                    onChange={(e) => setNewRootDepartmentCode(e.target.value)}
+                  />
+                  <select
+                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    value={newRootDepartmentDirectorId}
+                    onChange={(e) => setNewRootDepartmentDirectorId(e.target.value)}
+                  >
+                    <option value="">Директор (опційно)</option>
+                    {directors.map((d) => (
+                      <option key={d.id} value={d.id}>{d.firstName} {d.lastName}</option>
+                    ))}
+                  </select>
+                </div>
+                <button onClick={createRootDepartment} className="h-10 rounded-lg bg-primary px-4 text-white text-sm font-medium">
+                  Створити департамент
+                </button>
               </div>
             )}
-            <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={newDepartmentManagerId} onChange={(e) => setNewDepartmentManagerId(e.target.value)}>
-              <option value="">Керівник (опційно)</option>
-              {managers.map((m) => (
-                <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
-              ))}
-            </select>
-            <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={newDepartmentClerkId} onChange={(e) => setNewDepartmentClerkId(e.target.value)}>
-              <option value="">Діловод (опційно)</option>
-              {clerks.map((c) => (
-                <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
-              ))}
-            </select>
-            <button onClick={createDepartment} className="h-10 rounded-lg bg-primary text-white text-sm font-medium">{isDirector ? 'Створити відділ' : 'Створити підрозділ'}</button>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
+              <p className="text-sm font-semibold">Створити відділ у департаменті</p>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                {isAdmin ? (
+                  <select
+                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    value={newSectionParentId}
+                    onChange={(e) => setNewSectionParentId(e.target.value)}
+                  >
+                    <option value="">Оберіть департамент</option>
+                    {rootDepartments.map((dep) => (
+                      <option key={dep.id} value={dep.id}>
+                        {dep.nameUk || dep.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 flex items-center dark:border-slate-700 dark:text-slate-400">
+                    Департамент: {selectedRootDepartment?.nameUk || selectedRootDepartment?.name || user?.department?.nameUk || '—'}
+                  </div>
+                )}
+                <input
+                  className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  placeholder="Назва відділу"
+                  value={newSectionName}
+                  onChange={(e) => setNewSectionName(e.target.value)}
+                />
+                <input
+                  className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  placeholder="Код відділу"
+                  value={newSectionCode}
+                  onChange={(e) => setNewSectionCode(e.target.value)}
+                />
+                <select
+                  className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  value={newSectionManagerId}
+                  onChange={(e) => setNewSectionManagerId(e.target.value)}
+                >
+                  <option value="">Керівник (опційно)</option>
+                  {managers.map((m) => (
+                    <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+                  ))}
+                </select>
+                <select
+                  className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  value={newSectionClerkId}
+                  onChange={(e) => setNewSectionClerkId(e.target.value)}
+                >
+                  <option value="">Діловод (опційно)</option>
+                  {clerks.map((c) => (
+                    <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
+                  ))}
+                </select>
+              </div>
+              <button onClick={createSection} className="h-10 rounded-lg bg-primary px-4 text-white text-sm font-medium">
+                Створити відділ
+              </button>
+            </div>
           </div>
         )}
 
@@ -699,7 +839,7 @@ export default function DepartmentsPage() {
                       Заступники директора департаменту
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {deputyDirectors.map((depDir) => (
+                      {deputyDirectorCandidates.map((depDir) => (
                         <label key={depDir.id} className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
                           <input
                             type="checkbox"
@@ -710,7 +850,7 @@ export default function DepartmentsPage() {
                               )
                             }}
                           />
-                          <span>{depDir.firstName} {depDir.lastName}</span>
+                          <span>{depDir.firstName} {depDir.lastName} ({getRoleLabel(depDir.role)})</span>
                         </label>
                       ))}
                     </div>
