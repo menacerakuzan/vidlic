@@ -78,6 +78,7 @@ export default function TasksPage() {
     if (!accessToken || !user) return
     setLoading(true)
     setTaskActionError('')
+    const needsAssignableDirectory = ['director', 'deputy_director', 'manager', 'deputy_head'].includes(user.role)
 
     const taskParams = new URLSearchParams()
     taskParams.set('limit', '100')
@@ -126,8 +127,13 @@ export default function TasksPage() {
       setTeam(normalizedUsers)
     } else {
       let loadedFallback = false
+      if (!needsAssignableDirectory) {
+        setAssignableUsers([])
+        setTeam([])
+        loadedFallback = true
+      }
       const departmentId = user?.department?.id
-      if (departmentId) {
+      if (needsAssignableDirectory && departmentId) {
         const teamResp = await fetch(`/api/v1/departments/${departmentId}/team`, {
           headers: { Authorization: `Bearer ${accessToken}` },
         })
@@ -147,7 +153,7 @@ export default function TasksPage() {
           loadedFallback = true
         }
       }
-      if (!loadedFallback) {
+      if (needsAssignableDirectory && !loadedFallback) {
         setTaskActionError('Не вдалося завантажити список співробітників для призначення задач.')
       }
     }

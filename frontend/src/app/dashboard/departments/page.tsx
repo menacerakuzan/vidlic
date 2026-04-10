@@ -640,21 +640,21 @@ export default function DepartmentsPage() {
             {isAdmin && (
               <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
                 <p className="text-sm font-semibold">Створити департамент</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                   <input
-                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    className="h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     placeholder="Назва департаменту"
                     value={newRootDepartmentName}
                     onChange={(e) => setNewRootDepartmentName(e.target.value)}
                   />
                   <input
-                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    className="h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     placeholder="Код (напр. DEP-IT)"
                     value={newRootDepartmentCode}
                     onChange={(e) => setNewRootDepartmentCode(e.target.value)}
                   />
                   <select
-                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    className="h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     value={newRootDepartmentDirectorId}
                     onChange={(e) => setNewRootDepartmentDirectorId(e.target.value)}
                   >
@@ -672,10 +672,10 @@ export default function DepartmentsPage() {
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
               <p className="text-sm font-semibold">Створити відділ у департаменті</p>
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {isAdmin ? (
                   <select
-                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    className="h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     value={newSectionParentId}
                     onChange={(e) => setNewSectionParentId(e.target.value)}
                   >
@@ -687,24 +687,27 @@ export default function DepartmentsPage() {
                     ))}
                   </select>
                 ) : (
-                  <div className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 flex items-center dark:border-slate-700 dark:text-slate-400">
+                  <div
+                    className="h-10 w-full min-w-0 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 flex items-center overflow-hidden text-ellipsis whitespace-nowrap dark:border-slate-700 dark:text-slate-400"
+                    title={selectedRootDepartment?.nameUk || selectedRootDepartment?.name || user?.department?.nameUk || '—'}
+                  >
                     Департамент: {selectedRootDepartment?.nameUk || selectedRootDepartment?.name || user?.department?.nameUk || '—'}
                   </div>
                 )}
                 <input
-                  className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  className="h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   placeholder="Назва відділу"
                   value={newSectionName}
                   onChange={(e) => setNewSectionName(e.target.value)}
                 />
                 <input
-                  className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  className="h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   placeholder="Код відділу"
                   value={newSectionCode}
                   onChange={(e) => setNewSectionCode(e.target.value)}
                 />
                 <select
-                  className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  className="h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   value={newSectionManagerId}
                   onChange={(e) => setNewSectionManagerId(e.target.value)}
                 >
@@ -714,7 +717,7 @@ export default function DepartmentsPage() {
                   ))}
                 </select>
                 <select
-                  className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  className="h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   value={newSectionClerkId}
                   onChange={(e) => setNewSectionClerkId(e.target.value)}
                 >
