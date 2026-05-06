@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
-import { KanbanBoard, KanbanTask } from '@/components/kanban/kanban-board'
 import { useAuthStore } from '@/store/auth-store'
 
 type Task = {
@@ -50,7 +49,6 @@ export default function CreateTaskPage() {
   const [taskAttachments, setTaskAttachments] = useState<any[]>([])
   const [attachmentsLoading, setAttachmentsLoading] = useState(false)
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
-  const [deletingTaskId, setDeletingTaskId] = useState('')
   const [departments, setDepartments] = useState<DepartmentOption[]>([])
   const [assignableUsers, setAssignableUsers] = useState<TeamUser[]>([])
   const [taskActionError, setTaskActionError] = useState('')
@@ -195,55 +193,6 @@ export default function CreateTaskPage() {
     setTaskActionError(err?.message || 'Не вдалося створити задачу')
   }
 
-  const reassignFromKanban = async (taskId: string, assigneeId: string) => {
-    if (!accessToken) throw new Error('no token')
-    const resp = await fetch(`/api/v1/tasks/${taskId}`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ assigneeId }),
-    })
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => null)
-      throw new Error(err?.message || 'Помилка')
-    }
-    await loadAll()
-  }
-
-  const updateStatus = async (id: string, status: KanbanTask['status']) => {
-    setTasks((prev) => prev.map((task) => (task.id === id ? { ...task, status } : task)))
-    if (!accessToken) return
-    await fetch(`/api/v1/tasks/${id}/status`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ status }),
-    })
-  }
-
-  const deleteTask = async (id: string) => {
-    if (!accessToken) return
-    const ok = window.confirm('Видалити задачу?')
-    if (!ok) return
-    setTaskActionError('')
-    setDeletingTaskId(id)
-    const resp = await fetch(`/api/v1/tasks/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-    setDeletingTaskId('')
-    if (resp.ok) {
-      await loadAll()
-      if (selectedTaskId === id) {
-        setSelectedTaskId('')
-      }
-      return
-    }
-    const err = await resp.json().catch(() => null)
-    setTaskActionError(err?.message || 'Не вдалося видалити задачу')
-  }
-
   const loadTaskAttachments = async (taskId: string) => {
     if (!accessToken || !taskId) return
     setAttachmentsLoading(true)
@@ -314,27 +263,6 @@ export default function CreateTaskPage() {
     window.URL.revokeObjectURL(url)
   }
 
-  const sortedTasks = [...tasks].sort((a, b) => {
-    const aDue = a.dueDate ? new Date(a.dueDate).getTime() : Number.POSITIVE_INFINITY
-    const bDue = b.dueDate ? new Date(b.dueDate).getTime() : Number.POSITIVE_INFINITY
-    if (a.status !== 'done' && b.status !== 'done' && aDue !== bDue) return aDue - bDue
-    if (a.status !== b.status) return a.status === 'done' ? 1 : -1
-    const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0
-    const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0
-    return bCreated - aCreated
-  })
-
-  const kanbanTasks: KanbanTask[] = sortedTasks.map((task) => ({
-    id: task.id,
-    title: task.title,
-    status: task.status,
-    dueDate: task.dueDate,
-    isPrivate: Boolean(task.isPrivate),
-    departmentId: task.department?.id,
-    reporter: task.reporter,
-    assignee: task.assignee,
-  }))
-
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto space-y-6">
@@ -346,7 +274,7 @@ export default function CreateTaskPage() {
 
         <div>
           <h1 className="text-2xl font-semibold font-display">Створити задачу</h1>
-          <p className="text-slate-500 mt-1">Створення, призначення та локальний kanban</p>
+          <p className="text-slate-500 mt-1">Створення і призначення задач</p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-4 gap-3 dark:border-slate-700 dark:bg-slate-900">
@@ -397,18 +325,8 @@ export default function CreateTaskPage() {
           </button>
         </div>
 
-        {loading ? (
+        {loading && (
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Завантаження...</div>
-        ) : (
-          <KanbanBoard
-            tasks={kanbanTasks}
-            onStatusChange={updateStatus}
-            assignableUsers={assignableUsers}
-            loads={loads}
-            currentUserRole={user?.role}
-            onReassign={canAssign ? reassignFromKanban : undefined}
-            onDeleteTask={deleteTask}
-          />
         )}
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
@@ -462,10 +380,6 @@ export default function CreateTaskPage() {
             </div>
           ))}
         </div>
-
-        {deletingTaskId && (
-          <p className="text-xs text-slate-500 dark:text-slate-400">Видаляємо задачу...</p>
-        )}
       </div>
     </DashboardLayout>
   )

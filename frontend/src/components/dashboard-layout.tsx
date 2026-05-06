@@ -29,6 +29,7 @@ const navigation = [
   { name: 'Звіти', href: '/dashboard/reports', icon: FileText },
   { name: 'Заходи', href: '/dashboard/activities', icon: CalendarDays },
   { name: 'Створити задачу', href: '/dashboard/tasks/create', icon: CheckSquare },
+  { name: 'Список задач', href: '/dashboard/tasks/list', icon: CheckSquare },
   { name: 'Навантаження співробітників', href: '/dashboard/tasks/workload', icon: CheckSquare },
   { name: 'Сповіщення', href: '/dashboard/notifications', icon: Bell },
   { name: 'Підрозділи', href: '/dashboard/departments', icon: Users, roles: ['specialist', 'manager', 'director', 'deputy_director', 'deputy_head', 'admin', 'clerk', 'lawyer', 'accountant', 'hr'] },
