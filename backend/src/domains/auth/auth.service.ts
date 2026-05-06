@@ -100,7 +100,7 @@ export class AuthService {
         throw new UnauthorizedException('Користувач не знайдено або неактивний');
       }
 
-      await this.redisService.set(`revoked:${payload.jti}`, '1', 60 * 60 * 24 * 7);
+      await this.redisService.set(`revoked:${payload.jti}`, '1', 60 * 60 * 24 * 30);
 
       const tokens = await this.generateTokens(user);
       await this.createSession(user.id, tokens.refreshToken);
@@ -121,7 +121,7 @@ export class AuthService {
         ignoreExpiration: true,
       });
       
-      await this.redisService.set(`revoked:${payload.jti}`, '1', 60 * 60 * 24 * 7);
+      await this.redisService.set(`revoked:${payload.jti}`, '1', 60 * 60 * 24 * 30);
       
       await this.prisma.session.deleteMany({
         where: { tokenJti: payload.jti },
@@ -176,10 +176,10 @@ export class AuthService {
       jti,
     };
 
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '8h' });
     const refreshToken = this.jwtService.sign(payload, {
       secret: process.env.JWT_REFRESH_SECRET || 'vidlik-refresh-secret',
-      expiresIn: '7d',
+      expiresIn: '30d',
     });
 
     return { accessToken, refreshToken };

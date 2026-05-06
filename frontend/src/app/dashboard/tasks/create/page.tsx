@@ -317,10 +317,11 @@ export default function CreateTaskPage() {
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-4 gap-3 dark:border-slate-700 dark:bg-slate-900">
-          <input
+          <textarea
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="md:col-span-2 h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            rows={3}
+            className="md:col-span-2 min-h-[92px] rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
             placeholder="Назва задачі"
           />
           <textarea

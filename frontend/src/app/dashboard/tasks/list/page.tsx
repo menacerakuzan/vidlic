@@ -35,6 +35,7 @@ export default function TaskListPage() {
   const [users, setUsers] = useState<TeamUser[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [selectedTaskId, setSelectedTaskId] = useState('')
   const [deletingTaskId, setDeletingTaskId] = useState('')
   const [reassigningTaskId, setReassigningTaskId] = useState('')
   const [updatingStatusTaskId, setUpdatingStatusTaskId] = useState('')
@@ -95,6 +96,11 @@ export default function TaskListPage() {
     loadUsers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken])
+
+  useEffect(() => {
+    if (selectedTaskId) return
+    if (tasks.length > 0) setSelectedTaskId(tasks[0].id)
+  }, [tasks, selectedTaskId])
 
   const deleteTask = async (id: string) => {
     if (!accessToken) return
@@ -186,6 +192,10 @@ export default function TaskListPage() {
       return aDue - bDue
     })
   }, [tasks])
+  const selectedTask = useMemo(
+    () => orderedTasks.find((task) => task.id === selectedTaskId) || orderedTasks[0] || null,
+    [orderedTasks, selectedTaskId],
+  )
 
   const statusBadge = (status: Task['status']) => {
     if (status === 'todo') return 'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300'
@@ -237,74 +247,92 @@ export default function TaskListPage() {
           ) : orderedTasks.length === 0 ? (
             <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">Задач поки немає.</div>
           ) : (
-            <div className="divide-y divide-slate-200 dark:divide-slate-700">
-              {orderedTasks.map((task) => (
-                <div key={task.id} className="p-4 flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{task.title}</p>
-                    {task.description && <p className="text-xs text-slate-500 mt-1 whitespace-pre-wrap dark:text-slate-400">{task.description}</p>}
-                    <p className="text-xs text-slate-500 mt-2 dark:text-slate-400">
-                      {task.assignee ? `Виконавець: ${task.assignee.firstName} ${task.assignee.lastName}` : 'Без виконавця'}
+            <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] min-h-[520px]">
+              <div className="border-r border-slate-200 dark:border-slate-700 max-h-[70vh] overflow-y-auto">
+                {orderedTasks.map((task) => (
+                  <button
+                    key={task.id}
+                    onClick={() => setSelectedTaskId(task.id)}
+                    className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 ${selectedTask?.id === task.id ? 'bg-slate-100 dark:bg-slate-800/70' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}`}
+                  >
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2">{task.title}</p>
+                  </button>
+                ))}
+              </div>
+
+              <div className="p-4">
+                {!selectedTask ? (
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Оберіть задачу зі списку.</p>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{selectedTask.title}</p>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadge(selectedTask.status)}`}>
+                        {statusLabel(selectedTask.status)}
+                      </span>
+                    </div>
+                    {selectedTask.description && <p className="text-sm whitespace-pre-wrap text-slate-600 dark:text-slate-300">{selectedTask.description}</p>}
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {selectedTask.assignee ? `Виконавець: ${selectedTask.assignee.firstName} ${selectedTask.assignee.lastName}` : 'Без виконавця'}
                       {' · '}
-                      {task.department?.name || 'Без підрозділу'}
+                      {selectedTask.department?.name || 'Без підрозділу'}
                       {' · '}
-                      {task.dueDate ? `Термін: ${new Date(task.dueDate).toLocaleDateString('uk-UA')}` : 'Без терміну'}
+                      {selectedTask.dueDate ? `Термін: ${new Date(selectedTask.dueDate).toLocaleDateString('uk-UA')}` : 'Без терміну'}
                     </p>
-                    {task.startedAt && (
-                      <p className="text-xs text-emerald-700 mt-1 dark:text-emerald-400">
-                        Початок роботи: {new Date(task.startedAt).toLocaleString('uk-UA')}
+                    {selectedTask.startedAt && (
+                      <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                        Початок роботи: {new Date(selectedTask.startedAt).toLocaleString('uk-UA')}
                       </p>
                     )}
+
+                    <div className="flex flex-wrap items-center gap-2 pt-2">
+                      <select
+                        value={selectedStatuses[selectedTask.id] || selectedTask.status}
+                        onChange={(e) => setSelectedStatuses((prev) => ({ ...prev, [selectedTask.id]: e.target.value as Task['status'] }))}
+                        className="h-8 rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      >
+                        <option value="todo">Нове</option>
+                        <option value="in_progress">В роботі</option>
+                        <option value="done">Виконано</option>
+                      </select>
+                      <button
+                        onClick={() => updateTaskStatus(selectedTask.id)}
+                        disabled={updatingStatusTaskId === selectedTask.id}
+                        className="rounded border border-emerald-300 px-2 py-1 text-xs text-emerald-700 disabled:opacity-60"
+                      >
+                        {updatingStatusTaskId === selectedTask.id ? 'Оновлення...' : 'Оновити статус'}
+                      </button>
+
+                      <select
+                        value={selectedAssignees[selectedTask.id] || ''}
+                        onChange={(e) => setSelectedAssignees((prev) => ({ ...prev, [selectedTask.id]: e.target.value }))}
+                        className="h-8 min-w-[260px] rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      >
+                        <option value="">Перенаправити...</option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.firstName} {u.lastName} · {u.department?.nameUk || u.department?.name || 'Без підрозділу'}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => reassignTask(selectedTask.id)}
+                        disabled={!selectedAssignees[selectedTask.id] || reassigningTaskId === selectedTask.id}
+                        className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200"
+                      >
+                        {reassigningTaskId === selectedTask.id ? 'Передача...' : 'Перенаправити'}
+                      </button>
+                      <button
+                        onClick={() => deleteTask(selectedTask.id)}
+                        disabled={deletingTaskId === selectedTask.id}
+                        className="rounded border border-rose-300 px-2 py-1 text-xs text-rose-700 disabled:opacity-60"
+                      >
+                        {deletingTaskId === selectedTask.id ? 'Видалення...' : 'Видалити'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="shrink-0 flex items-center gap-2">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadge(task.status)}`}>
-                      {statusLabel(task.status)}
-                    </span>
-                    <select
-                      value={selectedStatuses[task.id] || task.status}
-                      onChange={(e) => setSelectedStatuses((prev) => ({ ...prev, [task.id]: e.target.value as Task['status'] }))}
-                      className="h-7 max-w-[150px] rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    >
-                      <option value="todo">Нове</option>
-                      <option value="in_progress">В роботі</option>
-                      <option value="done">Виконано</option>
-                    </select>
-                    <button
-                      onClick={() => updateTaskStatus(task.id)}
-                      disabled={updatingStatusTaskId === task.id}
-                      className="rounded border border-emerald-300 px-2 py-1 text-xs text-emerald-700 disabled:opacity-60"
-                    >
-                      {updatingStatusTaskId === task.id ? 'Оновлення...' : 'Оновити статус'}
-                    </button>
-                    <select
-                      value={selectedAssignees[task.id] || ''}
-                      onChange={(e) => setSelectedAssignees((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                      className="h-7 max-w-[220px] rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    >
-                      <option value="">Перенаправити...</option>
-                      {users.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.firstName} {u.lastName} · {u.department?.nameUk || u.department?.name || 'Без підрозділу'}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={() => reassignTask(task.id)}
-                      disabled={!selectedAssignees[task.id] || reassigningTaskId === task.id}
-                      className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200"
-                    >
-                      {reassigningTaskId === task.id ? 'Передача...' : 'Перенаправити'}
-                    </button>
-                    <button
-                      onClick={() => deleteTask(task.id)}
-                      disabled={deletingTaskId === task.id}
-                      className="rounded border border-rose-300 px-2 py-1 text-xs text-rose-700 disabled:opacity-60"
-                    >
-                      {deletingTaskId === task.id ? 'Видалення...' : 'Видалити'}
-                    </button>
-                  </div>
-                </div>
-              ))}
+                )}
+              </div>
             </div>
           )}
         </div>
