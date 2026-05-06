@@ -612,6 +612,12 @@ export class TasksService {
       const configured = this.getScopedDepartmentIdsFromUserPayload(user);
       if (configured.length > 0) {
         const expanded = new Set<string>();
+        expanded.add(user.departmentId);
+        const own = await this.prisma.department.findUnique({
+          where: { id: user.departmentId },
+          select: { children: { select: { id: true } } },
+        });
+        for (const child of own?.children || []) expanded.add(child.id);
         for (const depId of configured) {
           expanded.add(depId);
           const dep = await this.prisma.department.findUnique({
@@ -628,6 +634,12 @@ export class TasksService {
       const configured = this.getScopedDepartmentIdsFromUserPayload(user);
       if (configured.length > 0) {
         const expanded = new Set<string>();
+        expanded.add(user.departmentId);
+        const own = await this.prisma.department.findUnique({
+          where: { id: user.departmentId },
+          select: { children: { select: { id: true } } },
+        });
+        for (const child of own?.children || []) expanded.add(child.id);
         for (const depId of configured) {
           expanded.add(depId);
           const dep = await this.prisma.department.findUnique({
@@ -646,16 +658,16 @@ export class TasksService {
   private assertTaskAssignmentAllowed(actor: any, assigneeRole: string) {
     if (actor?.role === 'admin') return;
     if (actor?.role === 'director') {
-      if (['deputy_director', 'manager', 'specialist'].includes(assigneeRole)) return;
-      throw new ForbiddenException('Директор може призначати задачі лише заступнику директора, керівнику або спеціалісту');
+      if (['deputy_director', 'manager', 'specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(assigneeRole)) return;
+      throw new ForbiddenException('Директор може призначати задачі лише співробітникам операційних ролей');
     }
     if (actor?.role === 'deputy_director') {
-      if (['manager', 'specialist'].includes(assigneeRole)) return;
-      throw new ForbiddenException('Заступник директора може призначати задачі лише керівнику або спеціалісту');
+      if (['manager', 'specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(assigneeRole)) return;
+      throw new ForbiddenException('Заступник директора може призначати задачі керівнику та співробітникам відділу');
     }
     if (actor?.role === 'manager') {
-      if (assigneeRole === 'specialist') return;
-      throw new ForbiddenException('Керівник може призначати задачі лише спеціалісту');
+      if (['specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(assigneeRole)) return;
+      throw new ForbiddenException('Керівник може призначати задачі лише співробітникам свого відділу');
     }
     if (actor?.role === 'specialist' || actor?.role === 'clerk') {
       if (!assigneeRole || assigneeRole === actor?.role) return;

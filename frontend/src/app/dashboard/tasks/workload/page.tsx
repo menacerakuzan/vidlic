@@ -36,21 +36,34 @@ export default function WorkloadPage() {
     setLoading(true)
     setError('')
 
-    const params = new URLSearchParams()
-    params.set('limit', '300')
+    const all: Task[] = []
+    const pageSize = 100
+    let page = 1
 
-    const resp = await fetch(`/api/v1/tasks?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
+    while (page <= 10) {
+      const params = new URLSearchParams()
+      params.set('limit', String(pageSize))
+      params.set('page', String(page))
 
-    if (!resp.ok) {
-      setError('Не вдалося завантажити задачі.')
-      setLoading(false)
-      return
+      const resp = await fetch(`/api/v1/tasks?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null)
+        setError(err?.message || 'Не вдалося завантажити задачі.')
+        setLoading(false)
+        return
+      }
+
+      const data = await resp.json()
+      const chunk = Array.isArray(data?.data) ? data.data : []
+      all.push(...chunk)
+      if (chunk.length < pageSize) break
+      page += 1
     }
 
-    const data = await resp.json()
-    setTasks(Array.isArray(data?.data) ? data.data : [])
+    setTasks(all)
     setLoading(false)
   }
 

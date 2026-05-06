@@ -188,7 +188,11 @@ export default function CreateTaskPage() {
       }
       setDueDate('')
       await loadAll()
+      return
     }
+
+    const err = await resp.json().catch(() => null)
+    setTaskActionError(err?.message || 'Не вдалося створити задачу')
   }
 
   const reassignFromKanban = async (taskId: string, assigneeId: string) => {
