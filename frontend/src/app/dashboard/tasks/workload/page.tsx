@@ -9,6 +9,7 @@ type Task = {
   title: string
   status: 'todo' | 'in_progress' | 'done'
   dueDate?: string
+  startedAt?: string | null
   assignee?: { id: string; firstName: string; lastName: string }
   department?: { id: string; name?: string; nameUk?: string }
 }
@@ -256,6 +257,11 @@ export default function WorkloadPage() {
                               {task.dueDate ? new Date(task.dueDate).toLocaleDateString('uk-UA') : 'Без терміну'}
                             </span>
                           </div>
+                          {task.startedAt && (
+                            <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">
+                              Почато: {new Date(task.startedAt).toLocaleString('uk-UA')}
+                            </p>
+                          )}
                         </div>
                       )
                     })}

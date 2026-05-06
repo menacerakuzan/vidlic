@@ -1,0 +1,2 @@
+ALTER TABLE "tasks"
+ADD COLUMN "startedAt" TIMESTAMP(3);

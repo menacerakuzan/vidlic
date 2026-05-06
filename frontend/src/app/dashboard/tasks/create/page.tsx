@@ -326,8 +326,8 @@ export default function CreateTaskPage() {
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            rows={5}
-            className="md:col-span-2 min-h-[120px] rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-y"
+            rows={8}
+            className="md:col-span-2 min-h-[180px] rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
             placeholder="Опис задачі"
           />
           <select

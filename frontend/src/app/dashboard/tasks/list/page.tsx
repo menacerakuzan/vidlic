@@ -15,6 +15,7 @@ type Task = {
   reporter?: { id: string; firstName: string; lastName: string } | null
   department?: { id: string; name?: string } | null
   createdAt?: string
+  startedAt?: string | null
 }
 
 type TeamUser = {
@@ -36,7 +37,9 @@ export default function TaskListPage() {
   const [error, setError] = useState('')
   const [deletingTaskId, setDeletingTaskId] = useState('')
   const [reassigningTaskId, setReassigningTaskId] = useState('')
+  const [updatingStatusTaskId, setUpdatingStatusTaskId] = useState('')
   const [selectedAssignees, setSelectedAssignees] = useState<Record<string, string>>({})
+  const [selectedStatuses, setSelectedStatuses] = useState<Record<string, Task['status']>>({})
   const [actionToast, setActionToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
@@ -142,6 +145,30 @@ export default function TaskListPage() {
     setActionToast({ type: 'error', message })
   }
 
+  const updateTaskStatus = async (taskId: string) => {
+    const status = selectedStatuses[taskId]
+    if (!accessToken || !status) return
+    setUpdatingStatusTaskId(taskId)
+    const resp = await fetch(`/api/v1/tasks/${taskId}/status`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status }),
+    })
+    setUpdatingStatusTaskId('')
+    if (resp.ok) {
+      await loadTasks()
+      setActionToast({ type: 'success', message: status === 'in_progress' ? 'Задачу взято в роботу' : 'Статус задачі оновлено' })
+      return
+    }
+    const err = await resp.json().catch(() => null)
+    const message = extractApiErrorMessage(resp.status, err, 'Не вдалося змінити статус задачі')
+    setError(message)
+    setActionToast({ type: 'error', message })
+  }
+
   useEffect(() => {
     if (!actionToast) return
     const timer = window.setTimeout(() => setActionToast(null), 2200)
@@ -223,11 +250,32 @@ export default function TaskListPage() {
                       {' · '}
                       {task.dueDate ? `Термін: ${new Date(task.dueDate).toLocaleDateString('uk-UA')}` : 'Без терміну'}
                     </p>
+                    {task.startedAt && (
+                      <p className="text-xs text-emerald-700 mt-1 dark:text-emerald-400">
+                        Початок роботи: {new Date(task.startedAt).toLocaleString('uk-UA')}
+                      </p>
+                    )}
                   </div>
                   <div className="shrink-0 flex items-center gap-2">
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadge(task.status)}`}>
                       {statusLabel(task.status)}
                     </span>
+                    <select
+                      value={selectedStatuses[task.id] || task.status}
+                      onChange={(e) => setSelectedStatuses((prev) => ({ ...prev, [task.id]: e.target.value as Task['status'] }))}
+                      className="h-7 max-w-[150px] rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    >
+                      <option value="todo">Нове</option>
+                      <option value="in_progress">В роботі</option>
+                      <option value="done">Виконано</option>
+                    </select>
+                    <button
+                      onClick={() => updateTaskStatus(task.id)}
+                      disabled={updatingStatusTaskId === task.id}
+                      className="rounded border border-emerald-300 px-2 py-1 text-xs text-emerald-700 disabled:opacity-60"
+                    >
+                      {updatingStatusTaskId === task.id ? 'Оновлення...' : 'Оновити статус'}
+                    </button>
                     <select
                       value={selectedAssignees[task.id] || ''}
                       onChange={(e) => setSelectedAssignees((prev) => ({ ...prev, [task.id]: e.target.value }))}

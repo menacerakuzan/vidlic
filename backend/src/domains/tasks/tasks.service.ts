@@ -332,6 +332,7 @@ export class TasksService {
       where: { id },
       data: {
         status: dto.status,
+        startedAt: dto.status === 'in_progress' && !task.startedAt ? new Date() : task.startedAt,
         completedAt: dto.status === 'done' ? new Date() : null,
       },
       include: {
@@ -444,6 +445,7 @@ export class TasksService {
       } : null,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
+      startedAt: task.startedAt ?? null,
       completedAt: task.completedAt,
     };
   }
