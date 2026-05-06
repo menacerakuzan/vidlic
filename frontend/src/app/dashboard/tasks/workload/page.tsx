@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { extractApiErrorMessage } from '@/lib/error-message'
 
 type Task = {
   id: string
@@ -62,7 +63,7 @@ export default function WorkloadPage() {
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => null)
-        setError(err?.message || 'Не вдалося завантажити задачі.')
+        setError(extractApiErrorMessage(resp.status, err, 'Не вдалося завантажити задачі.'))
         setLoading(false)
         return
       }

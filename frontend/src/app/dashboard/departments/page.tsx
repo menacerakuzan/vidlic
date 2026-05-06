@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useAuthStore } from '@/store/auth-store'
 import { getRoleLabel } from '@/lib/utils'
+import { extractApiErrorMessage } from '@/lib/error-message'
 
 type Department = {
   id: string
@@ -376,7 +377,7 @@ export default function DepartmentsPage() {
       return
     }
     const err = await resp.json().catch(() => null)
-    setActionError(err?.message || 'Не вдалося створити департамент')
+    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося створити департамент'))
   }
 
   const createSection = async () => {
@@ -419,7 +420,7 @@ export default function DepartmentsPage() {
       return
     }
     const err = await resp.json().catch(() => null)
-    setActionError(err?.message || 'Не вдалося створити відділ')
+    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося створити відділ'))
   }
 
   const saveDepartmentLeads = async () => {
@@ -448,7 +449,7 @@ export default function DepartmentsPage() {
       return
     }
     const err = await resp.json().catch(() => null)
-    setActionError(err?.message || 'Не вдалося оновити керівництво підрозділу')
+    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося оновити керівництво підрозділу'))
   }
 
   const addEmployee = async () => {
@@ -485,7 +486,7 @@ export default function DepartmentsPage() {
       return
     }
     const err = await resp.json().catch(() => null)
-    setActionError(err?.message || 'Не вдалося додати співробітника')
+    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося додати співробітника'))
   }
 
   const deleteEmployee = async (id: string) => {
@@ -500,7 +501,7 @@ export default function DepartmentsPage() {
       return
     }
     const err = await resp.json().catch(() => null)
-    setActionError(err?.message || 'Не вдалося видалити співробітника')
+    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося видалити співробітника'))
   }
 
   const resetEmployeePassword = async (id: string, fullName: string) => {
@@ -528,7 +529,7 @@ export default function DepartmentsPage() {
       return
     }
     const err = await resp.json().catch(() => null)
-    setActionError(err?.message || 'Не вдалося змінити пароль')
+    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося змінити пароль'))
   }
 
   const assignExistingEmployee = async () => {
@@ -554,7 +555,7 @@ export default function DepartmentsPage() {
       return
     }
     const err = await resp.json().catch(() => null)
-    setActionError(err?.message || 'Не вдалося перевести співробітника')
+    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося перевести співробітника'))
   }
 
   const saveDepartmentSupervision = async () => {
@@ -580,7 +581,7 @@ export default function DepartmentsPage() {
     if (!updateDirectorResp.ok) {
       setSavingDeputyScope(false)
       const err = await updateDirectorResp.json().catch(() => null)
-      setActionError(err?.message || 'Не вдалося оновити директора департаменту')
+      setActionError(extractApiErrorMessage(updateDirectorResp.status, err, 'Не вдалося оновити директора департаменту'))
       return
     }
 
@@ -631,7 +632,7 @@ export default function DepartmentsPage() {
       if (!deputyHeadResp.ok) {
         setSavingDeputyScope(false)
         const err = await deputyHeadResp.json().catch(() => null)
-        setActionError(err?.message || 'Не вдалося закріпити заступника голови')
+        setActionError(extractApiErrorMessage(deputyHeadResp.status, err, 'Не вдалося закріпити заступника голови'))
         return
       }
     }

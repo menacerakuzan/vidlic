@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useAuthStore } from '@/store/auth-store'
 import { AnimatePresence, motion } from 'framer-motion'
+import { extractApiErrorMessage } from '@/lib/error-message'
 
 type Task = {
   id: string
@@ -75,7 +76,8 @@ export default function CreateTaskPage() {
       const tasksData = await tasksResp.json()
       setTasks(tasksData.data || [])
     } else {
-      setTaskActionError('Не вдалося завантажити задачі. Оновіть сторінку або спробуйте пізніше.')
+      const err = await tasksResp.json().catch(() => null)
+      setTaskActionError(extractApiErrorMessage(tasksResp.status, err, 'Не вдалося завантажити задачі.'))
     }
 
     if (departmentsResp.ok) {
@@ -193,7 +195,7 @@ export default function CreateTaskPage() {
     }
 
     const err = await resp.json().catch(() => null)
-    const message = err?.message || 'Не вдалося створити задачу'
+    const message = extractApiErrorMessage(resp.status, err, 'Не вдалося створити задачу')
     setTaskActionError(message)
     setActionToast({ type: 'error', message })
   }
@@ -242,7 +244,8 @@ export default function CreateTaskPage() {
       setActionToast({ type: 'success', message: 'Файл додано до задачі' })
       return
     }
-    setActionToast({ type: 'error', message: 'Не вдалося додати файл' })
+    const err = await resp.json().catch(() => null)
+    setActionToast({ type: 'error', message: extractApiErrorMessage(resp.status, err, 'Не вдалося додати файл') })
   }
 
   const deleteAttachment = async (id: string) => {
@@ -256,7 +259,8 @@ export default function CreateTaskPage() {
       setActionToast({ type: 'success', message: 'Файл видалено' })
       return
     }
-    setActionToast({ type: 'error', message: 'Не вдалося видалити файл' })
+    const err = await resp.json().catch(() => null)
+    setActionToast({ type: 'error', message: extractApiErrorMessage(resp.status, err, 'Не вдалося видалити файл') })
   }
 
   const downloadAttachment = async (id: string, fileName: string) => {
@@ -319,10 +323,11 @@ export default function CreateTaskPage() {
             className="md:col-span-2 h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             placeholder="Назва задачі"
           />
-          <input
+          <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="md:col-span-2 h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            rows={5}
+            className="md:col-span-2 min-h-[120px] rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-y"
             placeholder="Опис задачі"
           />
           <select

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { AnimatePresence, motion } from 'framer-motion'
+import { extractApiErrorMessage } from '@/lib/error-message'
 
 type Task = {
   id: string
@@ -59,7 +60,7 @@ export default function TaskListPage() {
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => null)
-        setError(err?.message || 'Не вдалося завантажити задачі.')
+        setError(extractApiErrorMessage(resp.status, err, 'Не вдалося завантажити задачі.'))
         setLoading(false)
         return
       }
@@ -111,7 +112,7 @@ export default function TaskListPage() {
     }
 
     const err = await resp.json().catch(() => null)
-    const message = err?.message || 'Не вдалося видалити задачу'
+    const message = extractApiErrorMessage(resp.status, err, 'Не вдалося видалити задачу')
     setError(message)
     setActionToast({ type: 'error', message })
   }
@@ -136,7 +137,7 @@ export default function TaskListPage() {
       return
     }
     const err = await resp.json().catch(() => null)
-    const message = err?.message || 'Не вдалося перенаправити задачу'
+    const message = extractApiErrorMessage(resp.status, err, 'Не вдалося перенаправити задачу')
     setError(message)
     setActionToast({ type: 'error', message })
   }
@@ -214,7 +215,7 @@ export default function TaskListPage() {
                 <div key={task.id} className="p-4 flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{task.title}</p>
-                    {task.description && <p className="text-xs text-slate-500 mt-1 dark:text-slate-400">{task.description}</p>}
+                    {task.description && <p className="text-xs text-slate-500 mt-1 whitespace-pre-wrap dark:text-slate-400">{task.description}</p>}
                     <p className="text-xs text-slate-500 mt-2 dark:text-slate-400">
                       {task.assignee ? `Виконавець: ${task.assignee.firstName} ${task.assignee.lastName}` : 'Без виконавця'}
                       {' · '}
