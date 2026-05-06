@@ -16,6 +16,14 @@ type DepartmentColumn = {
   departmentId: string
   departmentName: string
   tasks: Task[]
+  divisionTag?: string | null
+}
+
+type DepartmentOption = {
+  id: string
+  name?: string
+  nameUk?: string
+  divisionTag?: string | null
 }
 
 const statusFilters: Array<{ id: 'todo' | 'in_progress' | 'done'; label: string; dot: string }> = [
@@ -26,9 +34,12 @@ const statusFilters: Array<{ id: 'todo' | 'in_progress' | 'done'; label: string;
 
 export default function WorkloadPage() {
   const [tasks, setTasks] = useState<Task[]>([])
+  const [departments, setDepartments] = useState<DepartmentOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedStatuses, setSelectedStatuses] = useState<Array<'todo' | 'in_progress' | 'done'>>(['todo', 'in_progress', 'done'])
+  const [selectedManagement, setSelectedManagement] = useState('')
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState('')
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const loadTasks = async () => {
@@ -72,6 +83,19 @@ export default function WorkloadPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken])
 
+  useEffect(() => {
+    if (!accessToken) return
+    const loadDepartments = async () => {
+      const resp = await fetch('/api/v1/departments', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!resp.ok) return
+      const data = await resp.json()
+      setDepartments(Array.isArray(data) ? data : [])
+    }
+    loadDepartments()
+  }, [accessToken])
+
   const toggleStatus = (status: 'todo' | 'in_progress' | 'done') => {
     setSelectedStatuses((prev) => {
       if (prev.includes(status)) return prev.filter((s) => s !== status)
@@ -91,9 +115,10 @@ export default function WorkloadPage() {
       map.set(departmentId, item)
     })
 
-    return Array.from(map.values())
+    const prepared = Array.from(map.values())
       .map((col) => ({
         ...col,
+        divisionTag: departments.find((dep) => dep.id === col.departmentId)?.divisionTag || null,
         tasks: [...col.tasks].sort((a, b) => {
           if (a.status !== b.status) {
             const order = { todo: 0, in_progress: 1, done: 2 }
@@ -103,7 +128,27 @@ export default function WorkloadPage() {
         }),
       }))
       .sort((a, b) => a.departmentName.localeCompare(b.departmentName, 'uk'))
-  }, [tasks, selectedStatuses])
+    return prepared.filter((col) => {
+      if (selectedDepartmentId && col.departmentId !== selectedDepartmentId) return false
+      if (selectedManagement && (col.divisionTag || '') !== selectedManagement) return false
+      return true
+    })
+  }, [tasks, selectedStatuses, departments, selectedDepartmentId, selectedManagement])
+
+  const managementOptions = useMemo(() => {
+    return Array.from(new Set(departments.map((d) => (d.divisionTag || '').trim()).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b, 'uk'),
+    )
+  }, [departments])
+
+  const departmentOptions = useMemo(() => {
+    return departments
+      .filter((d) => {
+        if (!selectedManagement) return true
+        return (d.divisionTag || '').trim() === selectedManagement
+      })
+      .sort((a, b) => (a.nameUk || a.name || '').localeCompare(b.nameUk || b.name || '', 'uk'))
+  }, [departments, selectedManagement])
 
   const statusMeta = (status: Task['status']) => {
     if (status === 'todo') return { label: 'Нове', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300' }
@@ -135,6 +180,40 @@ export default function WorkloadPage() {
                 </button>
               )
             })}
+          </div>
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
+            <select
+              value={selectedManagement}
+              onChange={(e) => {
+                setSelectedManagement(e.target.value)
+                setSelectedDepartmentId('')
+              }}
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            >
+              <option value="">Усі управління</option>
+              {managementOptions.map((tag) => (
+                <option key={tag} value={tag}>{tag}</option>
+              ))}
+            </select>
+            <select
+              value={selectedDepartmentId}
+              onChange={(e) => setSelectedDepartmentId(e.target.value)}
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            >
+              <option value="">Усі відділи</option>
+              {departmentOptions.map((dep) => (
+                <option key={dep.id} value={dep.id}>{dep.nameUk || dep.name || dep.id}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => {
+                setSelectedManagement('')
+                setSelectedDepartmentId('')
+              }}
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-slate-600"
+            >
+              Скинути фільтри
+            </button>
           </div>
         </div>
 

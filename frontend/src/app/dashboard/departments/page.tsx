@@ -56,6 +56,8 @@ export default function DepartmentsPage() {
   const [newSectionClerkId, setNewSectionClerkId] = useState('')
   const [newSectionDivisionTag, setNewSectionDivisionTag] = useState('')
   const [newManagementName, setNewManagementName] = useState('')
+  const [selectedManagementTag, setSelectedManagementTag] = useState('')
+  const [managementSourceTag, setManagementSourceTag] = useState('')
   const [managementDepartmentIds, setManagementDepartmentIds] = useState<string[]>([])
   const [managementDeputyIds, setManagementDeputyIds] = useState<string[]>([])
   const [savingManagement, setSavingManagement] = useState(false)
@@ -155,6 +157,11 @@ export default function DepartmentsPage() {
       })
       .sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, 'uk'))
   }, [selectedRootDepartmentId, childDepartmentsMap, usersOptions])
+  const managementTags = useMemo(() => {
+    const children = childDepartmentsMap.get(selectedRootDepartmentId) || []
+    const tags = Array.from(new Set(children.map((d) => (d.divisionTag || '').trim()).filter(Boolean)))
+    return tags.sort((a, b) => a.localeCompare(b, 'uk'))
+  }, [childDepartmentsMap, selectedRootDepartmentId])
 
   const loadDepartments = async () => {
     if (!accessToken) return
@@ -315,9 +322,30 @@ export default function DepartmentsPage() {
 
   useEffect(() => {
     setNewManagementName('')
+    setSelectedManagementTag('')
+    setManagementSourceTag('')
     setManagementDepartmentIds([])
     setManagementDeputyIds([])
   }, [selectedRootDepartmentId])
+
+  useEffect(() => {
+    if (!selectedManagementTag) return
+    const children = childDepartmentsMap.get(selectedRootDepartmentId) || []
+    const managementDepartments = children.filter((d) => (d.divisionTag || '').trim() === selectedManagementTag)
+    const depIds = managementDepartments.map((d) => d.id)
+    const depSet = new Set(depIds)
+    const deputies = deputyDirectorCandidates
+      .filter((candidate) => {
+        const scope = Array.isArray(candidate.scopeDepartmentIds) ? candidate.scopeDepartmentIds : []
+        return scope.some((id) => depSet.has(id))
+      })
+      .map((d) => d.id)
+
+    setManagementSourceTag(selectedManagementTag)
+    setNewManagementName(selectedManagementTag)
+    setManagementDepartmentIds(depIds)
+    setManagementDeputyIds(deputies)
+  }, [selectedManagementTag, childDepartmentsMap, selectedRootDepartmentId, deputyDirectorCandidates])
 
   const canManageEmployees = isDirector || isAdmin
 
@@ -631,7 +659,7 @@ export default function DepartmentsPage() {
 
     const rootChildren = childDepartmentsMap.get(selectedRootDepartmentId) || []
     const selectedSet = new Set(managementDepartmentIds)
-    const sameTagChildren = rootChildren.filter((d) => (d.divisionTag || '').trim() === managementName)
+    const sameTagChildren = rootChildren.filter((d) => (d.divisionTag || '').trim() === (managementSourceTag || managementName))
 
     const departmentUpdates = rootChildren
       .filter((d) => selectedSet.has(d.id) || sameTagChildren.some((st) => st.id === d.id))
@@ -682,7 +710,78 @@ export default function DepartmentsPage() {
     setSavingManagement(false)
     await loadUsers()
     await loadDepartments()
+    setSelectedManagementTag(managementName)
+    setManagementSourceTag(managementName)
     setActionSuccess('Управління та його склад збережено')
+  }
+
+  const deleteManagement = async () => {
+    if (!accessToken || !selectedRootDepartmentId || !managementSourceTag || (!isAdmin && !isDirector)) return
+    const ok = window.confirm(`Видалити управління "${managementSourceTag}"?`)
+    if (!ok) return
+
+    setSavingManagement(true)
+    setActionError('')
+    setActionSuccess('')
+
+    const children = childDepartmentsMap.get(selectedRootDepartmentId) || []
+    const targetDepartments = children.filter((d) => (d.divisionTag || '').trim() === managementSourceTag)
+    const depIds = targetDepartments.map((d) => d.id)
+    const depSet = new Set(depIds)
+
+    const depResults = await Promise.all(
+      targetDepartments.map((dep) =>
+        fetch(`/api/v1/departments/${dep.id}`, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ divisionTag: null }),
+        }),
+      ),
+    )
+    if (depResults.some((r) => !r.ok)) {
+      setSavingManagement(false)
+      setActionError('Не вдалося видалити управління')
+      return
+    }
+
+    const deputyToClean = deputyDirectorCandidates.filter((candidate) => {
+      const scope = Array.isArray(candidate.scopeDepartmentIds) ? candidate.scopeDepartmentIds : []
+      return scope.some((id) => depSet.has(id))
+    })
+    const deputyResults = await Promise.all(
+      deputyToClean.map((candidate) => {
+        const scope = Array.isArray(candidate.scopeDepartmentIds) ? candidate.scopeDepartmentIds : []
+        const cleaned = scope.filter((id) => !depSet.has(id))
+        return fetch(`/api/v1/users/${candidate.id}`, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            scopeDepartmentIds: cleaned.length > 0 ? cleaned : [selectedRootDepartmentId],
+          }),
+        })
+      }),
+    )
+    if (deputyResults.some((r) => !r.ok)) {
+      setSavingManagement(false)
+      setActionError('Не вдалося оновити замів директора після видалення управління')
+      return
+    }
+
+    await loadUsers()
+    await loadDepartments()
+    setSelectedManagementTag('')
+    setManagementSourceTag('')
+    setNewManagementName('')
+    setManagementDepartmentIds([])
+    setManagementDeputyIds([])
+    setSavingManagement(false)
+    setActionSuccess('Управління видалено')
   }
 
   return (
@@ -809,9 +908,33 @@ export default function DepartmentsPage() {
               <p className="text-sm font-semibold">
                 Управління {selectedRootDepartment ? `(${selectedRootDepartment.nameUk || selectedRootDepartment.name})` : ''}
               </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <select
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  value={selectedManagementTag}
+                  onChange={(e) => setSelectedManagementTag(e.target.value)}
+                >
+                  <option value="">Нове управління</option>
+                  {managementTags.map((tag) => (
+                    <option key={tag} value={tag}>{tag}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => {
+                    setSelectedManagementTag('')
+                    setManagementSourceTag('')
+                    setNewManagementName('')
+                    setManagementDepartmentIds([])
+                    setManagementDeputyIds([])
+                  }}
+                  className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium dark:border-slate-600"
+                >
+                  Очистити форму
+                </button>
+              </div>
               <input
                 className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                placeholder="Назва управління"
+                placeholder="Назва управління (можна перейменувати)"
                 value={newManagementName}
                 onChange={(e) => setNewManagementName(e.target.value)}
               />
@@ -853,9 +976,18 @@ export default function DepartmentsPage() {
                   ))}
                 </div>
               </div>
-              <button disabled={savingManagement} onClick={saveManagementScope} className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium disabled:opacity-60 dark:border-slate-600">
-                {savingManagement ? 'Збереження...' : 'Зберегти управління'}
-              </button>
+              <div className="flex gap-2">
+                <button disabled={savingManagement} onClick={saveManagementScope} className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium disabled:opacity-60 dark:border-slate-600">
+                  {savingManagement ? 'Збереження...' : 'Зберегти управління'}
+                </button>
+                <button
+                  disabled={savingManagement || !managementSourceTag}
+                  onClick={deleteManagement}
+                  className="h-10 rounded-lg border border-rose-300 px-4 text-sm font-medium text-rose-700 disabled:opacity-60"
+                >
+                  Видалити управління
+                </button>
+              </div>
             </div>
           </div>
         )}
