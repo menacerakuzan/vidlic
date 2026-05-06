@@ -230,10 +230,12 @@ export default function TasksPage() {
   }, [tasks, assignableUsers])
 
   const assignDepartmentOptions = useMemo(() => {
-    if (!isDirectorMode) return visibleDepartmentOptions
-    const sections = visibleDepartmentOptions.filter((dep) => dep.parentId)
-    return sections.length > 0 ? sections : visibleDepartmentOptions
-  }, [isDirectorMode, visibleDepartmentOptions])
+    return [...visibleDepartmentOptions].sort((a, b) => {
+      if (!a.parentId && b.parentId) return -1
+      if (a.parentId && !b.parentId) return 1
+      return (a.nameUk || a.name || '').localeCompare(b.nameUk || b.name || '', 'uk')
+    })
+  }, [visibleDepartmentOptions])
 
   useEffect(() => {
     if (!canAssign) return
@@ -661,7 +663,7 @@ export default function TasksPage() {
             className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           >
             <option value="">Підрозділ для задачі</option>
-            {(isDirectorMode ? assignDepartmentOptions : visibleDepartmentOptions).map((dep) => (
+            {assignDepartmentOptions.map((dep) => (
               <option key={dep.id} value={dep.id}>
                 {dep.nameUk || dep.name || dep.id}
               </option>

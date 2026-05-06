@@ -11,6 +11,7 @@ type Department = {
   nameUk: string
   code: string
   parentId?: string | null
+  divisionTag?: string | null
   usersCount: number
   manager?: { id: string; firstName: string; lastName: string } | null
   clerk?: { id: string; firstName: string; lastName: string } | null
@@ -53,6 +54,8 @@ export default function DepartmentsPage() {
   const [newSectionParentId, setNewSectionParentId] = useState('')
   const [newSectionManagerId, setNewSectionManagerId] = useState('')
   const [newSectionClerkId, setNewSectionClerkId] = useState('')
+  const [newSectionDivisionTag, setNewSectionDivisionTag] = useState('')
+  const [editingDivisionTag, setEditingDivisionTag] = useState('')
   const [usersOptions, setUsersOptions] = useState<UserOption[]>([])
   const [selectedDirectorId, setSelectedDirectorId] = useState('')
   const [selectedManagerId, setSelectedManagerId] = useState('')
@@ -105,6 +108,26 @@ export default function DepartmentsPage() {
     }
     return map
   }, [visibleDepartments])
+
+  // Групування дочірніх відділів по divisionTag (для відображення всередині департаменту)
+  const groupChildrenByDivision = (children: Department[]): { tag: string | null; items: Department[] }[] => {
+    const groups = new Map<string, Department[]>()
+    for (const child of children) {
+      const tag = child.divisionTag || ''
+      const existing = groups.get(tag) || []
+      existing.push(child)
+      groups.set(tag, existing)
+    }
+    // Відділи без управління йдуть останніми
+    const result: { tag: string | null; items: Department[] }[] = []
+    for (const [tag, items] of groups.entries()) {
+      if (tag) result.push({ tag, items })
+    }
+    result.sort((a, b) => (a.tag || '').localeCompare(b.tag || '', 'uk'))
+    const untagged = groups.get('') || []
+    if (untagged.length > 0) result.push({ tag: null, items: untagged })
+    return result
+  }
   const selectedRootDepartmentId = useMemo(() => {
     if (!selectedDepartmentId) return ''
     const current = departments.find((d) => d.id === selectedDepartmentId)
@@ -236,6 +259,7 @@ export default function DepartmentsPage() {
     if (!selectedDepartment) return
     setSelectedManagerId(selectedDepartment.manager?.id || '')
     setSelectedClerkId(selectedDepartment.clerk?.id || '')
+    setEditingDivisionTag(selectedDepartment.divisionTag || '')
   }, [selectedDepartment])
 
   useEffect(() => {
@@ -336,6 +360,7 @@ export default function DepartmentsPage() {
       directorId: isDirector ? user?.id : undefined,
       managerId: newSectionManagerId || undefined,
       clerkId: newSectionClerkId || undefined,
+      divisionTag: newSectionDivisionTag.trim() || undefined,
     }
 
     const resp = await fetch('/api/v1/departments', {
@@ -351,6 +376,7 @@ export default function DepartmentsPage() {
       setNewSectionCode('')
       setNewSectionManagerId('')
       setNewSectionClerkId('')
+      setNewSectionDivisionTag('')
       await loadDepartments()
       setActionSuccess('Відділ створено всередині департаменту')
       return
@@ -367,6 +393,7 @@ export default function DepartmentsPage() {
     const payload = {
       managerId: selectedManagerId || null,
       clerkId: selectedClerkId || null,
+      divisionTag: editingDivisionTag.trim() || null,
     }
     const resp = await fetch(`/api/v1/departments/${selectedDepartmentId}`, {
       method: 'PUT',
@@ -380,7 +407,7 @@ export default function DepartmentsPage() {
     if (resp.ok) {
       await loadDepartments()
       await loadTeam(selectedDepartmentId)
-      setActionSuccess('Керівника відділу та діловода оновлено')
+      setActionSuccess('Керівника відділу, діловода та управління оновлено')
       return
     }
     const err = await resp.json().catch(() => null)
@@ -706,6 +733,12 @@ export default function DepartmentsPage() {
                   value={newSectionCode}
                   onChange={(e) => setNewSectionCode(e.target.value)}
                 />
+                <input
+                  className="h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  placeholder="Управління (напр. Цифровізація)"
+                  value={newSectionDivisionTag}
+                  onChange={(e) => setNewSectionDivisionTag(e.target.value)}
+                />
                 <select
                   className="h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   value={newSectionManagerId}
@@ -762,19 +795,28 @@ export default function DepartmentsPage() {
                     </button>
                     {expanded && children.length > 0 && (
                       <div className="bg-slate-50/70 dark:bg-slate-800/40">
-                        {children.map((child) => (
-                          <button
-                            key={child.id}
-                            onClick={() => setSelectedDepartmentId(child.id)}
-                            className={`w-full text-left px-8 py-2.5 text-sm border-t border-slate-100 dark:border-slate-700 ${
-                              selectedDepartmentId === child.id ? 'bg-slate-100 dark:bg-slate-800 font-medium' : ''
-                            }`}
-                          >
-                            <div>{child.nameUk || child.name}</div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                              {child.code} • {child.usersCount} осіб • Відділ
-                            </div>
-                          </button>
+                        {groupChildrenByDivision(children).map(({ tag, items }) => (
+                          <div key={tag ?? '__untagged__'}>
+                            {tag && (
+                              <div className="px-4 py-1 text-xs font-semibold text-slate-400 uppercase tracking-wide border-t border-slate-100 dark:border-slate-700 dark:text-slate-500">
+                                {tag}
+                              </div>
+                            )}
+                            {items.map((child) => (
+                              <button
+                                key={child.id}
+                                onClick={() => setSelectedDepartmentId(child.id)}
+                                className={`w-full text-left px-8 py-2.5 text-sm border-t border-slate-100 dark:border-slate-700 ${
+                                  selectedDepartmentId === child.id ? 'bg-slate-100 dark:bg-slate-800 font-medium' : ''
+                                }`}
+                              >
+                                <div>{child.nameUk || child.name}</div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                  {child.code} • {child.usersCount} осіб{child.divisionTag ? ` • ${child.divisionTag}` : ''}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
                         ))}
                       </div>
                     )}
@@ -787,20 +829,28 @@ export default function DepartmentsPage() {
               <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold dark:border-slate-700">Команда {selectedDepartment ? `(${selectedDepartment.nameUk || selectedDepartment.name})` : ''}</div>
 
               {(isAdmin || isDirector) && selectedDepartmentId && (
-                <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 border-b border-slate-100 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
-                  <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedManagerId} onChange={(e) => setSelectedManagerId(e.target.value)}>
-                    <option value="">Керівник не призначений</option>
-                    {managers.map((m) => (
-                      <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
-                    ))}
-                  </select>
-                  <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedClerkId} onChange={(e) => setSelectedClerkId(e.target.value)}>
-                    <option value="">Діловод не призначений</option>
-                    {clerks.map((c) => (
-                      <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
-                    ))}
-                  </select>
-                  <button disabled={savingLeads} onClick={saveDepartmentLeads} className="h-10 rounded-lg border border-slate-300 text-sm font-medium disabled:opacity-60 dark:border-slate-600">
+                <div className="p-4 space-y-3 border-b border-slate-100 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedManagerId} onChange={(e) => setSelectedManagerId(e.target.value)}>
+                      <option value="">Керівник не призначений</option>
+                      {managers.map((m) => (
+                        <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+                      ))}
+                    </select>
+                    <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedClerkId} onChange={(e) => setSelectedClerkId(e.target.value)}>
+                      <option value="">Діловод не призначений</option>
+                      {clerks.map((c) => (
+                        <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
+                      ))}
+                    </select>
+                    <input
+                      className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      placeholder="Управління (напр. Цифровізація)"
+                      value={editingDivisionTag}
+                      onChange={(e) => setEditingDivisionTag(e.target.value)}
+                    />
+                  </div>
+                  <button disabled={savingLeads} onClick={saveDepartmentLeads} className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium disabled:opacity-60 dark:border-slate-600">
                     {savingLeads ? 'Збереження...' : 'Зберегти відділ'}
                   </button>
                 </div>

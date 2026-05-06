@@ -45,6 +45,7 @@ export class DepartmentsService {
       nameUk: d.nameUk,
       code: d.code,
       parentId: d.parentId,
+      divisionTag: d.divisionTag ?? null,
       parent: d.parent ? { id: d.parent.id, name: d.parent.name } : null,
       manager: d.manager,
       clerk: d.clerk,
@@ -82,6 +83,7 @@ export class DepartmentsService {
       nameUk: department.nameUk,
       code: department.code,
       parentId: department.parentId,
+      divisionTag: department.divisionTag ?? null,
       parent: department.parent ? { id: department.parent.id, name: department.parent.name } : null,
       children: department.children.map(c => ({ id: c.id, name: c.name, nameUk: c.nameUk })),
       manager: department.manager ? {
@@ -151,6 +153,7 @@ export class DepartmentsService {
         managerId: dto.managerId,
         clerkId: dto.clerkId,
         directorId: isDirector ? actor.id : dto.directorId,
+        divisionTag: dto.divisionTag ?? null,
       },
     });
 
@@ -205,6 +208,7 @@ export class DepartmentsService {
         managerId: dto.managerId !== undefined ? dto.managerId : department.managerId,
         clerkId: dto.clerkId !== undefined ? dto.clerkId : department.clerkId,
         directorId: dto.directorId !== undefined ? dto.directorId : department.directorId,
+        divisionTag: dto.divisionTag !== undefined ? (dto.divisionTag || null) : department.divisionTag,
       },
     });
 

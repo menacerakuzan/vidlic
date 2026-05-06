@@ -33,6 +33,11 @@ export class CreateDepartmentDto {
   @IsOptional()
   @IsUUID()
   directorId?: string;
+
+  @ApiPropertyOptional({ example: 'Цифровізація' })
+  @IsOptional()
+  @IsString()
+  divisionTag?: string;
 }
 
 export class UpdateDepartmentDto {
@@ -70,6 +75,11 @@ export class UpdateDepartmentDto {
   @IsOptional()
   @IsUUID()
   directorId?: string;
+
+  @ApiPropertyOptional({ example: 'Комунікації' })
+  @IsOptional()
+  @IsString()
+  divisionTag?: string;
 }
 
 export class DepartmentTeamQueryDto {}
