@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { AnimatePresence, motion } from 'framer-motion'
 
 type Task = {
   id: string
@@ -35,6 +36,7 @@ export default function TaskListPage() {
   const [deletingTaskId, setDeletingTaskId] = useState('')
   const [reassigningTaskId, setReassigningTaskId] = useState('')
   const [selectedAssignees, setSelectedAssignees] = useState<Record<string, string>>({})
+  const [actionToast, setActionToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const loadTasks = async () => {
@@ -104,11 +106,14 @@ export default function TaskListPage() {
 
     if (resp.ok) {
       await loadTasks()
+      setActionToast({ type: 'success', message: 'Задачу видалено' })
       return
     }
 
     const err = await resp.json().catch(() => null)
-    setError(err?.message || 'Не вдалося видалити задачу')
+    const message = err?.message || 'Не вдалося видалити задачу'
+    setError(message)
+    setActionToast({ type: 'error', message })
   }
 
   const reassignTask = async (taskId: string) => {
@@ -127,11 +132,20 @@ export default function TaskListPage() {
     if (resp.ok) {
       await loadTasks()
       setSelectedAssignees((prev) => ({ ...prev, [taskId]: '' }))
+      setActionToast({ type: 'success', message: 'Задачу перенаправлено' })
       return
     }
     const err = await resp.json().catch(() => null)
-    setError(err?.message || 'Не вдалося перенаправити задачу')
+    const message = err?.message || 'Не вдалося перенаправити задачу'
+    setError(message)
+    setActionToast({ type: 'error', message })
   }
+
+  useEffect(() => {
+    if (!actionToast) return
+    const timer = window.setTimeout(() => setActionToast(null), 2200)
+    return () => window.clearTimeout(timer)
+  }, [actionToast])
 
   const orderedTasks = useMemo(() => {
     return [...tasks].sort((a, b) => {
@@ -160,6 +174,24 @@ export default function TaskListPage() {
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto space-y-6">
+        <AnimatePresence>
+          {actionToast && (
+            <motion.div
+              initial={{ opacity: 0, y: -12, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.98 }}
+              transition={{ duration: 0.22 }}
+              className={`fixed right-5 top-5 z-[100] rounded-xl px-4 py-2 text-sm font-medium shadow-lg ${
+                actionToast.type === 'success'
+                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border border-rose-200 bg-rose-50 text-rose-700'
+              }`}
+            >
+              {actionToast.message}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div>
           <h1 className="text-2xl font-semibold font-display">Список задач</h1>
           <p className="text-slate-500 mt-1">Усі задачі у вигляді списку</p>

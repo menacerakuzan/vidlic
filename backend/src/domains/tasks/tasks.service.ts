@@ -16,39 +16,58 @@ export class TasksService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
+    const andFilters: any[] = [];
+    const visibilityClauses: any[] = [];
 
     if (['specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
-      where.OR = [
+      visibilityClauses.push(
         { assigneeId: user.id },
         { reporterId: user.id },
-      ];
+      );
     } else if (['manager', 'director', 'deputy_director', 'deputy_head'].includes(user.role)) {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
-      where.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) };
-      where.NOT = this.buildLeadershipExcludeFilter();
+      visibilityClauses.push(
+        {
+          AND: [
+            { departmentId: { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) } },
+            { NOT: this.buildLeadershipExcludeFilter() },
+          ],
+        },
+        { assigneeId: user.id },
+        { reporterId: user.id },
+      );
+    }
+    if (visibilityClauses.length > 0) {
+      andFilters.push({ OR: visibilityClauses });
     }
 
-    if (status) where.status = status;
-    if (priority) where.priority = priority;
+    if (status) andFilters.push({ status });
+    if (priority) andFilters.push({ priority });
     if (departmentId && user.role !== 'specialist') {
       if (user.role === 'admin' || user.role === 'deputy_head') {
-        where.departmentId = departmentId;
+        andFilters.push({ departmentId });
       } else {
         const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
         if (!scopedDepartmentIds.includes(departmentId)) {
           throw new ForbiddenException('Немає доступу до задач цього підрозділу');
         }
-        where.departmentId = departmentId;
+        andFilters.push({ departmentId });
       }
     }
-    if (assigneeId) where.assigneeId = assigneeId;
-    if (reporterId) where.reporterId = reporterId;
+    if (assigneeId) andFilters.push({ assigneeId });
+    if (reporterId) andFilters.push({ reporterId });
 
     if (dueDateFrom && dueDateTo) {
-      where.dueDate = {
-        gte: new Date(dueDateFrom),
-        lte: new Date(dueDateTo),
-      };
+      andFilters.push({
+        dueDate: {
+          gte: new Date(dueDateFrom),
+          lte: new Date(dueDateTo),
+        },
+      });
+    }
+
+    if (andFilters.length > 0) {
+      where.AND = andFilters;
     }
 
     const [tasks, total] = await Promise.all([
@@ -79,18 +98,31 @@ export class TasksService {
 
   async getKanban(departmentId: string, user: any) {
     const where: any = {};
+    const visibilityClauses: any[] = [];
 
     if (['specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
-      where.OR = [
+      visibilityClauses.push(
         { assigneeId: user.id },
         { reporterId: user.id },
-      ];
+      );
     } else if (['manager', 'director', 'deputy_director', 'deputy_head'].includes(user.role)) {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
-      where.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) };
-      where.NOT = this.buildLeadershipExcludeFilter();
+      visibilityClauses.push(
+        {
+          AND: [
+            { departmentId: { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) } },
+            { NOT: this.buildLeadershipExcludeFilter() },
+          ],
+        },
+        { assigneeId: user.id },
+        { reporterId: user.id },
+      );
     } else if (departmentId) {
-      where.departmentId = departmentId;
+      visibilityClauses.push({ departmentId });
+    }
+
+    if (visibilityClauses.length > 0) {
+      where.OR = visibilityClauses;
     }
 
     const tasks = await this.prisma.task.findMany({
@@ -451,6 +483,7 @@ export class TasksService {
 
   private async canManageTask(task: any, user: any) {
     if (user.role === 'admin') return true;
+    if (task.assigneeId === user.id) return true;
     if (user.role === 'deputy_head') return false;
     if (this.shouldHideFromLeadership(task, user) && task.reporterId !== user.id) return false;
     if (user.role === 'director' || user.role === 'manager') {

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useAuthStore } from '@/store/auth-store'
+import { AnimatePresence, motion } from 'framer-motion'
 
 type Task = {
   id: string
@@ -52,6 +53,7 @@ export default function CreateTaskPage() {
   const [departments, setDepartments] = useState<DepartmentOption[]>([])
   const [assignableUsers, setAssignableUsers] = useState<TeamUser[]>([])
   const [taskActionError, setTaskActionError] = useState('')
+  const [actionToast, setActionToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [selectedAssignDepartmentId, setSelectedAssignDepartmentId] = useState('')
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
@@ -186,11 +188,14 @@ export default function CreateTaskPage() {
       }
       setDueDate('')
       await loadAll()
+      setActionToast({ type: 'success', message: 'Задачу створено та надіслано' })
       return
     }
 
     const err = await resp.json().catch(() => null)
-    setTaskActionError(err?.message || 'Не вдалося створити задачу')
+    const message = err?.message || 'Не вдалося створити задачу'
+    setTaskActionError(message)
+    setActionToast({ type: 'error', message })
   }
 
   const loadTaskAttachments = async (taskId: string) => {
@@ -234,7 +239,10 @@ export default function CreateTaskPage() {
     setUploadingAttachment(false)
     if (resp.ok) {
       await loadTaskAttachments(selectedTaskId)
+      setActionToast({ type: 'success', message: 'Файл додано до задачі' })
+      return
     }
+    setActionToast({ type: 'error', message: 'Не вдалося додати файл' })
   }
 
   const deleteAttachment = async (id: string) => {
@@ -245,7 +253,10 @@ export default function CreateTaskPage() {
     })
     if (resp.ok && selectedTaskId) {
       await loadTaskAttachments(selectedTaskId)
+      setActionToast({ type: 'success', message: 'Файл видалено' })
+      return
     }
+    setActionToast({ type: 'error', message: 'Не вдалося видалити файл' })
   }
 
   const downloadAttachment = async (id: string, fileName: string) => {
@@ -263,9 +274,33 @@ export default function CreateTaskPage() {
     window.URL.revokeObjectURL(url)
   }
 
+  useEffect(() => {
+    if (!actionToast) return
+    const timer = window.setTimeout(() => setActionToast(null), 2200)
+    return () => window.clearTimeout(timer)
+  }, [actionToast])
+
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto space-y-6">
+        <AnimatePresence>
+          {actionToast && (
+            <motion.div
+              initial={{ opacity: 0, y: -12, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.98 }}
+              transition={{ duration: 0.22 }}
+              className={`fixed right-5 top-5 z-[100] rounded-xl px-4 py-2 text-sm font-medium shadow-lg ${
+                actionToast.type === 'success'
+                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border border-rose-200 bg-rose-50 text-rose-700'
+              }`}
+            >
+              {actionToast.message}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {taskActionError && (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300">
             {taskActionError}

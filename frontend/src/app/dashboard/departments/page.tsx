@@ -55,6 +55,10 @@ export default function DepartmentsPage() {
   const [newSectionManagerId, setNewSectionManagerId] = useState('')
   const [newSectionClerkId, setNewSectionClerkId] = useState('')
   const [newSectionDivisionTag, setNewSectionDivisionTag] = useState('')
+  const [newManagementName, setNewManagementName] = useState('')
+  const [managementDepartmentIds, setManagementDepartmentIds] = useState<string[]>([])
+  const [managementDeputyIds, setManagementDeputyIds] = useState<string[]>([])
+  const [savingManagement, setSavingManagement] = useState(false)
   const [editingDivisionTag, setEditingDivisionTag] = useState('')
   const [usersOptions, setUsersOptions] = useState<UserOption[]>([])
   const [selectedDirectorId, setSelectedDirectorId] = useState('')
@@ -228,7 +232,7 @@ export default function DepartmentsPage() {
   )
 
   const managers = useMemo(
-    () => usersOptions.filter((userOption) => userOption.role === 'manager'),
+    () => usersOptions.filter((userOption) => userOption.role === 'manager' || userOption.role === 'deputy_director'),
     [usersOptions],
   )
   const clerks = useMemo(
@@ -308,6 +312,12 @@ export default function DepartmentsPage() {
     })
     setSelectedDeputyHeadId(scopedHead?.id || '')
   }, [selectedRootDepartmentId, childDepartmentsMap, usersOptions])
+
+  useEffect(() => {
+    setNewManagementName('')
+    setManagementDepartmentIds([])
+    setManagementDeputyIds([])
+  }, [selectedRootDepartmentId])
 
   const canManageEmployees = isDirector || isAdmin
 
@@ -458,7 +468,7 @@ export default function DepartmentsPage() {
     })
     if (resp.ok) {
       await loadTeam(selectedDepartmentId)
-      setActionSuccess('Співробітника видалено')
+      setActionSuccess('Співробітника деактивовано')
       return
     }
     const err = await resp.json().catch(() => null)
@@ -603,6 +613,78 @@ export default function DepartmentsPage() {
     setActionSuccess('Керівництво департаменту та зони курації оновлено')
   }
 
+  const saveManagementScope = async () => {
+    if (!accessToken || !selectedRootDepartmentId || (!isAdmin && !isDirector)) return
+    const managementName = newManagementName.trim()
+    if (!managementName) {
+      setActionError('Вкажіть назву управління')
+      return
+    }
+    if (managementDepartmentIds.length === 0) {
+      setActionError('Оберіть хоча б один відділ для управління')
+      return
+    }
+
+    setActionError('')
+    setActionSuccess('')
+    setSavingManagement(true)
+
+    const rootChildren = childDepartmentsMap.get(selectedRootDepartmentId) || []
+    const selectedSet = new Set(managementDepartmentIds)
+    const sameTagChildren = rootChildren.filter((d) => (d.divisionTag || '').trim() === managementName)
+
+    const departmentUpdates = rootChildren
+      .filter((d) => selectedSet.has(d.id) || sameTagChildren.some((st) => st.id === d.id))
+      .map((dep) =>
+        fetch(`/api/v1/departments/${dep.id}`, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            divisionTag: selectedSet.has(dep.id) ? managementName : null,
+          }),
+        }),
+      )
+    const departmentResults = await Promise.all(departmentUpdates)
+    if (departmentResults.some((resp) => !resp.ok)) {
+      setSavingManagement(false)
+      setActionError('Не вдалося оновити склад управління')
+      return
+    }
+
+    const usersById = new Map(usersOptions.map((u) => [u.id, u]))
+    const deputyUpdates = managementDeputyIds
+      .map((id) => usersById.get(id))
+      .filter(Boolean)
+      .map((candidate) =>
+        fetch(`/api/v1/users/${candidate!.id}`, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            role: 'deputy_director',
+            departmentId: selectedRootDepartmentId,
+            scopeDepartmentIds: Array.from(new Set([selectedRootDepartmentId, ...managementDepartmentIds])),
+          }),
+        }),
+      )
+    const deputyResults = await Promise.all(deputyUpdates)
+    if (deputyResults.some((resp) => !resp.ok)) {
+      setSavingManagement(false)
+      setActionError('Не вдалося призначити заступника(ів) директора до управління')
+      return
+    }
+
+    setSavingManagement(false)
+    await loadUsers()
+    await loadDepartments()
+    setActionSuccess('Управління та його склад збережено')
+  }
+
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto space-y-6">
@@ -720,6 +802,59 @@ export default function DepartmentsPage() {
               </div>
               <button onClick={createSection} className="h-10 rounded-lg bg-primary px-4 text-white text-sm font-medium">
                 Створити відділ
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
+              <p className="text-sm font-semibold">
+                Управління {selectedRootDepartment ? `(${selectedRootDepartment.nameUk || selectedRootDepartment.name})` : ''}
+              </p>
+              <input
+                className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                placeholder="Назва управління"
+                value={newManagementName}
+                onChange={(e) => setNewManagementName(e.target.value)}
+              />
+              <div className="space-y-2">
+                <p className="text-xs text-slate-500 dark:text-slate-400">Відділи, що входять в управління</p>
+                <div className="grid grid-cols-1 gap-2 max-h-36 overflow-auto">
+                  {(childDepartmentsMap.get(selectedRootDepartmentId) || []).map((dep) => (
+                    <label key={dep.id} className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={managementDepartmentIds.includes(dep.id)}
+                        onChange={(e) => {
+                          setManagementDepartmentIds((prev) =>
+                            e.target.checked ? Array.from(new Set([...prev, dep.id])) : prev.filter((id) => id !== dep.id),
+                          )
+                        }}
+                      />
+                      <span>{dep.nameUk || dep.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs text-slate-500 dark:text-slate-400">Заступник(и) директора для управління</p>
+                <div className="grid grid-cols-1 gap-2 max-h-36 overflow-auto">
+                  {deputyDirectorCandidates.map((candidate) => (
+                    <label key={candidate.id} className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={managementDeputyIds.includes(candidate.id)}
+                        onChange={(e) => {
+                          setManagementDeputyIds((prev) =>
+                            e.target.checked ? Array.from(new Set([...prev, candidate.id])) : prev.filter((id) => id !== candidate.id),
+                          )
+                        }}
+                      />
+                      <span>{candidate.firstName} {candidate.lastName}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <button disabled={savingManagement} onClick={saveManagementScope} className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium disabled:opacity-60 dark:border-slate-600">
+                {savingManagement ? 'Збереження...' : 'Зберегти управління'}
               </button>
             </div>
           </div>

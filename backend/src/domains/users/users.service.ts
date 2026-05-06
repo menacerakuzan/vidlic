@@ -201,8 +201,29 @@ export class UsersService {
         throw new ForbiddenException('Директор не може видаляти директора або адміністратора');
       }
     }
+    if (actor.id === user.id) {
+      throw new ForbiddenException('Неможливо видалити власний обліковий запис');
+    }
 
-    await this.prisma.user.delete({ where: { id } });
+    const stamp = Date.now();
+    await this.prisma.$transaction([
+      this.prisma.department.updateMany({ where: { managerId: id }, data: { managerId: null } }),
+      this.prisma.department.updateMany({ where: { clerkId: id }, data: { clerkId: null } }),
+      this.prisma.department.updateMany({ where: { directorId: id }, data: { directorId: null } }),
+      this.prisma.task.updateMany({ where: { assigneeId: id }, data: { assigneeId: null } }),
+      this.prisma.user.update({
+        where: { id },
+        data: {
+          isActive: false,
+          email: `${user.email}.deleted.${stamp}`,
+          employeeId: `${user.employeeId}-DEL-${String(stamp).slice(-6)}`,
+          departmentId: null,
+          positionId: null,
+          scopeDepartmentIds: [],
+        },
+      }),
+      this.prisma.session.deleteMany({ where: { userId: id } }),
+    ]);
 
     await this.auditService.log({
       userId: actor.id,
@@ -213,7 +234,7 @@ export class UsersService {
       ipAddress,
     });
 
-    return { success: true };
+    return { success: true, mode: 'deactivated' };
   }
 
   async updatePassword(id: string, dto: UpdateUserPasswordDto, actor: any, ipAddress?: string) {
