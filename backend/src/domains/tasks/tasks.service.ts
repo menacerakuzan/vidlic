@@ -232,10 +232,13 @@ export class TasksService {
 
     if (dto.assigneeId) {
       const assignee = await this.prisma.user.findUnique({ where: { id: dto.assigneeId } });
-      if (!assignee || assignee.departmentId !== (dto.departmentId ?? task.departmentId)) {
+      const isActorReassigningOwnedTask = actorIsAssignee && dto.assigneeId !== task.assigneeId;
+      if (!assignee) {
+        throw new BadRequestException('Виконавця не знайдено');
+      }
+      if (!isActorReassigningOwnedTask && assignee.departmentId !== (dto.departmentId ?? task.departmentId)) {
         throw new BadRequestException('Виконавець має бути з того ж підрозділу');
       }
-      const isActorReassigningOwnedTask = actorIsAssignee && dto.assigneeId !== task.assigneeId;
       if (isActorReassigningOwnedTask) {
         if (assignee.role === 'director') {
           throw new ForbiddenException('Задачу не можна перенаправити директору');

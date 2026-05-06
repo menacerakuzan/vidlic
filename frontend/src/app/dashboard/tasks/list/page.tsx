@@ -15,11 +15,26 @@ type Task = {
   createdAt?: string
 }
 
+type TeamUser = {
+  id: string
+  firstName: string
+  lastName: string
+  role: string
+  department?: {
+    id: string
+    name?: string
+    nameUk?: string
+  } | null
+}
+
 export default function TaskListPage() {
   const [tasks, setTasks] = useState<Task[]>([])
+  const [users, setUsers] = useState<TeamUser[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [deletingTaskId, setDeletingTaskId] = useState('')
+  const [reassigningTaskId, setReassigningTaskId] = useState('')
+  const [selectedAssignees, setSelectedAssignees] = useState<Record<string, string>>({})
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const loadTasks = async () => {
@@ -58,8 +73,20 @@ export default function TaskListPage() {
     setLoading(false)
   }
 
+  const loadUsers = async () => {
+    if (!accessToken) return
+    const resp = await fetch('/api/v1/users?limit=100', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!resp.ok) return
+    const data = await resp.json()
+    const list = Array.isArray(data?.data) ? data.data : []
+    setUsers(list)
+  }
+
   useEffect(() => {
     loadTasks()
+    loadUsers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken])
 
@@ -82,6 +109,28 @@ export default function TaskListPage() {
 
     const err = await resp.json().catch(() => null)
     setError(err?.message || 'Не вдалося видалити задачу')
+  }
+
+  const reassignTask = async (taskId: string) => {
+    const assigneeId = selectedAssignees[taskId]
+    if (!accessToken || !assigneeId) return
+    setReassigningTaskId(taskId)
+    const resp = await fetch(`/api/v1/tasks/${taskId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ assigneeId }),
+    })
+    setReassigningTaskId('')
+    if (resp.ok) {
+      await loadTasks()
+      setSelectedAssignees((prev) => ({ ...prev, [taskId]: '' }))
+      return
+    }
+    const err = await resp.json().catch(() => null)
+    setError(err?.message || 'Не вдалося перенаправити задачу')
   }
 
   const orderedTasks = useMemo(() => {
@@ -146,6 +195,25 @@ export default function TaskListPage() {
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadge(task.status)}`}>
                       {statusLabel(task.status)}
                     </span>
+                    <select
+                      value={selectedAssignees[task.id] || ''}
+                      onChange={(e) => setSelectedAssignees((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                      className="h-7 max-w-[220px] rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    >
+                      <option value="">Перенаправити...</option>
+                      {users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.firstName} {u.lastName} · {u.department?.nameUk || u.department?.name || 'Без підрозділу'}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => reassignTask(task.id)}
+                      disabled={!selectedAssignees[task.id] || reassigningTaskId === task.id}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200"
+                    >
+                      {reassigningTaskId === task.id ? 'Передача...' : 'Перенаправити'}
+                    </button>
                     <button
                       onClick={() => deleteTask(task.id)}
                       disabled={deletingTaskId === task.id}
