@@ -14,7 +14,6 @@ export class TasksService {
   async findAll(query: TaskQueryDto, user: any) {
     const { page = 1, limit = 50, status, priority, departmentId, assigneeId, reporterId, dueDateFrom, dueDateTo } = query;
     const skip = (page - 1) * limit;
-    const isLeadership = ['manager', 'director', 'deputy_director', 'deputy_head'].includes(user.role);
 
     const where: any = {};
 
@@ -26,18 +25,7 @@ export class TasksService {
     } else if (['manager', 'director', 'deputy_director', 'deputy_head'].includes(user.role)) {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
       where.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) };
-      where.NOT = {
-        OR: [
-          { isPrivate: true },
-          {
-            AND: [
-              { reportId: null },
-              { assigneeId: null },
-              { reporter: { is: { role: 'specialist' } } },
-            ],
-          },
-        ],
-      };
+      where.NOT = this.buildLeadershipExcludeFilter();
     }
 
     if (status) where.status = status;
@@ -55,7 +43,7 @@ export class TasksService {
     }
     if (assigneeId) where.assigneeId = assigneeId;
     if (reporterId) where.reporterId = reporterId;
-    
+
     if (dueDateFrom && dueDateTo) {
       where.dueDate = {
         gte: new Date(dueDateFrom),
@@ -63,28 +51,28 @@ export class TasksService {
       };
     }
 
-    const tasks = await this.prisma.task.findMany({
-      where,
-      ...(isLeadership ? {} : { skip, take: limit }),
-      include: {
-        assignee: { select: { id: true, firstName: true, lastName: true, email: true } },
-        reporter: { select: { id: true, firstName: true, lastName: true, role: true } },
-        department: { select: { id: true, name: true, nameUk: true } },
-        report: { select: { id: true, title: true, reportType: true } },
-      },
-      orderBy: [
-        { priority: 'desc' },
-        { dueDate: 'asc' },
-        { createdAt: 'desc' },
-      ],
-    });
-
-    const visibleTasks = isLeadership ? tasks.filter((task) => !this.shouldHideFromLeadership(task, user)) : tasks;
-    const total = isLeadership ? visibleTasks.length : await this.prisma.task.count({ where });
-    const pageData = isLeadership ? visibleTasks.slice(skip, skip + limit) : visibleTasks;
+    const [tasks, total] = await Promise.all([
+      this.prisma.task.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          assignee: { select: { id: true, firstName: true, lastName: true, email: true } },
+          reporter: { select: { id: true, firstName: true, lastName: true, role: true } },
+          department: { select: { id: true, name: true, nameUk: true } },
+          report: { select: { id: true, title: true, reportType: true } },
+        },
+        orderBy: [
+          { priority: 'desc' },
+          { dueDate: 'asc' },
+          { createdAt: 'desc' },
+        ],
+      }),
+      this.prisma.task.count({ where }),
+    ]);
 
     return {
-      data: pageData.map(t => this.mapTask(t)),
+      data: tasks.map(t => this.mapTask(t)),
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -100,18 +88,7 @@ export class TasksService {
     } else if (['manager', 'director', 'deputy_director', 'deputy_head'].includes(user.role)) {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
       where.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) };
-      where.NOT = {
-        OR: [
-          { isPrivate: true },
-          {
-            AND: [
-              { reportId: null },
-              { assigneeId: null },
-              { reporter: { is: { role: 'specialist' } } },
-            ],
-          },
-        ],
-      };
+      where.NOT = this.buildLeadershipExcludeFilter();
     } else if (departmentId) {
       where.departmentId = departmentId;
     }
@@ -129,12 +106,10 @@ export class TasksService {
       ],
     });
 
-    const visibleTasks = tasks.filter((task) => !this.shouldHideFromLeadership(task, user));
-
     const kanban = {
-      todo: visibleTasks.filter(t => t.status === 'todo').map(t => this.mapTask(t)),
-      in_progress: visibleTasks.filter(t => t.status === 'in_progress').map(t => this.mapTask(t)),
-      done: visibleTasks.filter(t => t.status === 'done').map(t => this.mapTask(t)),
+      todo: tasks.filter(t => t.status === 'todo').map(t => this.mapTask(t)),
+      in_progress: tasks.filter(t => t.status === 'in_progress').map(t => this.mapTask(t)),
+      done: tasks.filter(t => t.status === 'done').map(t => this.mapTask(t)),
     };
 
     return kanban;
@@ -519,6 +494,21 @@ export class TasksService {
     if (user.role === 'clerk' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
     if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role) && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
     return false;
+  }
+
+  private buildLeadershipExcludeFilter() {
+    return {
+      OR: [
+        { isPrivate: true },
+        {
+          AND: [
+            { reportId: null },
+            { assigneeId: null },
+            { reporter: { is: { role: 'specialist' } } },
+          ],
+        },
+      ],
+    };
   }
 
   private shouldHideFromLeadership(task: any, user: any) {

@@ -305,6 +305,20 @@ export default function TasksPage() {
     }
   }
 
+  const reassignFromKanban = async (taskId: string, assigneeId: string) => {
+    if (!accessToken) throw new Error('no token')
+    const resp = await fetch(`/api/v1/tasks/${taskId}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assigneeId }),
+    })
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => null)
+      throw new Error(err?.message || 'Помилка')
+    }
+    await loadAll()
+  }
+
   const updateStatus = async (id: string, status: KanbanTask['status']) => {
     setTasks((prev) => prev.map((task) => task.id === id ? { ...task, status } : task))
     if (!accessToken) return
@@ -464,6 +478,7 @@ export default function TasksPage() {
     dueDate: task.dueDate,
     executionHours: task.executionHours ?? null,
     isPrivate: Boolean(task.isPrivate),
+    departmentId: task.department?.id,
     reporter: task.reporter,
     assignee: task.assignee,
   }))
@@ -733,7 +748,15 @@ export default function TasksPage() {
         {loading ? (
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Завантаження...</div>
         ) : (
-          <KanbanBoard tasks={kanbanTasks} onStatusChange={updateStatus} />
+          <KanbanBoard
+            tasks={kanbanTasks}
+            onStatusChange={updateStatus}
+            assignableUsers={assignableUsers}
+            loads={loads}
+            currentUserId={user?.id}
+            currentUserRole={user?.role}
+            onReassign={canAssign ? reassignFromKanban : undefined}
+          />
         )}
 
         {user?.role === 'specialist' && (
