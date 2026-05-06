@@ -85,13 +85,20 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           // ignore malformed event
         }
       }
+      let retryTimeout: ReturnType<typeof setTimeout>
       stream.onerror = () => {
         stream.close()
+        if (!cancelled) {
+          retryTimeout = setTimeout(() => {
+            if (!cancelled) loadUnread()
+          }, 5000)
+        }
       }
 
       return () => {
         cancelled = true
         clearInterval(interval)
+        clearTimeout(retryTimeout)
         stream.close()
       }
     }
@@ -314,7 +321,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                           {searchData.tasks.slice(0, 4).map((item) => (
                             <Link
                               key={`task-${item.id}`}
-                              href="/dashboard/tasks"
+                              href={`/dashboard/tasks?taskId=${item.id}`}
                               className="block rounded px-2 py-1 hover:bg-slate-50 dark:hover:bg-slate-800"
                               onClick={() => setSearchOpen(false)}
                             >

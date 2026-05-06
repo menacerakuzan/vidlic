@@ -68,8 +68,6 @@ export default function TasksPage() {
   const [transparency, setTransparency] = useState<any[]>([])
   const [departments, setDepartments] = useState<DepartmentOption[]>([])
   const [assignableUsers, setAssignableUsers] = useState<TeamUser[]>([])
-  const [reassigningTaskId, setReassigningTaskId] = useState('')
-  const [reassignToUserId, setReassignToUserId] = useState<Record<string, string>>({})
   const [taskActionError, setTaskActionError] = useState('')
   const [selectedAssignDepartmentId, setSelectedAssignDepartmentId] = useState('')
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
@@ -354,31 +352,6 @@ export default function TasksPage() {
     setTaskActionError(err?.message || 'Не вдалося видалити задачу')
   }
 
-  const reassignTask = async (task: Task) => {
-    if (!accessToken) return
-    const targetUserId = reassignToUserId[task.id]
-    if (!targetUserId) return
-    setTaskActionError('')
-    setReassigningTaskId(task.id)
-    const resp = await fetch(`/api/v1/tasks/${task.id}`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        assigneeId: targetUserId,
-      }),
-    })
-    setReassigningTaskId('')
-    if (resp.ok) {
-      await loadAll()
-      return
-    }
-    const err = await resp.json().catch(() => null)
-    setTaskActionError(err?.message || 'Не вдалося перенаправити задачу')
-  }
-
   const loadTaskAttachments = async (taskId: string) => {
     if (!accessToken || !taskId) return
     setAttachmentsLoading(true)
@@ -483,20 +456,6 @@ export default function TasksPage() {
     assignee: task.assignee,
   }))
 
-  const specialistOwnTasks = useMemo(() => {
-    if (user?.role !== 'specialist') return []
-    return tasks.filter((task) => task.reporter?.id === user.id)
-  }, [tasks, user?.id, user?.role])
-  const ownCreatedTasks = useMemo(() => {
-    if (!user?.id) return []
-    return tasks.filter((task) => task.reporter?.id === user.id)
-  }, [tasks, user?.id])
-  const assignedToMeTasks = useMemo(() => {
-    if (!user?.id) return []
-    return tasks.filter((task) => task.assignee?.id === user.id)
-  }, [tasks, user?.id])
-  const canManageVisibleTasks = ['admin', 'director', 'deputy_director', 'manager', 'deputy_head'].includes(user?.role || '')
-
   const workloadByUser = useMemo(() => {
     const map = new Map<string, { userId: string; name: string; active: number; overdue: number; critical: number }>()
     tasks.forEach((task) => {
@@ -595,8 +554,14 @@ export default function TasksPage() {
                 <option value="medium">Medium</option>
                 <option value="low">Low</option>
               </select>
-              <input type="date" value={filterDueFrom} onChange={(e) => setFilterDueFrom(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />
-              <input type="date" value={filterDueTo} onChange={(e) => setFilterDueTo(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-500 dark:text-slate-400">Від</label>
+                <input type="date" value={filterDueFrom} onChange={(e) => setFilterDueFrom(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-500 dark:text-slate-400">До</label>
+                <input type="date" value={filterDueTo} onChange={(e) => setFilterDueTo(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />
+              </div>
               <button
                 onClick={() => {
                   setFilterDepartmentId('')
@@ -757,151 +722,6 @@ export default function TasksPage() {
             currentUserRole={user?.role}
             onReassign={canAssign ? reassignFromKanban : undefined}
           />
-        )}
-
-        {user?.role === 'specialist' && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
-            <h2 className="text-lg font-semibold">Мої створені задачі</h2>
-            {specialistOwnTasks.length === 0 && (
-              <p className="text-sm text-slate-500 dark:text-slate-400">У вас немає власних задач для видалення.</p>
-            )}
-            {specialistOwnTasks.map((task) => (
-              <div key={task.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                <div>
-                  <p className="text-sm font-medium">{task.title}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Статус: {task.status} {task.assignee ? `· Виконавець: ${task.assignee.firstName} ${task.assignee.lastName}` : ''}
-                  </p>
-                </div>
-                <button
-                  onClick={() => deleteTask(task.id)}
-                  disabled={deletingTaskId === task.id}
-                  className="rounded border border-rose-300 px-3 py-1.5 text-xs text-rose-700 disabled:opacity-60"
-                >
-                  {deletingTaskId === task.id ? 'Видалення...' : 'Видалити'}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {user?.role !== 'specialist' && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
-            <h2 className="text-lg font-semibold">Мої створені задачі</h2>
-            {ownCreatedTasks.length === 0 && (
-              <p className="text-sm text-slate-500 dark:text-slate-400">У вас немає власних задач для видалення.</p>
-            )}
-            {ownCreatedTasks.map((task) => (
-              <div key={task.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                <div>
-                  <p className="text-sm font-medium">{task.title}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Статус: {task.status} {task.assignee ? `· Виконавець: ${task.assignee.firstName} ${task.assignee.lastName}` : ''}
-                  </p>
-                  {canAssign && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <select
-                        value={reassignToUserId[task.id] || ''}
-                        onChange={(e) => setReassignToUserId((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                        className="h-8 rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                      >
-                        <option value="">Перенаправити на...</option>
-                        {availableSorted
-                          .filter((member) => member.role !== 'director')
-                          .filter((member) => !task.department?.id || member.department?.id === task.department.id)
-                          .map((member) => (
-                            <option key={member.id} value={member.id}>
-                              {member.firstName} {member.lastName}
-                            </option>
-                          ))}
-                      </select>
-                      <button
-                        onClick={() => reassignTask(task)}
-                        disabled={reassigningTaskId === task.id || !(reassignToUserId[task.id] || '')}
-                        className="rounded border border-primary px-2 py-1 text-xs text-primary disabled:opacity-60"
-                      >
-                        {reassigningTaskId === task.id ? '...' : 'Перенаправити'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={() => deleteTask(task.id)}
-                  disabled={deletingTaskId === task.id}
-                  className="rounded border border-rose-300 px-3 py-1.5 text-xs text-rose-700 disabled:opacity-60"
-                >
-                  {deletingTaskId === task.id ? 'Видалення...' : 'Видалити'}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
-          <h2 className="text-lg font-semibold">Задачі, призначені мені</h2>
-          {assignedToMeTasks.length === 0 && (
-            <p className="text-sm text-slate-500 dark:text-slate-400">Наразі призначених задач немає.</p>
-          )}
-          {assignedToMeTasks.map((task) => (
-            <div key={task.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-              <div>
-                <p className="text-sm font-medium">{task.title}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Статус: {task.status} · Автор: {task.reporter ? `${task.reporter.firstName} ${task.reporter.lastName}` : '—'}
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <select
-                    value={reassignToUserId[task.id] || ''}
-                    onChange={(e) => setReassignToUserId((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                    className="h-8 rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                  >
-                    <option value="">Перенаправити на...</option>
-                    {availableSorted
-                      .filter((member) => member.role !== 'director')
-                      .filter((member) => !task.department?.id || member.department?.id === task.department.id)
-                      .map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.firstName} {member.lastName}
-                        </option>
-                      ))}
-                  </select>
-                  <button
-                    onClick={() => reassignTask(task)}
-                    disabled={reassigningTaskId === task.id || !(reassignToUserId[task.id] || '')}
-                    className="rounded border border-primary px-2 py-1 text-xs text-primary disabled:opacity-60"
-                  >
-                    {reassigningTaskId === task.id ? '...' : 'Перенаправити'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {canManageVisibleTasks && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
-            <h2 className="text-lg font-semibold">Керування видимими задачами</h2>
-            {tasks.length === 0 && (
-              <p className="text-sm text-slate-500 dark:text-slate-400">Задач для керування немає.</p>
-            )}
-            {tasks.map((task) => (
-              <div key={task.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                <div>
-                  <p className="text-sm font-medium">{task.title}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Статус: {task.status} {task.assignee ? `· Виконавець: ${task.assignee.firstName} ${task.assignee.lastName}` : ''}
-                  </p>
-                </div>
-                <button
-                  onClick={() => deleteTask(task.id)}
-                  disabled={deletingTaskId === task.id}
-                  className="rounded border border-rose-300 px-3 py-1.5 text-xs text-rose-700 disabled:opacity-60"
-                >
-                  {deletingTaskId === task.id ? 'Видалення...' : 'Видалити'}
-                </button>
-              </div>
-            ))}
-          </div>
         )}
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">

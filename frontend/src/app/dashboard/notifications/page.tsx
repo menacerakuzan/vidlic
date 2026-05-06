@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 
 type Notification = {
@@ -12,10 +12,28 @@ type Notification = {
   createdAt: string
 }
 
+const TYPE_LABELS: Record<string, string> = {
+  task_assigned: 'Задачі',
+  task_overdue: 'Задачі',
+  report_submitted: 'Звіти',
+  report_approved: 'Звіти',
+  report_rejected: 'Звіти',
+  digest: 'Дайджест',
+}
+
+const TYPE_GROUPS = [
+  { label: 'Усі', value: '' },
+  { label: 'Задачі', value: 'task' },
+  { label: 'Звіти', value: 'report' },
+  { label: 'Дайджест', value: 'digest' },
+]
+
 export default function NotificationsPage() {
   const [items, setItems] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
+  const [typeFilter, setTypeFilter] = useState('')
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
+  const loadRef = useRef<() => Promise<void>>()
 
   const load = async () => {
     if (!accessToken) return
@@ -29,25 +47,39 @@ export default function NotificationsPage() {
     }
     setLoading(false)
   }
+  loadRef.current = load
 
   useEffect(() => {
     load()
     if (!accessToken) return
 
-    const stream = new EventSource(`/api/v1/notifications/stream?token=${encodeURIComponent(accessToken)}`)
-    stream.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data || '{}')
-        if (payload?.type === 'notification.created') {
-          load()
+    let stream: EventSource
+    let retryTimeout: ReturnType<typeof setTimeout>
+
+    const connect = () => {
+      stream = new EventSource(`/api/v1/notifications/stream?token=${encodeURIComponent(accessToken)}`)
+      stream.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data || '{}')
+          if (payload?.type === 'notification.created') {
+            loadRef.current?.()
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
+      }
+      stream.onerror = () => {
+        stream.close()
+        retryTimeout = setTimeout(connect, 5000)
       }
     }
-    stream.onerror = () => stream.close()
 
-    return () => stream.close()
+    connect()
+
+    return () => {
+      stream?.close()
+      clearTimeout(retryTimeout)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken])
 
@@ -57,9 +89,7 @@ export default function NotificationsPage() {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
     })
-    if (resp.ok) {
-      await load()
-    }
+    if (resp.ok) await load()
   }
 
   const markAllRead = async () => {
@@ -68,10 +98,14 @@ export default function NotificationsPage() {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
     })
-    if (resp.ok) {
-      await load()
-    }
+    if (resp.ok) await load()
   }
+
+  const filtered = typeFilter
+    ? items.filter((item) => item.type.startsWith(typeFilter))
+    : items
+
+  const unreadCount = items.filter((i) => !i.isRead).length
 
   return (
     <DashboardLayout>
@@ -79,28 +113,62 @@ export default function NotificationsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold font-display">Сповіщення</h1>
-            <p className="text-slate-500 mt-1">Оповіщення щодо звітів і задач</p>
+            <p className="text-slate-500 mt-1">Оповіщення щодо звітів і задач{unreadCount > 0 ? ` · ${unreadCount} непрочитаних` : ''}</p>
           </div>
-          <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm" onClick={markAllRead}>
+          <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600" onClick={markAllRead}>
             Позначити все як прочитане
           </button>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-          {loading && <div className="px-4 py-5 text-sm text-slate-500">Завантаження...</div>}
-          {!loading && items.length === 0 && <div className="px-4 py-5 text-sm text-slate-500">Сповіщень поки немає</div>}
-          {!loading && items.map((item) => (
-            <div key={item.id} className={`px-4 py-4 border-b border-slate-100 ${item.isRead ? 'bg-white' : 'bg-blue-50/40'}`}>
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-medium text-slate-900">{item.title}</p>
+        <div className="flex gap-2 flex-wrap">
+          {TYPE_GROUPS.map((g) => (
+            <button
+              key={g.value}
+              onClick={() => setTypeFilter(g.value)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                typeFilter === g.value
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-300'
+              }`}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden dark:border-slate-700 dark:bg-slate-900">
+          {loading && <div className="px-4 py-5 text-sm text-slate-500 dark:text-slate-400">Завантаження...</div>}
+          {!loading && filtered.length === 0 && <div className="px-4 py-5 text-sm text-slate-500 dark:text-slate-400">Сповіщень поки немає</div>}
+          {!loading && filtered.map((item) => (
+            <div
+              key={item.id}
+              className={`px-4 py-4 border-b border-slate-100 dark:border-slate-700 ${
+                item.isRead
+                  ? 'bg-white dark:bg-slate-900'
+                  : 'bg-blue-50 dark:bg-blue-950/40 border-l-4 border-l-blue-400'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className={`font-medium ${item.isRead ? 'text-slate-900 dark:text-slate-100' : 'text-slate-900 dark:text-white'}`}>
+                      {item.title}
+                    </p>
+                    {!item.isRead && (
+                      <span className="shrink-0 inline-block w-2 h-2 rounded-full bg-blue-500" />
+                    )}
+                  </div>
+                  <p className="text-sm text-slate-700 dark:text-slate-300 mt-1">{item.message}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">
+                    {TYPE_LABELS[item.type] || item.type} · {new Date(item.createdAt).toLocaleString('uk-UA')}
+                  </p>
+                </div>
                 {!item.isRead && (
-                  <button className="text-xs text-primary hover:underline" onClick={() => markRead(item.id)}>
+                  <button className="shrink-0 text-xs text-primary hover:underline" onClick={() => markRead(item.id)}>
                     Прочитано
                   </button>
                 )}
               </div>
-              <p className="text-sm text-slate-700 mt-1">{item.message}</p>
-              <p className="text-xs text-slate-500 mt-2">{new Date(item.createdAt).toLocaleString('uk-UA')}</p>
             </div>
           ))}
         </div>

@@ -69,11 +69,6 @@ export default function DepartmentsPage() {
   >('specialist')
   const [selectedExistingUserId, setSelectedExistingUserId] = useState('')
   const [assigningExistingUser, setAssigningExistingUser] = useState(false)
-  const [templateTitlePattern, setTemplateTitlePattern] = useState('ЗВІТ')
-  const [templateHeaderPattern, setTemplateHeaderPattern] = useState('Про виконання роботи {{departmentName}}\\n{{period}}')
-  const [templateAiPrompt, setTemplateAiPrompt] = useState('')
-  const [templateSectionsRaw, setTemplateSectionsRaw] = useState('[\n  {"key":"workDone","title":"Виконана робота","required":true},\n  {"key":"achievements","title":"Досягнення","required":false},\n  {"key":"problems","title":"Проблемні питання","required":false},\n  {"key":"nextWeekPlan","title":"План наступного періоду","required":true}\n]')
-  const [savingTemplate, setSavingTemplate] = useState(false)
   const [expandedDepartmentIds, setExpandedDepartmentIds] = useState<string[]>([])
   const [selectedDeputyDirectorIds, setSelectedDeputyDirectorIds] = useState<string[]>([])
   const [selectedDeputyHeadId, setSelectedDeputyHeadId] = useState('')
@@ -81,6 +76,12 @@ export default function DepartmentsPage() {
   const [actionError, setActionError] = useState('')
   const [actionSuccess, setActionSuccess] = useState('')
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
+
+  useEffect(() => {
+    if (!actionSuccess) return
+    const t = setTimeout(() => setActionSuccess(''), 3000)
+    return () => clearTimeout(t)
+  }, [actionSuccess])
 
   const isAdmin = user?.role === 'admin'
   const isDirector = user?.role === 'director' || user?.role === 'deputy_director'
@@ -212,7 +213,6 @@ export default function DepartmentsPage() {
   useEffect(() => {
     if (selectedDepartmentId) {
       loadTeam(selectedDepartmentId)
-      loadTemplate(selectedDepartmentId)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDepartmentId, accessToken])
@@ -310,7 +310,6 @@ export default function DepartmentsPage() {
   }, [selectedRootDepartmentId, childDepartmentsMap, usersOptions])
 
   const canManageEmployees = isDirector || isAdmin
-  const canEditTemplate = isAdmin || isDirector || user?.role === 'manager'
 
   const createRootDepartment = async () => {
     if (!isAdmin || !accessToken || !newRootDepartmentName.trim() || !newRootDepartmentCode.trim()) return
@@ -520,54 +519,6 @@ export default function DepartmentsPage() {
     setActionError(err?.message || 'Не вдалося перевести співробітника')
   }
 
-  const loadTemplate = async (departmentId: string) => {
-    if (!accessToken || !departmentId) return
-    const resp = await fetch(`/api/v1/departments/${departmentId}/report-template`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-    if (!resp.ok) return
-    const data = await resp.json()
-    setTemplateTitlePattern(data?.titlePattern || 'ЗВІТ')
-    setTemplateHeaderPattern(data?.headerPattern || 'Про виконання роботи {{departmentName}}\\n{{period}}')
-    setTemplateAiPrompt(data?.aiPrompt || '')
-    setTemplateSectionsRaw(JSON.stringify(data?.sectionSchema || [], null, 2))
-  }
-
-  const saveTemplate = async () => {
-    if (!accessToken || !selectedDepartmentId) return
-    setSavingTemplate(true)
-    let parsedSections: any = []
-    try {
-      parsedSections = JSON.parse(templateSectionsRaw || '[]')
-    } catch {
-      setActionError('JSON секцій має некоректний формат')
-      setSavingTemplate(false)
-      return
-    }
-
-    const resp = await fetch(`/api/v1/departments/${selectedDepartmentId}/report-template`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        titlePattern: templateTitlePattern,
-        headerPattern: templateHeaderPattern,
-        aiPrompt: templateAiPrompt,
-        sectionSchema: parsedSections,
-      }),
-    })
-    setSavingTemplate(false)
-    if (resp.ok) {
-      await loadTemplate(selectedDepartmentId)
-      setActionSuccess('Шаблон звіту збережено')
-      return
-    }
-    const err = await resp.json().catch(() => null)
-    setActionError(err?.message || 'Не вдалося зберегти шаблон')
-  }
-
   const saveDepartmentSupervision = async () => {
     if (!accessToken || !selectedRootDepartmentId || (!isAdmin && !isDirector)) return
     setActionError('')
@@ -660,6 +611,13 @@ export default function DepartmentsPage() {
         <div>
           <h1 className="text-2xl font-semibold font-display">Підрозділи</h1>
           <p className="text-slate-500 mt-1">Керування підрозділами та співробітниками</p>
+          {(isAdmin || isDirector) && (
+            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 space-y-0.5">
+              <p><b>Департамент</b> — головний підрозділ з директором та заступниками.</p>
+              <p><b>Відділ</b> — дочірній підрозділ у складі департаменту; має керівника (manager) та діловода (clerk).</p>
+              <p><b>Управління</b> — необов'язкова мітка для групування відділів (наприклад: «Цифровізація», «Фінанси»).</p>
+            </div>
+          )}
         </div>
 
         {(isAdmin || isDirector) && (
@@ -974,7 +932,14 @@ export default function DepartmentsPage() {
               )}
 
               <div>
-                {team.length === 0 && <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">Порожньо</div>}
+                {team.length === 0 && (
+                  <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
+                    <p className="font-medium mb-1">У цьому підрозділі ще немає співробітників.</p>
+                    {canManageEmployees && (
+                      <p>Скористайтеся формою вище, щоб додати нового або перевести існуючого.</p>
+                    )}
+                  </div>
+                )}
                 {team.map((member) => (
                   <div key={member.id} className="px-4 py-3 border-b border-slate-100 flex items-center justify-between dark:border-slate-700">
                     <div>
@@ -1004,49 +969,6 @@ export default function DepartmentsPage() {
               </div>
             </div>
 
-            {selectedDepartmentId && canEditTemplate && (
-              <div className="lg:col-span-3 rounded-2xl border border-slate-200 bg-white overflow-hidden dark:border-slate-700 dark:bg-slate-900">
-                <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold dark:border-slate-700">
-                  Конструктор шаблону звіту ({selectedDepartment?.nameUk || selectedDepartment?.name || '-'})
-                </div>
-                <div className="p-4 space-y-3">
-                  <input
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    value={templateTitlePattern}
-                    onChange={(e) => setTemplateTitlePattern(e.target.value)}
-                    placeholder="Заголовок (напр. ЗВІТ)"
-                  />
-                  <textarea
-                    rows={2}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    value={templateHeaderPattern}
-                    onChange={(e) => setTemplateHeaderPattern(e.target.value)}
-                    placeholder="Шапка: можна {{departmentName}}, {{period}}, {{title}}, {{author}}"
-                  />
-                  <textarea
-                    rows={5}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    value={templateAiPrompt}
-                    onChange={(e) => setTemplateAiPrompt(e.target.value)}
-                    placeholder="Додатковий AI-промпт для цього підрозділу"
-                  />
-                  <textarea
-                    rows={8}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    value={templateSectionsRaw}
-                    onChange={(e) => setTemplateSectionsRaw(e.target.value)}
-                    placeholder='JSON секцій'
-                  />
-                  <button
-                    onClick={saveTemplate}
-                    disabled={savingTemplate}
-                    className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium disabled:opacity-60 dark:border-slate-600"
-                  >
-                    {savingTemplate ? 'Збереження...' : 'Зберегти шаблон'}
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>

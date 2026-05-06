@@ -211,15 +211,47 @@ export default function AnalyticsPage() {
                     className="w-20 rounded border border-slate-300 px-2 py-1 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   />
                   {frequency === 'weekly' && (
-                    <>
-                      <label>Дні (0-6)</label>
-                      <input
-                        value={item.weekdays || '1,2,3,4,5'}
-                        onChange={(e) => upsertDigest(frequency, { weekdays: e.target.value })}
-                        className="w-40 rounded border border-slate-300 px-2 py-1 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                        placeholder="1,2,3,4,5"
-                      />
-                    </>
+                    <div className="flex flex-wrap gap-1 items-center">
+                      {[
+                        { label: 'Пн', value: 1 },
+                        { label: 'Вт', value: 2 },
+                        { label: 'Ср', value: 3 },
+                        { label: 'Чт', value: 4 },
+                        { label: 'Пт', value: 5 },
+                        { label: 'Сб', value: 6 },
+                        { label: 'Нд', value: 0 },
+                      ].map((day) => {
+                        const active = (item.weekdays || '1,2,3,4,5')
+                          .split(',')
+                          .map((s: string) => s.trim())
+                          .filter(Boolean)
+                          .map(Number)
+                        const checked = active.includes(day.value)
+                        return (
+                          <label
+                            key={day.value}
+                            className={`cursor-pointer select-none rounded border px-2 py-1 text-xs font-medium transition-colors ${
+                              checked
+                                ? 'border-primary bg-primary/10 text-primary'
+                                : 'border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-300'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={checked}
+                              onChange={() => {
+                                const next = checked
+                                  ? active.filter((d: number) => d !== day.value)
+                                  : [...active, day.value].sort((a, b) => a - b)
+                                upsertDigest(frequency, { weekdays: next.join(',') })
+                              }}
+                            />
+                            {day.label}
+                          </label>
+                        )
+                      })}
+                    </div>
                   )}
                 </div>
               </div>
