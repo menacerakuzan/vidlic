@@ -10,9 +10,7 @@ export interface KanbanTask {
   id: string
   title: string
   status: 'todo' | 'in_progress' | 'done'
-  priority?: string
   dueDate?: string
-  executionHours?: number | null
   isPrivate?: boolean
   departmentId?: string
   reporter?: { id: string; firstName: string; lastName: string }
@@ -32,9 +30,9 @@ interface KanbanBoardProps {
   onStatusChange: (id: string, status: KanbanTask['status']) => void
   assignableUsers?: KanbanAssignee[]
   loads?: Record<string, number>
-  currentUserId?: string
   currentUserRole?: string
   onReassign?: (taskId: string, assigneeId: string) => Promise<void>
+  onDeleteTask?: (taskId: string) => Promise<void>
 }
 
 const ROLE_ORDER: Record<string, number> = {
@@ -58,19 +56,12 @@ const ROLE_LABEL: Record<string, string> = {
   director: 'Директор',
 }
 
-const PRIORITY_COLOR: Record<string, string> = {
-  critical: 'bg-rose-500',
-  high: 'bg-orange-400',
-  medium: 'bg-amber-400',
-  low: 'bg-slate-300 dark:bg-slate-600',
-}
-
 const columns: { id: KanbanTask['status']; label: string; className: string }[] = [
   { id: 'todo', label: 'Активні', className: 'bg-slate-50 border-slate-200 dark:bg-slate-900/50 dark:border-slate-700' },
   { id: 'done', label: 'Виконано', className: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800/60' },
 ]
 
-export function KanbanBoard({ tasks, onStatusChange, assignableUsers = [], loads = {}, currentUserId, currentUserRole, onReassign }: KanbanBoardProps) {
+export function KanbanBoard({ tasks, onStatusChange, assignableUsers = [], loads = {}, currentUserRole, onReassign, onDeleteTask }: KanbanBoardProps) {
   const grouped = useMemo(() => {
     return columns.reduce((acc, col) => {
       acc[col.id] = col.id === 'todo'
@@ -104,9 +95,9 @@ export function KanbanBoard({ tasks, onStatusChange, assignableUsers = [], loads
             tasks={grouped[column.id]}
             assignableUsers={assignableUsers}
             loads={loads}
-            currentUserId={currentUserId}
             currentUserRole={currentUserRole}
             onReassign={onReassign}
+            onDeleteTask={onDeleteTask}
           />
         ))}
       </div>
@@ -115,7 +106,7 @@ export function KanbanBoard({ tasks, onStatusChange, assignableUsers = [], loads
 }
 
 function KanbanColumn({
-  status, title, className, tasks, assignableUsers, loads, currentUserId, currentUserRole, onReassign,
+  status, title, className, tasks, assignableUsers, loads, currentUserRole, onReassign, onDeleteTask,
 }: {
   status: KanbanTask['status']
   title: string
@@ -123,9 +114,9 @@ function KanbanColumn({
   tasks: KanbanTask[]
   assignableUsers: KanbanAssignee[]
   loads: Record<string, number>
-  currentUserId?: string
   currentUserRole?: string
   onReassign?: (taskId: string, assigneeId: string) => Promise<void>
+  onDeleteTask?: (taskId: string) => Promise<void>
 }) {
   const { setNodeRef } = useDroppable({ id: status, data: { status } })
 
@@ -144,9 +135,9 @@ function KanbanColumn({
                 task={task}
                 assignableUsers={assignableUsers}
                 loads={loads}
-                currentUserId={currentUserId}
                 currentUserRole={currentUserRole}
                 onReassign={onReassign}
+                onDeleteTask={onDeleteTask}
               />
             ))}
           </div>
@@ -157,19 +148,21 @@ function KanbanColumn({
 }
 
 function KanbanCard({
-  task, assignableUsers, loads, currentUserId, currentUserRole, onReassign,
+  task, assignableUsers, loads, currentUserRole, onReassign, onDeleteTask,
 }: {
   task: KanbanTask
   assignableUsers: KanbanAssignee[]
   loads: Record<string, number>
-  currentUserId?: string
   currentUserRole?: string
   onReassign?: (taskId: string, assigneeId: string) => Promise<void>
+  onDeleteTask?: (taskId: string) => Promise<void>
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
   const [showReassign, setShowReassign] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState('')
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [reassignSuccess, setReassignSuccess] = useState(false)
   const [error, setError] = useState('')
   const popupRef = useRef<HTMLDivElement>(null)
 
@@ -226,6 +219,8 @@ function KanbanCard({
     setError('')
     try {
       await onReassign(task.id, selectedUserId)
+      setReassignSuccess(true)
+      window.setTimeout(() => setReassignSuccess(false), 1400)
       setShowReassign(false)
       setSelectedUserId('')
     } catch {
@@ -236,6 +231,16 @@ function KanbanCard({
   }
 
   const isOverdue = task.dueDate && task.status !== 'done' && new Date(task.dueDate) < new Date()
+
+  const handleDelete = async () => {
+    if (!onDeleteTask || deleting) return
+    setDeleting(true)
+    try {
+      await onDeleteTask(task.id)
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   return (
     <div
@@ -249,9 +254,7 @@ function KanbanCard({
         {...listeners}
         className="px-4 pt-3 pb-2 cursor-grab active:cursor-grabbing"
       >
-        {/* Priority dot + title */}
         <div className="flex items-start gap-2">
-          <span className={`mt-1.5 shrink-0 w-2 h-2 rounded-full ${PRIORITY_COLOR[task.priority || 'medium']}`} />
           <p className="font-medium leading-snug">{task.title}</p>
         </div>
 
@@ -270,15 +273,13 @@ function KanbanCard({
             {task.dueDate
               ? `${isOverdue ? 'Прострочено: ' : 'Термін: '}${new Date(task.dueDate).toLocaleDateString('uk-UA')}`
               : 'Термін не вказано'}
-            {task.executionHours ? ` · ${task.executionHours} год` : ''}
             {task.isPrivate ? ' · Приватна' : ''}
           </p>
         </div>
       </div>
 
-      {/* Кнопка "Передати" — не є частиною drag area */}
-      {canReassign && task.status !== 'done' && (
-        <div className="px-4 pb-3 pl-8">
+      <div className="px-4 pb-3 pl-4 flex items-center gap-3">
+        {canReassign && task.status !== 'done' && (
           <button
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
@@ -287,12 +288,28 @@ function KanbanCard({
               setSelectedUserId('')
               setError('')
             }}
-            className="text-xs text-primary hover:underline"
+            className={`text-xs transition-all duration-300 ${reassignSuccess ? 'text-emerald-600 font-semibold' : 'text-primary hover:underline'}`}
           >
-            Передати задачу
+            {reassignSuccess ? 'Передано успішно' : 'Передати задачу'}
           </button>
-        </div>
-      )}
+        )}
+        {onDeleteTask && (
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              handleDelete()
+            }}
+            className="text-xs text-rose-600 hover:underline disabled:opacity-60"
+            disabled={deleting}
+          >
+            {deleting ? 'Видалення...' : 'Видалити'}
+          </button>
+        )}
+        {reassignSuccess && (
+          <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+        )}
+      </div>
 
       {/* Попап вибору виконавця */}
       {showReassign && (

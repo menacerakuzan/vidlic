@@ -4,16 +4,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { KanbanBoard, KanbanTask } from '@/components/kanban/kanban-board'
 import { useAuthStore } from '@/store/auth-store'
-import { getPriorityLabel } from '@/lib/utils'
 
 type Task = {
   id: string
   title: string
   description?: string
   status: 'todo' | 'in_progress' | 'done'
-  priority: string
   dueDate?: string
-  executionHours?: number | null
   isPrivate?: boolean
   assignee?: { id: string; firstName: string; lastName: string }
   reporter?: { id: string; firstName: string; lastName: string }
@@ -50,16 +47,14 @@ export default function TasksPage() {
   const [filterReporterId, setFilterReporterId] = useState('')
   const [filterDepartmentId, setFilterDepartmentId] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
-  const [filterPriority, setFilterPriority] = useState('')
   const [filterDueFrom, setFilterDueFrom] = useState('')
   const [filterDueTo, setFilterDueTo] = useState('')
   const [createDepartmentId, setCreateDepartmentId] = useState('')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [priority, setPriority] = useState('medium')
   const [assigneeId, setAssigneeId] = useState('')
   const [dueDate, setDueDate] = useState('')
-  const [executionHours, setExecutionHours] = useState('')
+  const [activeSubsection, setActiveSubsection] = useState<'create' | 'workload'>('create')
   const [selectedTaskId, setSelectedTaskId] = useState('')
   const [taskAttachments, setTaskAttachments] = useState<any[]>([])
   const [attachmentsLoading, setAttachmentsLoading] = useState(false)
@@ -84,7 +79,6 @@ export default function TasksPage() {
     if (filterAssigneeId) taskParams.set('assigneeId', filterAssigneeId)
     if (filterReporterId) taskParams.set('reporterId', filterReporterId)
     if (filterStatus) taskParams.set('status', filterStatus)
-    if (filterPriority) taskParams.set('priority', filterPriority)
     if (filterDueFrom) taskParams.set('dueDateFrom', filterDueFrom)
     if (filterDueTo) taskParams.set('dueDateTo', filterDueTo)
 
@@ -174,7 +168,6 @@ export default function TasksPage() {
     filterReporterId,
     filterDepartmentId,
     filterStatus,
-    filterPriority,
     filterDueFrom,
     filterDueTo,
   ])
@@ -267,7 +260,6 @@ export default function TasksPage() {
 
     const payload: any = {
       title: title.trim(),
-      priority,
       departmentId: targetDepartmentId,
     }
     if (description.trim()) payload.description = description.trim()
@@ -276,7 +268,6 @@ export default function TasksPage() {
       payload.assigneeId = assigneeId
     }
     if (dueDate) payload.dueDate = dueDate
-    if (executionHours) payload.executionHours = Number(executionHours)
 
     const resp = await fetch('/api/v1/tasks', {
       method: 'POST',
@@ -298,7 +289,6 @@ export default function TasksPage() {
         setSelectedAssignDepartmentId(assignDepartmentOptions[0].id)
       }
       setDueDate('')
-      setExecutionHours('')
       await loadAll()
     }
   }
@@ -424,20 +414,11 @@ export default function TasksPage() {
 
   const filteredTasks = tasks
 
-  const priorityWeight: Record<string, number> = {
-    critical: 4,
-    high: 3,
-    medium: 2,
-    low: 1,
-  }
-
   const sortedFilteredTasks = [...filteredTasks].sort((a, b) => {
     const aDue = a.dueDate ? new Date(a.dueDate).getTime() : Number.POSITIVE_INFINITY
     const bDue = b.dueDate ? new Date(b.dueDate).getTime() : Number.POSITIVE_INFINITY
     if (a.status !== 'done' && b.status !== 'done' && aDue !== bDue) return aDue - bDue
     if (a.status !== b.status) return a.status === 'done' ? 1 : -1
-    const pDiff = (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0)
-    if (pDiff !== 0) return pDiff
     const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0
     const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0
     return bCreated - aCreated
@@ -447,32 +428,40 @@ export default function TasksPage() {
     id: task.id,
     title: task.title,
     status: task.status,
-    priority: task.priority,
     dueDate: task.dueDate,
-    executionHours: task.executionHours ?? null,
     isPrivate: Boolean(task.isPrivate),
     departmentId: task.department?.id,
     reporter: task.reporter,
     assignee: task.assignee,
   }))
 
-  const workloadByUser = useMemo(() => {
-    const map = new Map<string, { userId: string; name: string; active: number; overdue: number; critical: number }>()
+  const workloadByDepartment = useMemo(() => {
+    const map = new Map<string, { departmentId: string; departmentName: string; employees: Map<string, { userId: string; name: string; tasks: Task[] }> }>()
     tasks.forEach((task) => {
       if (!task.assignee?.id || task.status === 'done') return
-      const current = map.get(task.assignee.id) || {
+      const depId = task.department?.id || 'unassigned-department'
+      const depName = task.department?.name || 'Без підрозділу'
+      const depEntry = map.get(depId) || {
+        departmentId: depId,
+        departmentName: depName,
+        employees: new Map<string, { userId: string; name: string; tasks: Task[] }>(),
+      }
+      const employeeEntry = depEntry.employees.get(task.assignee.id) || {
         userId: task.assignee.id,
         name: `${task.assignee.firstName} ${task.assignee.lastName}`.trim(),
-        active: 0,
-        overdue: 0,
-        critical: 0,
+        tasks: [],
       }
-      current.active += 1
-      if (task.priority === 'critical') current.critical += 1
-      if (task.dueDate && new Date(task.dueDate).getTime() < Date.now()) current.overdue += 1
-      map.set(task.assignee.id, current)
+      employeeEntry.tasks.push(task)
+      depEntry.employees.set(task.assignee.id, employeeEntry)
+      map.set(depId, depEntry)
     })
-    return Array.from(map.values()).sort((a, b) => b.active - a.active)
+    return Array.from(map.values())
+      .map((dep) => ({
+        departmentId: dep.departmentId,
+        departmentName: dep.departmentName,
+        employees: Array.from(dep.employees.values()).sort((a, b) => b.tasks.length - a.tasks.length),
+      }))
+      .sort((a, b) => a.departmentName.localeCompare(b.departmentName, 'uk'))
   }, [tasks])
 
   const filteredTransparency = useMemo(() => {
@@ -510,7 +499,7 @@ export default function TasksPage() {
         )}
         <div>
           <h1 className="text-2xl font-semibold font-display">Задачі</h1>
-          <p className="text-slate-500 mt-1">Створення, призначення та Kanban</p>
+          <p className="text-slate-500 mt-1">Створення, призначення, видалення та навантаження</p>
         </div>
 
         {canFilterByEmployee && (
@@ -547,13 +536,6 @@ export default function TasksPage() {
                 <option value="in_progress">В роботі</option>
                 <option value="done">Виконано</option>
               </select>
-              <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
-                <option value="">Усі пріоритети</option>
-                <option value="critical">Critical</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-slate-500 dark:text-slate-400">Від</label>
                 <input type="date" value={filterDueFrom} onChange={(e) => setFilterDueFrom(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />
@@ -568,7 +550,6 @@ export default function TasksPage() {
                   setFilterAssigneeId('')
                   setFilterReporterId('')
                   setFilterStatus('')
-                  setFilterPriority('')
                   setFilterDueFrom('')
                   setFilterDueTo('')
                 }}
@@ -615,7 +596,32 @@ export default function TasksPage() {
           </div>
         )}
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-4 gap-3 dark:border-slate-700 dark:bg-slate-900">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4 dark:border-slate-700 dark:bg-slate-900">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setActiveSubsection('create')}
+              className={`rounded-lg border px-3 py-2 text-sm ${
+                activeSubsection === 'create'
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-200'
+              }`}
+            >
+              Створити задачу
+            </button>
+            <button
+              onClick={() => setActiveSubsection('workload')}
+              className={`rounded-lg border px-3 py-2 text-sm ${
+                activeSubsection === 'workload'
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-200'
+              }`}
+            >
+              Нагрузка співробітників
+            </button>
+          </div>
+
+          {activeSubsection === 'create' && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -628,12 +634,6 @@ export default function TasksPage() {
             className="md:col-span-2 h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             placeholder="Опис задачі"
           />
-          <select value={priority} onChange={(e) => setPriority(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
-            <option value="low">{getPriorityLabel('low')}</option>
-            <option value="medium">{getPriorityLabel('medium')}</option>
-            <option value="high">{getPriorityLabel('high')}</option>
-            <option value="critical">{getPriorityLabel('critical')}</option>
-          </select>
           <select
             value={selectedAssignDepartmentId || createDepartmentId}
             onChange={(e) => {
@@ -667,33 +667,41 @@ export default function TasksPage() {
             onChange={(e) => setDueDate(e.target.value)}
             className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           />
-          <input
-            type="number"
-            min={1}
-            max={999}
-            value={executionHours}
-            onChange={(e) => setExecutionHours(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-            placeholder="Час (год)"
-          />
           <button disabled={creating} onClick={createTask} className="md:col-span-4 h-10 rounded-lg bg-primary text-white text-sm font-medium disabled:opacity-60">
             {creating ? 'Створення...' : 'Створити задачу'}
           </button>
         </div>
+          )}
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-          <h2 className="text-base font-semibold mb-3">Загруженість співробітників</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            {workloadByUser.map((row) => (
-              <div key={row.userId} className="rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800/70">
-                <p className="text-sm font-semibold">{row.name}</p>
-                <p className="text-xs text-slate-600 dark:text-slate-300">
-                  Активні: <b>{row.active}</b> · Прострочені: {row.overdue} · Critical: {row.critical}
-                </p>
+          {activeSubsection === 'workload' && (
+            <div>
+              <h2 className="text-base font-semibold mb-3">Нагрузка співробітників по відділах</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {workloadByDepartment.map((department) => (
+                  <div key={department.departmentId} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700 dark:bg-slate-800/60">
+                    <p className="text-sm font-semibold mb-2">{department.departmentName}</p>
+                    <div className="space-y-2">
+                      {department.employees.map((employee) => (
+                        <div key={employee.userId} className="rounded-lg border border-slate-200 p-2 dark:border-slate-700">
+                          <p className="text-xs font-semibold text-slate-700 dark:text-slate-100">
+                            {employee.name} · {employee.tasks.length}
+                          </p>
+                          <div className="mt-1 space-y-1">
+                            {employee.tasks.map((task) => (
+                              <p key={task.id} className="text-xs text-slate-600 dark:text-slate-300">
+                                • {task.title}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-            {workloadByUser.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">Дані поки відсутні.</p>}
-          </div>
+              {workloadByDepartment.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">Дані поки відсутні.</p>}
+            </div>
+          )}
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
@@ -718,9 +726,9 @@ export default function TasksPage() {
             onStatusChange={updateStatus}
             assignableUsers={assignableUsers}
             loads={loads}
-            currentUserId={user?.id}
             currentUserRole={user?.role}
             onReassign={canAssign ? reassignFromKanban : undefined}
+            onDeleteTask={deleteTask}
           />
         )}
 
