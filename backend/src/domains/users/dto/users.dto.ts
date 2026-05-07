@@ -49,6 +49,12 @@ export class CreateUserDto {
   @IsArray()
   @IsString({ each: true })
   scopeDepartmentIds?: string[];
+
+  @ApiPropertyOptional({ type: [String], description: 'Додаткові підрозділи користувача' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  secondaryDepartmentIds?: string[];
 }
 
 export class UpdateUserDto {
@@ -87,6 +93,12 @@ export class UpdateUserDto {
   @IsArray()
   @IsString({ each: true })
   scopeDepartmentIds?: string[];
+
+  @ApiPropertyOptional({ type: [String], description: 'Додаткові підрозділи користувача' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  secondaryDepartmentIds?: string[];
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()

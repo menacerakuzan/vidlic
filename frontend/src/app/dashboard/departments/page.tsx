@@ -25,6 +25,8 @@ type TeamUser = {
   lastName: string
   email: string
   role: string
+  isSecondary?: boolean
+  secondaryDepartmentIds?: string[]
   department?: {
     id: string
     nameUk?: string
@@ -39,6 +41,7 @@ type UserOption = {
   role: string
   departmentId?: string | null
   scopeDepartmentIds?: string[]
+  secondaryDepartmentIds?: string[]
 }
 
 export default function DepartmentsPage() {
@@ -68,6 +71,8 @@ export default function DepartmentsPage() {
   const [selectedManagerId, setSelectedManagerId] = useState('')
   const [selectedClerkId, setSelectedClerkId] = useState('')
   const [savingLeads, setSavingLeads] = useState(false)
+  const [secondaryUserId, setSecondaryUserId] = useState('')
+  const [addingSecondary, setAddingSecondary] = useState(false)
   const [newUserEmail, setNewUserEmail] = useState('')
   const [newUserFirstName, setNewUserFirstName] = useState('')
   const [newUserLastName, setNewUserLastName] = useState('')
@@ -205,6 +210,7 @@ export default function DepartmentsPage() {
       role: u.role,
       departmentId: u.department?.id || null,
       scopeDepartmentIds: Array.isArray(u.scopeDepartmentIds) ? u.scopeDepartmentIds : [],
+      secondaryDepartmentIds: Array.isArray(u.secondaryDepartmentIds) ? u.secondaryDepartmentIds : [],
     })))
   }
 
@@ -556,6 +562,55 @@ export default function DepartmentsPage() {
     }
     const err = await resp.json().catch(() => null)
     setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося перевести співробітника'))
+  }
+
+  const addSecondaryDepartment = async () => {
+    if (!canManageEmployees || !accessToken || !selectedDepartmentId || !secondaryUserId) return
+    setActionError('')
+    setActionSuccess('')
+    setAddingSecondary(true)
+    const targetUser = usersOptions.find((u) => u.id === secondaryUserId)
+    const current = Array.isArray(targetUser?.secondaryDepartmentIds) ? targetUser!.secondaryDepartmentIds : []
+    if (current.includes(selectedDepartmentId)) {
+      setAddingSecondary(false)
+      setActionError('Цей співробітник вже прикріплений до підрозділу як сумісник')
+      return
+    }
+    const resp = await fetch(`/api/v1/users/${secondaryUserId}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secondaryDepartmentIds: [...current, selectedDepartmentId] }),
+    })
+    setAddingSecondary(false)
+    if (resp.ok) {
+      setSecondaryUserId('')
+      await loadTeam(selectedDepartmentId)
+      await loadUsers()
+      setActionSuccess('Співробітника додано як сумісника')
+      return
+    }
+    const err = await resp.json().catch(() => null)
+    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося додати сумісника'))
+  }
+
+  const removeSecondaryDepartment = async (memberId: string) => {
+    if (!canManageEmployees || !accessToken || !selectedDepartmentId) return
+    setActionError('')
+    const targetUser = usersOptions.find((u) => u.id === memberId)
+    const current = Array.isArray(targetUser?.secondaryDepartmentIds) ? targetUser!.secondaryDepartmentIds : []
+    const resp = await fetch(`/api/v1/users/${memberId}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secondaryDepartmentIds: current.filter((id) => id !== selectedDepartmentId) }),
+    })
+    if (resp.ok) {
+      await loadTeam(selectedDepartmentId)
+      await loadUsers()
+      setActionSuccess('Сумісника видалено з підрозділу')
+      return
+    }
+    const err = await resp.json().catch(() => null)
+    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося видалити сумісника'))
   }
 
   const saveDepartmentSupervision = async () => {
@@ -1199,6 +1254,35 @@ export default function DepartmentsPage() {
                 </div>
               )}
 
+              {canManageEmployees && selectedDepartmentId && (
+                <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-3 border-b border-slate-100 bg-indigo-50/40 dark:border-slate-700 dark:bg-indigo-950/20">
+                  <p className="md:col-span-4 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    Додати сумісника — людина залишається у своєму відділі, але також видна тут
+                  </p>
+                  <select
+                    className="md:col-span-3 h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    value={secondaryUserId}
+                    onChange={(e) => setSecondaryUserId(e.target.value)}
+                  >
+                    <option value="">Оберіть співробітника з іншого відділу...</option>
+                    {usersOptions
+                      .filter((u) => u.departmentId !== selectedDepartmentId && u.role !== 'admin')
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.firstName} {u.lastName} ({getRoleLabel(u.role)})
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    disabled={addingSecondary || !secondaryUserId}
+                    onClick={addSecondaryDepartment}
+                    className="h-10 rounded-lg border border-indigo-300 text-sm font-medium text-indigo-700 disabled:opacity-60 dark:border-indigo-700 dark:text-indigo-300"
+                  >
+                    {addingSecondary ? 'Додаємо...' : 'Додати сумісником'}
+                  </button>
+                </div>
+              )}
+
               <div>
                 {team.length === 0 && (
                   <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
@@ -1211,25 +1295,43 @@ export default function DepartmentsPage() {
                 {team.map((member) => (
                   <div key={member.id} className="px-4 py-3 border-b border-slate-100 flex items-center justify-between dark:border-slate-700">
                     <div>
-                      <p className="text-sm font-medium">{member.firstName} {member.lastName}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{member.firstName} {member.lastName}</p>
+                        {member.isSecondary && (
+                          <span className="inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
+                            Суміщення
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400">{member.email} • {getRoleLabel(member.role)}</p>
                       {member.department && (
                         <p className="text-xs text-slate-400 dark:text-slate-500">
-                          Підрозділ: {member.department.nameUk || member.department.code || member.department.id}
+                          Основний відділ: {member.department.nameUk || member.department.code || member.department.id}
                         </p>
                       )}
                     </div>
                     {canManageEmployees && member.role !== 'director' && member.role !== 'deputy_head' && member.role !== 'admin' && (
                       <div className="flex items-center gap-3">
-                        {isAdmin && (
+                        {member.isSecondary ? (
                           <button
-                            onClick={() => resetEmployeePassword(member.id, `${member.firstName} ${member.lastName}`)}
-                            className="text-sm text-amber-600 hover:underline"
+                            onClick={() => removeSecondaryDepartment(member.id)}
+                            className="text-sm text-indigo-600 hover:underline dark:text-indigo-400"
                           >
-                            Змінити пароль
+                            Прибрати суміщення
                           </button>
+                        ) : (
+                          <>
+                            {isAdmin && (
+                              <button
+                                onClick={() => resetEmployeePassword(member.id, `${member.firstName} ${member.lastName}`)}
+                                className="text-sm text-amber-600 hover:underline"
+                              >
+                                Змінити пароль
+                              </button>
+                            )}
+                            <button onClick={() => deleteEmployee(member.id)} className="text-sm text-rose-600 hover:underline">Видалити</button>
+                          </>
                         )}
-                        <button onClick={() => deleteEmployee(member.id)} className="text-sm text-rose-600 hover:underline">Видалити</button>
                       </div>
                     )}
                   </div>

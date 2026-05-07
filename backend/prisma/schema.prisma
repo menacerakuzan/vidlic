@@ -119,7 +119,8 @@ model User {
   patronymic   String?
   passwordHash String
   role         UserRole @default(specialist)
-  scopeDepartmentIds Json?
+  scopeDepartmentIds     Json?
+  secondaryDepartmentIds Json?
   isActive     Boolean  @default(true)
   departmentId String?
   positionId   String?

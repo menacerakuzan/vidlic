@@ -270,20 +270,54 @@ export class DepartmentsService {
     // so transferred users remain visible in the department context.
     const departmentIds = [department.id, ...department.children.map((child) => child.id)];
 
-    const users = await this.prisma.user.findMany({
-      where: { departmentId: { in: departmentIds }, isActive: true },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        patronymic: true,
-        email: true,
-        role: true,
-        department: { select: { id: true, nameUk: true, code: true } },
-        position: { select: { titleUk: true } },
-      },
-      orderBy: [{ departmentId: 'asc' }, { role: 'asc' }, { lastName: 'asc' }],
+    // Primary members (departmentId matches) + secondary members (secondaryDepartmentIds contains this dept)
+    const [primaryUsers, allUsers] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { departmentId: { in: departmentIds }, isActive: true },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          patronymic: true,
+          email: true,
+          role: true,
+          secondaryDepartmentIds: true,
+          department: { select: { id: true, nameUk: true, code: true } },
+          position: { select: { titleUk: true } },
+        },
+        orderBy: [{ departmentId: 'asc' }, { role: 'asc' }, { lastName: 'asc' }],
+      }),
+      // Find secondary members — users whose secondaryDepartmentIds overlap with departmentIds
+      this.prisma.user.findMany({
+        where: {
+          isActive: true,
+          departmentId: { notIn: departmentIds },
+        },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          patronymic: true,
+          email: true,
+          role: true,
+          secondaryDepartmentIds: true,
+          department: { select: { id: true, nameUk: true, code: true } },
+          position: { select: { titleUk: true } },
+        },
+        orderBy: [{ role: 'asc' }, { lastName: 'asc' }],
+      }),
+    ]);
+
+    const primaryIds = new Set(primaryUsers.map((u) => u.id));
+    const secondaryMembers = allUsers.filter((u) => {
+      const secondary = Array.isArray(u.secondaryDepartmentIds) ? u.secondaryDepartmentIds : [];
+      return secondary.some((id: string) => departmentIds.includes(id));
     });
+
+    const users = [
+      ...primaryUsers,
+      ...secondaryMembers.filter((u) => !primaryIds.has(u.id)).map((u) => ({ ...u, isSecondary: true })),
+    ];
 
     return users;
   }

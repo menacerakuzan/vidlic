@@ -112,6 +112,7 @@ export class UsersService {
         departmentId: dto.departmentId,
         positionId: dto.positionId,
         scopeDepartmentIds: Array.isArray(dto.scopeDepartmentIds) ? dto.scopeDepartmentIds : undefined,
+        secondaryDepartmentIds: Array.isArray(dto.secondaryDepartmentIds) ? dto.secondaryDepartmentIds : [],
       },
       include: { department: true, position: true },
     });
@@ -170,6 +171,7 @@ export class UsersService {
         departmentId: dto.departmentId ?? user.departmentId,
         positionId: dto.positionId ?? user.positionId,
         scopeDepartmentIds: Array.isArray(dto.scopeDepartmentIds) ? dto.scopeDepartmentIds : user.scopeDepartmentIds,
+        secondaryDepartmentIds: Array.isArray(dto.secondaryDepartmentIds) ? dto.secondaryDepartmentIds : user.secondaryDepartmentIds,
         isActive: dto.isActive ?? user.isActive,
       },
       include: { department: true, position: true },
@@ -220,6 +222,7 @@ export class UsersService {
           departmentId: null,
           positionId: null,
           scopeDepartmentIds: [],
+          secondaryDepartmentIds: [],
         },
       }),
       this.prisma.session.deleteMany({ where: { userId: id } }),
@@ -298,6 +301,7 @@ export class UsersService {
         titleUk: user.position.titleUk,
       } : null,
       scopeDepartmentIds: Array.isArray(user.scopeDepartmentIds) ? user.scopeDepartmentIds : [],
+      secondaryDepartmentIds: Array.isArray(user.secondaryDepartmentIds) ? user.secondaryDepartmentIds : [],
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
