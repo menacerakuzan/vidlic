@@ -102,6 +102,7 @@ export class TasksService {
       visibilityClauses.push(
         { assigneeId: user.id },
         { reporterId: user.id },
+        { coAssigneeIds: { array_contains: user.id } },
       );
     } else if (['manager', 'director', 'deputy_director', 'deputy_head'].includes(user.role)) {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
@@ -114,6 +115,7 @@ export class TasksService {
         },
         { assigneeId: user.id },
         { reporterId: user.id },
+        { coAssigneeIds: { array_contains: user.id } },
       );
     } else if (departmentId) {
       visibilityClauses.push({ departmentId });
@@ -209,6 +211,7 @@ export class TasksService {
         isPrivate: isPrivateSpecialistTask,
         departmentId: targetDepartmentId,
         assigneeId: dto.assigneeId,
+        coAssigneeIds: Array.isArray(dto.coAssigneeIds) ? dto.coAssigneeIds : [],
         reporterId: user.id,
         reportId: dto.reportId,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
@@ -290,6 +293,7 @@ export class TasksService {
         description: dto.description ?? task.description,
         departmentId: dto.departmentId ?? task.departmentId,
         assigneeId: dto.assigneeId ?? task.assigneeId,
+        coAssigneeIds: Array.isArray(dto.coAssigneeIds) ? dto.coAssigneeIds : task.coAssigneeIds,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : (dto.dueDate === null ? null : task.dueDate),
       },
       include: {
@@ -421,6 +425,7 @@ export class TasksService {
       title: task.title,
       description: task.description,
       status: task.status,
+      coAssigneeIds: Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds : [],
       isPrivate: Boolean(task.isPrivate),
       dueDate: task.dueDate,
       assignee: task.assignee ? {
@@ -489,7 +494,8 @@ export class TasksService {
 
   private async canManageTask(task: any, user: any) {
     if (user.role === 'admin') return true;
-    if (task.assigneeId === user.id || task.reporterId === user.id) return true;
+    const coIds = Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds as string[] : [];
+    if (task.assigneeId === user.id || task.reporterId === user.id || coIds.includes(user.id)) return true;
     if (user.role === 'deputy_head') return false;
     if (this.shouldHideFromLeadership(task, user)) return false;
     if (user.role === 'director' || user.role === 'manager') {
@@ -507,8 +513,10 @@ export class TasksService {
 
   private async canMoveTaskStatus(task: any, user: any) {
     if (user.role === 'admin') return true;
+    const coIds = Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds as string[] : [];
+    if (task.assigneeId === user.id || task.reporterId === user.id || coIds.includes(user.id)) return true;
     if (user.role === 'deputy_head') return false;
-    if (this.shouldHideFromLeadership(task, user) && task.reporterId !== user.id) return false;
+    if (this.shouldHideFromLeadership(task, user)) return false;
     if (user.role === 'director' || user.role === 'manager') {
       const scoped = await this.resolveScopedDepartmentIdsForUser(user);
       if (scoped.includes(task.departmentId)) return true;
@@ -517,13 +525,13 @@ export class TasksService {
       const scoped = await this.resolveScopedDepartmentIdsForUser(user);
       if (scoped.includes(task.departmentId)) return true;
     }
-    if (task.assigneeId === user.id || task.reporterId === user.id) return true;
     return false;
   }
 
   private async canViewTask(task: any, user: any) {
     if (user.role === 'admin') return true;
-    if (task.assigneeId === user.id || task.reporterId === user.id) return true;
+    const coIds = Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds as string[] : [];
+    if (task.assigneeId === user.id || task.reporterId === user.id || coIds.includes(user.id)) return true;
     if (this.shouldHideFromLeadership(task, user)) return false;
     if (user.role === 'director' || user.role === 'manager' || user.role === 'deputy_head') {
       const scoped = await this.resolveScopedDepartmentIdsForUser(user);

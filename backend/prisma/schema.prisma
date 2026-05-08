@@ -274,8 +274,9 @@ model Task {
   executionHours Int?
   isPrivate    Boolean      @default(false)
   departmentId String?
-  assigneeId   String?
-  reporterId   String
+  assigneeId    String?
+  coAssigneeIds Json?
+  reporterId    String
   reportId     String?
   dueDate      DateTime?
   createdAt    DateTime     @default(now())

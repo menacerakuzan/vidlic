@@ -17,6 +17,7 @@ type Task = {
   department?: { id: string; name?: string; nameUk?: string } | null
   createdAt?: string
   startedAt?: string | null
+  coAssigneeIds?: string[]
 }
 
 type TeamUser = {
@@ -416,7 +417,7 @@ export default function TaskListPage() {
             <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] min-h-[520px]">
               {/* Sidebar list */}
               <div className="border-r border-slate-200 dark:border-slate-700 max-h-[70vh] overflow-y-auto">
-                {orderedTasks.map((task) => {
+                {orderedTasks.map((task, idx) => {
                   const isSelected = selectedTask?.id === task.id
                   const u = urgencyLevel(task)
                   return (
@@ -426,7 +427,10 @@ export default function TaskListPage() {
                       className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${sidebarBorderClass(task, isSelected)}`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2 flex-1">{task.title}</p>
+                        <div className="flex items-start gap-2 flex-1 min-w-0">
+                          <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mt-0.5 shrink-0 w-5 text-right">{idx + 1}</span>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2 flex-1">{task.title}</p>
+                        </div>
                         {u !== 'normal' && <UrgencyBadge level={u} />}
                       </div>
                       {task.dueDate && u !== 'normal' && (
@@ -517,6 +521,15 @@ export default function TaskListPage() {
                             <span className="font-medium">Виконавець:</span>{' '}
                             {selectedTask.assignee ? `${selectedTask.assignee.firstName} ${selectedTask.assignee.lastName}` : 'Без виконавця'}
                           </p>
+                          {Array.isArray(selectedTask.coAssigneeIds) && selectedTask.coAssigneeIds.length > 0 && (
+                            <p className="text-slate-600 dark:text-slate-300">
+                              <span className="font-medium">Співвиконавці:</span>{' '}
+                              {selectedTask.coAssigneeIds.map((coId) => {
+                                const u = users.find((u) => u.id === coId)
+                                return u ? `${u.firstName} ${u.lastName}` : coId
+                              }).join(', ')}
+                            </p>
+                          )}
                           <p className="text-slate-600 dark:text-slate-300">
                             <span className="font-medium">Підрозділ:</span>{' '}
                             {selectedTask.department?.nameUk || selectedTask.department?.name || 'Без підрозділу'}

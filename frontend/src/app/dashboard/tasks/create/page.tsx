@@ -24,6 +24,7 @@ type TeamUser = {
   firstName: string
   lastName: string
   role: string
+  secondaryDepartmentIds?: string[]
   department?: {
     id: string
     nameUk?: string
@@ -56,6 +57,8 @@ export default function CreateTaskPage() {
   const [taskActionError, setTaskActionError] = useState('')
   const [actionToast, setActionToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [selectedAssignDepartmentId, setSelectedAssignDepartmentId] = useState('')
+  const [overrideDepartmentId, setOverrideDepartmentId] = useState('')
+  const [coAssigneeIds, setCoAssigneeIds] = useState<string[]>([])
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const loadAll = async () => {
@@ -93,6 +96,7 @@ export default function CreateTaskPage() {
         firstName: u.firstName,
         lastName: u.lastName,
         role: u.role,
+        secondaryDepartmentIds: Array.isArray(u.secondaryDepartmentIds) ? u.secondaryDepartmentIds : [],
         department: u.department || null,
       }))
       setAssignableUsers(normalizedUsers)
@@ -152,7 +156,11 @@ export default function CreateTaskPage() {
   const availableForAssignment = useMemo(() => {
     if (!canAssign) return []
     if (!selectedAssignDepartmentId) return availableSorted
-    return availableSorted.filter((member) => member.department?.id === selectedAssignDepartmentId)
+    return availableSorted.filter((member) => {
+      if (member.department?.id === selectedAssignDepartmentId) return true
+      if (Array.isArray(member.secondaryDepartmentIds) && member.secondaryDepartmentIds.includes(selectedAssignDepartmentId)) return true
+      return false
+    })
   }, [canAssign, selectedAssignDepartmentId, availableSorted])
 
   const createTask = async () => {
@@ -160,7 +168,7 @@ export default function CreateTaskPage() {
     setCreating(true)
 
     const selectedAssignee = availableForAssignment.find((member) => member.id === assigneeId)
-    const targetDepartmentId = selectedAssignDepartmentId || selectedAssignee?.department?.id || user?.department?.id
+    const targetDepartmentId = overrideDepartmentId || selectedAssignDepartmentId || selectedAssignee?.department?.id || user?.department?.id
 
     const payload: any = {
       title: title.trim(),
@@ -168,6 +176,7 @@ export default function CreateTaskPage() {
     }
     if (description.trim()) payload.description = description.trim()
     if (canAssign && assigneeId) payload.assigneeId = assigneeId
+    if (coAssigneeIds.length > 0) payload.coAssigneeIds = coAssigneeIds
     if (dueDate) payload.dueDate = dueDate
 
     const resp = await fetch('/api/v1/tasks', {
@@ -185,6 +194,8 @@ export default function CreateTaskPage() {
       setTitle('')
       setDescription('')
       setAssigneeId('')
+      setCoAssigneeIds([])
+      setOverrideDepartmentId('')
       if (isDirectorMode && assignDepartmentOptions.length > 0) {
         setSelectedAssignDepartmentId(assignDepartmentOptions[0].id)
       }
@@ -344,16 +355,84 @@ export default function CreateTaskPage() {
             ))}
           </select>
           {canAssign ? (
-            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
+            <select
+              value={assigneeId}
+              onChange={(e) => { setAssigneeId(e.target.value); setOverrideDepartmentId(''); setCoAssigneeIds((prev) => prev.filter((id) => id !== e.target.value)) }}
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            >
               <option value="">Без виконавця</option>
-              {availableForAssignment.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.firstName} {member.lastName} ({loads[member.id] || 0})
-                </option>
-              ))}
+              {availableForAssignment.map((member) => {
+                const isSecondary = member.department?.id !== selectedAssignDepartmentId && Array.isArray(member.secondaryDepartmentIds) && member.secondaryDepartmentIds.includes(selectedAssignDepartmentId)
+                return (
+                  <option key={member.id} value={member.id}>
+                    {member.firstName} {member.lastName}{isSecondary ? ' (сумісник)' : ''} ({loads[member.id] || 0})
+                  </option>
+                )
+              })}
             </select>
           ) : (
             <div className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 flex items-center dark:border-slate-700 dark:text-slate-400">Призначення: через керівника/директора</div>
+          )}
+          {(() => {
+            if (!assigneeId) return null
+            const selected = availableForAssignment.find((m) => m.id === assigneeId)
+            if (!selected) return null
+            const secondary = Array.isArray(selected.secondaryDepartmentIds) ? selected.secondaryDepartmentIds : []
+            if (secondary.length === 0) return null
+            const allDepts = [selected.department?.id, ...secondary].filter(Boolean) as string[]
+            return (
+              <div className="md:col-span-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3 dark:border-indigo-800 dark:bg-indigo-950/30">
+                <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300 mb-1.5">
+                  {selected.firstName} {selected.lastName} — сумісник у кількох відділах. Обери відділ для цієї задачі:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {allDepts.map((depId) => {
+                    const dep = departments.find((d) => d.id === depId)
+                    const isActive = (overrideDepartmentId || selectedAssignDepartmentId) === depId
+                    return (
+                      <button
+                        key={depId}
+                        type="button"
+                        onClick={() => setOverrideDepartmentId(depId)}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition ${isActive ? 'border-indigo-500 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200' : 'border-slate-300 bg-white text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'}`}
+                      >
+                        {dep?.nameUk || dep?.name || depId}
+                        {depId === selected.department?.id ? ' (основний)' : ' (суміщення)'}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+          {canAssign && availableForAssignment.length > 0 && (
+            <div className="md:col-span-4">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1.5">Співвиконавці (необов'язково)</p>
+              <div className="flex flex-wrap gap-2">
+                {availableForAssignment
+                  .filter((m) => m.id !== assigneeId)
+                  .map((member) => {
+                    const isSelected = coAssigneeIds.includes(member.id)
+                    return (
+                      <button
+                        key={member.id}
+                        type="button"
+                        onClick={() => setCoAssigneeIds((prev) =>
+                          isSelected ? prev.filter((id) => id !== member.id) : [...prev, member.id]
+                        )}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition ${
+                          isSelected
+                            ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                            : 'border-slate-300 bg-white text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'
+                        }`}
+                      >
+                        {member.firstName} {member.lastName}
+                        {isSelected ? ' ✓' : ''}
+                      </button>
+                    )
+                  })}
+              </div>
+            </div>
           )}
           <input
             type="datetime-local"
