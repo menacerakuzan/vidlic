@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { AnimatePresence, motion } from 'framer-motion'
 import { extractApiErrorMessage } from '@/lib/error-message'
+import { useAuthStore } from '@/store/auth-store'
 
 type Task = {
   id: string
@@ -68,6 +69,7 @@ function UrgencyBadge({ level }: { level: ReturnType<typeof urgencyLevel> }) {
 }
 
 export default function TaskListPage() {
+  const { user } = useAuthStore()
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<TeamUser[]>([])
   const [departments, setDepartments] = useState<DepartmentOption[]>([])
@@ -83,6 +85,11 @@ export default function TaskListPage() {
   const [filterDepartmentId, setFilterDepartmentId] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterUrgency, setFilterUrgency] = useState('')
+  const [editMode, setEditMode] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editDueDate, setEditDueDate] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const loadTasks = async () => {
@@ -150,6 +157,10 @@ export default function TaskListPage() {
     if (selectedTaskId) return
     if (tasks.length > 0) setSelectedTaskId(tasks[0].id)
   }, [tasks, selectedTaskId])
+
+  useEffect(() => {
+    setEditMode(false)
+  }, [selectedTaskId])
 
   const deleteTask = async (id: string) => {
     if (!accessToken) return
@@ -222,6 +233,41 @@ export default function TaskListPage() {
     const message = extractApiErrorMessage(resp.status, err, 'Не вдалося змінити статус задачі')
     setError(message)
     setActionToast({ type: 'error', message })
+  }
+
+  const openEdit = (task: Task) => {
+    setEditTitle(task.title)
+    setEditDescription(task.description || '')
+    setEditDueDate(task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 16) : '')
+    setEditMode(true)
+  }
+
+  const saveEdit = async (taskId: string) => {
+    if (!accessToken || !editTitle.trim()) return
+    setSavingEdit(true)
+    const payload: any = {
+      title: editTitle.trim(),
+      description: editDescription.trim() || undefined,
+    }
+    if (editDueDate) {
+      payload.dueDate = editDueDate
+    } else {
+      payload.dueDate = null
+    }
+    const resp = await fetch(`/api/v1/tasks/${taskId}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    setSavingEdit(false)
+    if (resp.ok) {
+      setEditMode(false)
+      await loadTasks()
+      setActionToast({ type: 'success', message: 'Задачу оновлено' })
+      return
+    }
+    const err = await resp.json().catch(() => null)
+    setActionToast({ type: 'error', message: extractApiErrorMessage(resp.status, err, 'Не вдалося оновити задачу') })
   }
 
   useEffect(() => {
@@ -400,88 +446,151 @@ export default function TaskListPage() {
                   <p className="text-sm text-slate-500 dark:text-slate-400">Оберіть задачу зі списку.</p>
                 ) : (
                   <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{selectedTask.title}</p>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <UrgencyBadge level={urgencyLevel(selectedTask)} />
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadge(selectedTask.status)}`}>
-                          {statusLabel(selectedTask.status)}
-                        </span>
+                    {editMode ? (
+                      <div className="space-y-3">
+                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Редагування задачі</p>
+                        <textarea
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          rows={2}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
+                          placeholder="Назва задачі"
+                        />
+                        <textarea
+                          value={editDescription}
+                          onChange={(e) => setEditDescription(e.target.value)}
+                          rows={4}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
+                          placeholder="Опис (необов'язково)"
+                        />
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Дедлайн</label>
+                          <input
+                            type="datetime-local"
+                            value={editDueDate}
+                            onChange={(e) => setEditDueDate(e.target.value)}
+                            className="h-9 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                          />
+                          {editDueDate && (
+                            <button
+                              onClick={() => setEditDueDate('')}
+                              className="ml-2 text-xs text-slate-500 underline"
+                            >
+                              Прибрати дедлайн
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => saveEdit(selectedTask.id)}
+                            disabled={savingEdit || !editTitle.trim()}
+                            className="rounded-lg bg-primary px-4 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+                          >
+                            {savingEdit ? 'Збереження...' : 'Зберегти'}
+                          </button>
+                          <button
+                            onClick={() => setEditMode(false)}
+                            className="rounded-lg border border-slate-300 px-4 py-1.5 text-xs dark:border-slate-600"
+                          >
+                            Скасувати
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <>
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{selectedTask.title}</p>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <UrgencyBadge level={urgencyLevel(selectedTask)} />
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadge(selectedTask.status)}`}>
+                              {statusLabel(selectedTask.status)}
+                            </span>
+                          </div>
+                        </div>
 
-                    {selectedTask.description && (
-                      <p className="text-sm whitespace-pre-wrap text-slate-600 dark:text-slate-300">{selectedTask.description}</p>
+                        {selectedTask.description && (
+                          <p className="text-sm whitespace-pre-wrap text-slate-600 dark:text-slate-300">{selectedTask.description}</p>
+                        )}
+
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs space-y-1 dark:border-slate-700 dark:bg-slate-800/50">
+                          <p className="text-slate-600 dark:text-slate-300">
+                            <span className="font-medium">Виконавець:</span>{' '}
+                            {selectedTask.assignee ? `${selectedTask.assignee.firstName} ${selectedTask.assignee.lastName}` : 'Без виконавця'}
+                          </p>
+                          <p className="text-slate-600 dark:text-slate-300">
+                            <span className="font-medium">Підрозділ:</span>{' '}
+                            {selectedTask.department?.nameUk || selectedTask.department?.name || 'Без підрозділу'}
+                          </p>
+                          {selectedTask.dueDate && (
+                            <p className={urgencyLevel(selectedTask) === 'overdue' ? 'text-rose-600 font-medium' : urgencyLevel(selectedTask) === 'critical' ? 'text-orange-600 font-medium' : 'text-slate-600 dark:text-slate-300'}>
+                              <span className="font-medium">Дедлайн:</span>{' '}
+                              {new Date(selectedTask.dueDate).toLocaleString('uk-UA')}
+                            </p>
+                          )}
+                          {selectedTask.startedAt && (
+                            <p className="text-emerald-700 dark:text-emerald-400">
+                              <span className="font-medium">Початок роботи:</span>{' '}
+                              {new Date(selectedTask.startedAt).toLocaleString('uk-UA')}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 pt-2">
+                          {(user?.role === 'admin' || user?.role === 'director' || user?.role === 'deputy_director' ||
+                            user?.id === selectedTask.reporter?.id) && (
+                            <button
+                              onClick={() => openEdit(selectedTask)}
+                              className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:text-slate-200"
+                            >
+                              Редагувати
+                            </button>
+                          )}
+                          <select
+                            value={selectedStatuses[selectedTask.id] || selectedTask.status}
+                            onChange={(e) => setSelectedStatuses((prev) => ({ ...prev, [selectedTask.id]: e.target.value as Task['status'] }))}
+                            className="h-8 rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                          >
+                            <option value="todo">Нове</option>
+                            <option value="in_progress">В роботі</option>
+                            <option value="done">Виконано</option>
+                          </select>
+                          <button
+                            onClick={() => updateTaskStatus(selectedTask.id)}
+                            disabled={updatingStatusTaskId === selectedTask.id}
+                            className="rounded border border-emerald-300 px-2 py-1 text-xs text-emerald-700 disabled:opacity-60"
+                          >
+                            {updatingStatusTaskId === selectedTask.id ? 'Оновлення...' : 'Оновити статус'}
+                          </button>
+
+                          <select
+                            value={selectedAssignees[selectedTask.id] || ''}
+                            onChange={(e) => setSelectedAssignees((prev) => ({ ...prev, [selectedTask.id]: e.target.value }))}
+                            className="h-8 min-w-[260px] rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                          >
+                            <option value="">Перенаправити...</option>
+                            {users.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.firstName} {u.lastName} · {u.department?.nameUk || u.department?.name || 'Без підрозділу'}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => reassignTask(selectedTask.id)}
+                            disabled={!selectedAssignees[selectedTask.id] || reassigningTaskId === selectedTask.id}
+                            className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200"
+                          >
+                            {reassigningTaskId === selectedTask.id ? 'Передача...' : 'Перенаправити'}
+                          </button>
+                          <button
+                            onClick={() => deleteTask(selectedTask.id)}
+                            disabled={deletingTaskId === selectedTask.id}
+                            className="rounded border border-rose-300 px-2 py-1 text-xs text-rose-700 disabled:opacity-60"
+                          >
+                            {deletingTaskId === selectedTask.id ? 'Видалення...' : 'Видалити'}
+                          </button>
+                        </div>
+                      </>
                     )}
-
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs space-y-1 dark:border-slate-700 dark:bg-slate-800/50">
-                      <p className="text-slate-600 dark:text-slate-300">
-                        <span className="font-medium">Виконавець:</span>{' '}
-                        {selectedTask.assignee ? `${selectedTask.assignee.firstName} ${selectedTask.assignee.lastName}` : 'Без виконавця'}
-                      </p>
-                      <p className="text-slate-600 dark:text-slate-300">
-                        <span className="font-medium">Підрозділ:</span>{' '}
-                        {selectedTask.department?.nameUk || selectedTask.department?.name || 'Без підрозділу'}
-                      </p>
-                      {selectedTask.dueDate && (
-                        <p className={urgencyLevel(selectedTask) === 'overdue' ? 'text-rose-600 font-medium' : urgencyLevel(selectedTask) === 'critical' ? 'text-orange-600 font-medium' : 'text-slate-600 dark:text-slate-300'}>
-                          <span className="font-medium">Дедлайн:</span>{' '}
-                          {new Date(selectedTask.dueDate).toLocaleString('uk-UA')}
-                        </p>
-                      )}
-                      {selectedTask.startedAt && (
-                        <p className="text-emerald-700 dark:text-emerald-400">
-                          <span className="font-medium">Початок роботи:</span>{' '}
-                          {new Date(selectedTask.startedAt).toLocaleString('uk-UA')}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 pt-2">
-                      <select
-                        value={selectedStatuses[selectedTask.id] || selectedTask.status}
-                        onChange={(e) => setSelectedStatuses((prev) => ({ ...prev, [selectedTask.id]: e.target.value as Task['status'] }))}
-                        className="h-8 rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                      >
-                        <option value="todo">Нове</option>
-                        <option value="in_progress">В роботі</option>
-                        <option value="done">Виконано</option>
-                      </select>
-                      <button
-                        onClick={() => updateTaskStatus(selectedTask.id)}
-                        disabled={updatingStatusTaskId === selectedTask.id}
-                        className="rounded border border-emerald-300 px-2 py-1 text-xs text-emerald-700 disabled:opacity-60"
-                      >
-                        {updatingStatusTaskId === selectedTask.id ? 'Оновлення...' : 'Оновити статус'}
-                      </button>
-
-                      <select
-                        value={selectedAssignees[selectedTask.id] || ''}
-                        onChange={(e) => setSelectedAssignees((prev) => ({ ...prev, [selectedTask.id]: e.target.value }))}
-                        className="h-8 min-w-[260px] rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                      >
-                        <option value="">Перенаправити...</option>
-                        {users.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.firstName} {u.lastName} · {u.department?.nameUk || u.department?.name || 'Без підрозділу'}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={() => reassignTask(selectedTask.id)}
-                        disabled={!selectedAssignees[selectedTask.id] || reassigningTaskId === selectedTask.id}
-                        className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200"
-                      >
-                        {reassigningTaskId === selectedTask.id ? 'Передача...' : 'Перенаправити'}
-                      </button>
-                      <button
-                        onClick={() => deleteTask(selectedTask.id)}
-                        disabled={deletingTaskId === selectedTask.id}
-                        className="rounded border border-rose-300 px-2 py-1 text-xs text-rose-700 disabled:opacity-60"
-                      >
-                        {deletingTaskId === selectedTask.id ? 'Видалення...' : 'Видалити'}
-                      </button>
-                    </div>
                   </div>
                 )}
               </div>

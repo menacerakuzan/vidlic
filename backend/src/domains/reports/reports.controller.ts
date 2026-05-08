@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Req, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
 import {
@@ -239,5 +239,27 @@ export class ReportsController {
     @Req() req: any,
   ) {
     return this.reportsService.getVersionDiff(id, req.user, Number(fromVersion) || undefined, Number(toVersion) || undefined);
+  }
+
+  @Post(':id/tasks/:taskId')
+  @Permissions('reports:write')
+  @ApiOperation({ summary: 'Прикріпити задачу до звіту' })
+  attachTask(@Param('id') id: string, @Param('taskId') taskId: string, @Req() req: any) {
+    return this.reportsService.attachTask(id, taskId, req.user.id);
+  }
+
+  @Delete(':id/tasks/:taskId')
+  @HttpCode(200)
+  @Permissions('reports:write')
+  @ApiOperation({ summary: 'Відкріпити задачу від звіту' })
+  detachTask(@Param('id') id: string, @Param('taskId') taskId: string, @Req() req: any) {
+    return this.reportsService.detachTask(id, taskId, req.user.id);
+  }
+
+  @Get(':id/tasks')
+  @Permissions('reports:read')
+  @ApiOperation({ summary: 'Задачі прикріплені до звіту' })
+  getReportTasks(@Param('id') id: string, @Req() req: any) {
+    return this.reportsService.getReportTasks(id, req.user.id);
   }
 }

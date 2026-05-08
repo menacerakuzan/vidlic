@@ -2548,4 +2548,47 @@ export class ReportsService {
     }
     return result;
   }
+
+  async attachTask(reportId: string, taskId: string, userId: string) {
+    const report = await this.prisma.report.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('Звіт не знайдено');
+    if (report.authorId !== userId) throw new ForbiddenException('Можна прикріпляти задачі лише до власного звіту');
+
+    const task = await this.prisma.task.findUnique({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('Задачу не знайдено');
+
+    await this.prisma.task.update({ where: { id: taskId }, data: { reportId } });
+    return { success: true };
+  }
+
+  async detachTask(reportId: string, taskId: string, userId: string) {
+    const report = await this.prisma.report.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('Звіт не знайдено');
+    if (report.authorId !== userId) throw new ForbiddenException('Можна відкріпляти задачі лише від власного звіту');
+
+    await this.prisma.task.update({
+      where: { id: taskId },
+      data: { reportId: null },
+    });
+    return { success: true };
+  }
+
+  async getReportTasks(reportId: string, userId: string) {
+    const report = await this.prisma.report.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('Звіт не знайдено');
+
+    const tasks = await this.prisma.task.findMany({
+      where: { reportId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        dueDate: true,
+        completedAt: true,
+        assignee: { select: { id: true, firstName: true, lastName: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    return tasks;
+  }
 }

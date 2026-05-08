@@ -44,6 +44,10 @@ export default function ReportDetailsPage() {
   const [sourceStatusFilter, setSourceStatusFilter] = useState<'all' | 'approved' | 'pending'>('all')
   const [sourceDepartmentFilter, setSourceDepartmentFilter] = useState<string>('all')
   const [sourceAuthorFilter, setSourceAuthorFilter] = useState<string>('all')
+  const [reportTasks, setReportTasks] = useState<any[]>([])
+  const [allMyTasks, setAllMyTasks] = useState<any[]>([])
+  const [reportTasksLoading, setReportTasksLoading] = useState(false)
+  const [attachingTaskId, setAttachingTaskId] = useState('')
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
   const decodeEntities = (value: string) =>
     value
@@ -184,6 +188,46 @@ export default function ReportDetailsPage() {
 
   useEffect(() => {
     loadAttachments()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params?.id, accessToken])
+
+  const loadReportTasks = async () => {
+    if (!accessToken || !params?.id) return
+    setReportTasksLoading(true)
+    const [rtResp, myResp] = await Promise.all([
+      fetch(`/api/v1/reports/${params.id}/tasks`, { headers: { Authorization: `Bearer ${accessToken}` } }),
+      fetch('/api/v1/tasks?limit=100', { headers: { Authorization: `Bearer ${accessToken}` } }),
+    ])
+    if (rtResp.ok) setReportTasks(await rtResp.json())
+    if (myResp.ok) {
+      const data = await myResp.json()
+      setAllMyTasks(Array.isArray(data?.data) ? data.data : [])
+    }
+    setReportTasksLoading(false)
+  }
+
+  const attachTask = async (taskId: string) => {
+    if (!accessToken || !params?.id || attachingTaskId) return
+    setAttachingTaskId(taskId)
+    await fetch(`/api/v1/reports/${params.id}/tasks/${taskId}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    setAttachingTaskId('')
+    await loadReportTasks()
+  }
+
+  const detachTask = async (taskId: string) => {
+    if (!accessToken || !params?.id) return
+    await fetch(`/api/v1/reports/${params.id}/tasks/${taskId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    await loadReportTasks()
+  }
+
+  useEffect(() => {
+    loadReportTasks()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params?.id, accessToken])
 
@@ -1071,6 +1115,65 @@ export default function ReportDetailsPage() {
               ))}
             </div>
           </>
+        )}
+
+        {/* Задачі прикріплені до звіту */}
+        {report && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
+            <h2 className="text-lg font-semibold">Задачі до звіту</h2>
+
+            {reportTasksLoading && <p className="text-sm text-slate-500 dark:text-slate-400">Завантаження...</p>}
+
+            {!reportTasksLoading && reportTasks.length === 0 && (
+              <p className="text-sm text-slate-500 dark:text-slate-400">Задач не прикріплено.</p>
+            )}
+
+            {reportTasks.map((task: any) => (
+              <div key={task.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+                <div>
+                  <p className="text-sm font-medium">{task.title}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : 'Без виконавця'}
+                    {' · '}
+                    {task.status === 'done' ? '✅ Виконано' : task.status === 'in_progress' ? '🔄 В роботі' : '⬜ Нове'}
+                    {task.completedAt && ` · ${new Date(task.completedAt).toLocaleDateString('uk-UA')}`}
+                  </p>
+                </div>
+                {report.authorId === user?.id && (
+                  <button
+                    onClick={() => detachTask(task.id)}
+                    className="shrink-0 rounded border border-rose-300 px-2 py-1 text-xs text-rose-700"
+                  >
+                    Відкріпити
+                  </button>
+                )}
+              </div>
+            ))}
+
+            {report.authorId === user?.id && (
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                <p className="text-xs text-slate-500 mb-2">Додати задачу:</p>
+                <div className="flex flex-wrap gap-2">
+                  {allMyTasks
+                    .filter((t: any) => !reportTasks.some((rt: any) => rt.id === t.id))
+                    .map((t: any) => (
+                      <button
+                        key={t.id}
+                        onClick={() => attachTask(t.id)}
+                        disabled={attachingTaskId === t.id}
+                        className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        {t.title}
+                        {t.status === 'done' && ' ✅'}
+                      </button>
+                    ))}
+                  {allMyTasks.filter((t: any) => !reportTasks.some((rt: any) => rt.id === t.id)).length === 0 && (
+                    <p className="text-xs text-slate-400">Всі ваші задачі вже прикріплені або задач немає.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </DashboardLayout>

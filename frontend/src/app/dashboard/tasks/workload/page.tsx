@@ -28,6 +28,11 @@ type DepartmentOption = {
   divisionTag?: string | null
 }
 
+type UserMeta = {
+  id: string
+  secondaryDepartmentIds: string[]
+}
+
 const statusFilters: Array<{ id: 'todo' | 'in_progress' | 'done'; label: string; dot: string }> = [
   { id: 'todo', label: 'Нове', dot: 'bg-sky-500' },
   { id: 'in_progress', label: 'В роботі', dot: 'bg-amber-500' },
@@ -49,6 +54,7 @@ function urgencyLevel(task: Task): 'overdue' | 'critical' | 'soon' | 'normal' {
 export default function WorkloadPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [departments, setDepartments] = useState<DepartmentOption[]>([])
+  const [userMetas, setUserMetas] = useState<UserMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedStatuses, setSelectedStatuses] = useState<Array<'todo' | 'in_progress' | 'done'>>(['todo', 'in_progress', 'done'])
@@ -107,7 +113,20 @@ export default function WorkloadPage() {
       const data = await resp.json()
       setDepartments(Array.isArray(data) ? data : [])
     }
+    const loadUsers = async () => {
+      const resp = await fetch('/api/v1/users?limit=200', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!resp.ok) return
+      const data = await resp.json()
+      const list = Array.isArray(data?.data) ? data.data : []
+      setUserMetas(list.map((u: any) => ({
+        id: u.id,
+        secondaryDepartmentIds: Array.isArray(u.secondaryDepartmentIds) ? u.secondaryDepartmentIds : [],
+      })))
+    }
     loadDepartments()
+    loadUsers()
   }, [accessToken])
 
   const toggleStatus = (status: 'todo' | 'in_progress' | 'done') => {
@@ -116,6 +135,12 @@ export default function WorkloadPage() {
       return [...prev, status]
     })
   }
+
+  const userMetaMap = useMemo(() => {
+    const m = new Map<string, UserMeta>()
+    userMetas.forEach((u) => m.set(u.id, u))
+    return m
+  }, [userMetas])
 
   const columns = useMemo(() => {
     const filtered = tasks.filter((task) => selectedStatuses.includes(task.status))
@@ -127,6 +152,27 @@ export default function WorkloadPage() {
       const item = map.get(departmentId) || { departmentId, departmentName, tasks: [] }
       item.tasks.push(task)
       map.set(departmentId, item)
+
+      // Дублюємо в вторинні відділи виконавця (суміщення)
+      if (task.assignee?.id) {
+        const meta = userMetaMap.get(task.assignee.id)
+        if (meta) {
+          meta.secondaryDepartmentIds
+            .filter((secDepId) => secDepId !== departmentId)
+            .forEach((secDepId) => {
+              const secDep = departments.find((d) => d.id === secDepId)
+              if (!secDep) return
+              const secItem = map.get(secDepId) || {
+                departmentId: secDepId,
+                departmentName: secDep.nameUk || secDep.name || secDepId,
+                tasks: [],
+              }
+              // Помічаємо задачу як "суміщення" через поле в об'єкті
+              secItem.tasks.push({ ...task, _secondary: true } as any)
+              map.set(secDepId, secItem)
+            })
+        }
+      }
     })
 
     const urgencyOrder = { overdue: 0, critical: 1, soon: 2, normal: 3 }
@@ -159,7 +205,7 @@ export default function WorkloadPage() {
       if (selectedManagement && (col.divisionTag || '') !== selectedManagement) return false
       return true
     })
-  }, [tasks, selectedStatuses, departments, selectedDepartmentId, selectedManagement])
+  }, [tasks, selectedStatuses, departments, selectedDepartmentId, selectedManagement, userMetaMap])
 
   const managementOptions = useMemo(() => {
     return Array.from(new Set(departments.map((d) => (d.divisionTag || '').trim()).filter(Boolean))).sort((a, b) =>
@@ -364,9 +410,10 @@ export default function WorkloadPage() {
                         const meta = statusMeta(task.status)
                         const u = urgencyLevel(task)
                         const us = urgencyStyle(u)
+                        const isSecondary = !!(task as any)._secondary
                         return (
                           <div
-                            key={task.id}
+                            key={`${task.id}-${isSecondary ? 'sec' : 'pri'}`}
                             className={`rounded-xl border p-2 ${us.card} dark:bg-slate-800/50`}
                           >
                             <div className="flex items-start justify-between gap-1">
@@ -377,9 +424,16 @@ export default function WorkloadPage() {
                                 </span>
                               )}
                             </div>
-                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                              {task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : 'Без виконавця'}
-                            </p>
+                            <div className="mt-1 flex items-center gap-1.5">
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                {task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : 'Без виконавця'}
+                              </p>
+                              {isSecondary && (
+                                <span className="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300">
+                                  Суміщення
+                                </span>
+                              )}
+                            </div>
                             <div className="mt-2 flex items-center justify-between">
                               <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.cls}`}>
                                 {meta.label}
