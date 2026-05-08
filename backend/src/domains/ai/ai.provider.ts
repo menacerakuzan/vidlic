@@ -441,6 +441,19 @@ export class AiProviderService {
         ? `6. Рекомендована структура секцій (JSON): ${JSON.stringify(input.sectionSchema)}`
         : '',
       '',
+      (() => {
+        const tasks = (input.reportContent as any)?.linkedTasks;
+        if (!Array.isArray(tasks) || tasks.length === 0) return '';
+        return [
+          'ПРИКРІПЛЕНІ ЗАДАЧІ (обов\'язково включити у розділ "Виконана робота"):',
+          tasks.map((t: any, i: number) =>
+            `${i + 1}. ${t.title} — статус: ${t.status}${t.completedAt ? `, завершено: ${t.completedAt}` : ''}${t.assignee ? `, виконавець: ${t.assignee}` : ''}`
+          ).join('\n'),
+          'Кожна задача зі статусом "виконано" має бути відображена як виконаний пункт роботи.',
+          'Задачі зі статусом "в роботі" — як розпочаті роботи.',
+          '',
+        ].join('\n');
+      })(),
       'ВХІДНІ ДАНІ ДЛЯ ОБРОБКИ (можуть містити sourceReports для склейки):',
       JSON.stringify(input.reportContent || {}),
       '',

@@ -419,7 +419,30 @@ export class ReportsService {
     const executorPosition = this.resolveAuthorPosition(report.author);
 
     const aggregation = await this.buildAggregationContextForDraft(report, sourceReportIds);
-    const payloadContent = aggregation
+
+    const linkedTasks = await this.prisma.task.findMany({
+      where: { reportId: id },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        dueDate: true,
+        completedAt: true,
+        assignee: { select: { firstName: true, lastName: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const tasksContext = linkedTasks.length > 0
+      ? linkedTasks.map((t) => ({
+          title: t.title,
+          status: t.status === 'done' ? 'виконано' : t.status === 'in_progress' ? 'в роботі' : 'нове',
+          completedAt: t.completedAt ? new Date(t.completedAt).toLocaleDateString('uk-UA') : null,
+          assignee: t.assignee ? `${t.assignee.firstName} ${t.assignee.lastName}` : null,
+        }))
+      : null;
+
+    const baseContent = aggregation
       ? {
           aggregateMeta: aggregation.meta,
           sourceReports: aggregation.sources,
@@ -427,6 +450,10 @@ export class ReportsService {
           currentReport: this.ensureObject(report.content),
         }
       : this.ensureObject(report.content);
+
+    const payloadContent = tasksContext
+      ? { ...baseContent, linkedTasks: tasksContext }
+      : baseContent;
 
     const aiSubmission = await this.aiProvider.buildManagerSubmission({
       title: report.title || (report.reportType === 'weekly' ? 'Тижневий звіт' : 'Місячний звіт'),
