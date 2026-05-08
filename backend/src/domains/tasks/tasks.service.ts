@@ -185,8 +185,13 @@ export class TasksService {
 
     if (dto.assigneeId) {
       const assignee = await this.prisma.user.findUnique({ where: { id: dto.assigneeId } });
-      if (!assignee || assignee.departmentId !== targetDepartmentId) {
-        throw new BadRequestException('Виконавець має бути з того ж підрозділу');
+      if (!assignee) {
+        throw new BadRequestException('Виконавця не знайдено');
+      }
+      const assigneeSecondary = Array.isArray(assignee.secondaryDepartmentIds) ? assignee.secondaryDepartmentIds as string[] : [];
+      const assigneeBelongs = assignee.departmentId === targetDepartmentId || assigneeSecondary.includes(targetDepartmentId);
+      if (!assigneeBelongs) {
+        throw new BadRequestException('Виконавець має бути з того ж підрозділу або бути сумісником у ньому');
       }
       this.assertTaskAssignmentAllowed(user, assignee.role);
     }
@@ -262,8 +267,12 @@ export class TasksService {
       if (!assignee) {
         throw new BadRequestException('Виконавця не знайдено');
       }
-      if (!isActorReassigningOwnedTask && assignee.departmentId !== (dto.departmentId ?? task.departmentId)) {
-        throw new BadRequestException('Виконавець має бути з того ж підрозділу');
+      if (!isActorReassigningOwnedTask) {
+        const targetDep = dto.departmentId ?? task.departmentId;
+        const assigneeSecondary = Array.isArray(assignee.secondaryDepartmentIds) ? assignee.secondaryDepartmentIds as string[] : [];
+        if (assignee.departmentId !== targetDep && !assigneeSecondary.includes(targetDep)) {
+          throw new BadRequestException('Виконавець має бути з того ж підрозділу або бути сумісником у ньому');
+        }
       }
       if (isActorReassigningOwnedTask) {
         if (assignee.role === 'director') {
@@ -467,7 +476,12 @@ export class TasksService {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
       return scopedDepartmentIds.includes(departmentId);
     }
-    if (user.role === 'manager' || user.role === 'specialist' || user.role === 'clerk') {
+    if (user.role === 'manager') {
+      if (user.departmentId === departmentId) return true;
+      const secondary = Array.isArray(user.secondaryDepartmentIds) ? user.secondaryDepartmentIds as string[] : [];
+      return secondary.includes(departmentId);
+    }
+    if (user.role === 'specialist' || user.role === 'clerk') {
       return user.departmentId === departmentId;
     }
     return false;
@@ -623,7 +637,10 @@ export class TasksService {
 
   private async resolveScopedDepartmentIdsForUser(user: any): Promise<string[]> {
     if (!user?.departmentId) return [];
-    if (user.role === 'manager') return [user.departmentId];
+    if (user.role === 'manager') {
+      const secondary = Array.isArray(user.secondaryDepartmentIds) ? (user.secondaryDepartmentIds as string[]).filter(Boolean) : [];
+      return [user.departmentId, ...secondary];
+    }
     if (user.role === 'director') {
       return this.resolveDepartmentScopeIds(user.departmentId);
     }
