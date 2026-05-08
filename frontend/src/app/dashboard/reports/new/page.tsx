@@ -25,11 +25,21 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
+type MyTask = {
+  id: string
+  title: string
+  status: 'todo' | 'in_progress' | 'done'
+  dueDate?: string
+  completedAt?: string
+}
+
 function NewReportContent() {
   const { user } = useAuthStore()
   const router = useRouter()
   const searchParams = useSearchParams()
   const [submitting, setSubmitting] = useState(false)
+  const [myTasks, setMyTasks] = useState<MyTask[]>([])
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([])
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const {
@@ -44,6 +54,14 @@ function NewReportContent() {
       reportType: 'weekly',
     },
   })
+
+  useEffect(() => {
+    if (!accessToken) return
+    fetch('/api/v1/tasks?limit=100', { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then((r) => r.json())
+      .then((data) => setMyTasks(Array.isArray(data?.data) ? data.data : []))
+      .catch(() => {})
+  }, [accessToken])
 
   useEffect(() => {
     const mode = searchParams.get('mode')
@@ -109,6 +127,16 @@ function NewReportContent() {
 
     const created = await resp.json().catch(() => null)
     const reportId = created?.id
+    if (reportId && selectedTaskIds.length > 0) {
+      await Promise.all(
+        selectedTaskIds.map((taskId) =>
+          fetch(`/api/v1/reports/${reportId}/tasks/${taskId}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}` },
+          })
+        )
+      )
+    }
     if (reportId) {
       router.push(`/dashboard/reports/${reportId}`)
       return
@@ -209,6 +237,43 @@ function NewReportContent() {
                   />
                 </div>
               </>
+            )}
+
+            {myTasks.length > 0 && (
+              <div className="space-y-2">
+                <Label>Прикріпити задачі до звіту</Label>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2 dark:border-slate-700 dark:bg-slate-800/50">
+                  {myTasks.map((task) => {
+                    const checked = selectedTaskIds.includes(task.id)
+                    const statusIcon = task.status === 'done' ? '✅' : task.status === 'in_progress' ? '🔄' : '⬜'
+                    return (
+                      <label key={task.id} className="flex items-center gap-3 cursor-pointer rounded-md px-2 py-1.5 hover:bg-white dark:hover:bg-slate-700/50">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setSelectedTaskIds((prev) =>
+                              checked ? prev.filter((id) => id !== task.id) : [...prev, task.id]
+                            )
+                          }
+                          className="h-4 w-4 rounded border-slate-300 accent-primary"
+                        />
+                        <span className="text-sm">
+                          {statusIcon} {task.title}
+                        </span>
+                        {task.dueDate && (
+                          <span className="ml-auto text-xs text-slate-400 shrink-0">
+                            {new Date(task.dueDate).toLocaleDateString('uk-UA')}
+                          </span>
+                        )}
+                      </label>
+                    )
+                  })}
+                </div>
+                {selectedTaskIds.length > 0 && (
+                  <p className="text-xs text-slate-500">Вибрано задач: {selectedTaskIds.length}</p>
+                )}
+              </div>
             )}
 
             <Button type="submit" disabled={submitting}>
