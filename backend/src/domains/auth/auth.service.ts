@@ -173,6 +173,7 @@ export class AuthService {
       role: user.role,
       departmentId: user.departmentId,
       scopeDepartmentIds: Array.isArray(user.scopeDepartmentIds) ? user.scopeDepartmentIds : [],
+      secondaryDepartmentIds: Array.isArray(user.secondaryDepartmentIds) ? user.secondaryDepartmentIds : [],
       jti,
     };
 

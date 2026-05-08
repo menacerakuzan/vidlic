@@ -489,9 +489,9 @@ export class TasksService {
 
   private async canManageTask(task: any, user: any) {
     if (user.role === 'admin') return true;
-    if (task.assigneeId === user.id) return true;
+    if (task.assigneeId === user.id || task.reporterId === user.id) return true;
     if (user.role === 'deputy_head') return false;
-    if (this.shouldHideFromLeadership(task, user) && task.reporterId !== user.id) return false;
+    if (this.shouldHideFromLeadership(task, user)) return false;
     if (user.role === 'director' || user.role === 'manager') {
       const scoped = await this.resolveScopedDepartmentIdsForUser(user);
       if (scoped.includes(task.departmentId)) return true;
@@ -517,14 +517,14 @@ export class TasksService {
       const scoped = await this.resolveScopedDepartmentIdsForUser(user);
       if (scoped.includes(task.departmentId)) return true;
     }
-    if (user.role === 'clerk' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
-    if (user.role === 'specialist' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
+    if (task.assigneeId === user.id || task.reporterId === user.id) return true;
     return false;
   }
 
   private async canViewTask(task: any, user: any) {
     if (user.role === 'admin') return true;
-    if (this.shouldHideFromLeadership(task, user) && task.reporterId !== user.id) return false;
+    if (task.assigneeId === user.id || task.reporterId === user.id) return true;
+    if (this.shouldHideFromLeadership(task, user)) return false;
     if (user.role === 'director' || user.role === 'manager' || user.role === 'deputy_head') {
       const scoped = await this.resolveScopedDepartmentIdsForUser(user);
       if (scoped.includes(task.departmentId)) return true;
@@ -533,8 +533,6 @@ export class TasksService {
       const scoped = await this.resolveScopedDepartmentIdsForUser(user);
       if (scoped.includes(task.departmentId)) return true;
     }
-    if (user.role === 'clerk' && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
-    if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role) && (task.assigneeId === user.id || task.reporterId === user.id)) return true;
     return false;
   }
 
