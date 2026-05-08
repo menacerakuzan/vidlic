@@ -88,15 +88,10 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
       where.departmentId = departmentId;
     }
 
-    const [total, byStatus, byPriority, overdue] = await Promise.all([
+    const [total, byStatus, overdue] = await Promise.all([
       this.prisma.task.count({ where }),
       this.prisma.task.groupBy({
         by: ['status'],
-        where,
-        _count: true,
-      }),
-      this.prisma.task.groupBy({
-        by: ['priority'],
         where,
         _count: true,
       }),
@@ -112,7 +107,6 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     return {
       total,
       byStatus: byStatus.reduce((acc, s) => ({ ...acc, [s.status]: s._count }), {}),
-      byPriority: byPriority.reduce((acc, p) => ({ ...acc, [p.priority]: p._count }), {}),
       overdue,
     };
   }
@@ -265,7 +259,7 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
         role: true,
         tasks: {
           where: { status: { not: 'done' } },
-          select: { id: true, status: true, dueDate: true, priority: true },
+          select: { id: true, status: true, dueDate: true },
         },
       },
       take: 200,
@@ -279,8 +273,7 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
       const overdue = employee.tasks.filter((task) => task.dueDate && task.dueDate < now).length;
       const soon = employee.tasks.filter((task) => task.dueDate && task.dueDate >= now && task.dueDate <= dueSoon).length;
       const inProgress = employee.tasks.filter((task) => task.status === 'in_progress').length;
-      const critical = employee.tasks.filter((task) => task.priority === 'critical').length;
-      const capacityScore = Math.max(0, 100 - open * 4 - overdue * 6 - critical * 7);
+      const capacityScore = Math.max(0, 100 - open * 4 - overdue * 8);
 
       return {
         userId: employee.id,
@@ -290,7 +283,6 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
         inProgressTasks: inProgress,
         overdueTasks: overdue,
         dueSoonTasks: soon,
-        criticalTasks: critical,
         capacityScore,
       };
     });

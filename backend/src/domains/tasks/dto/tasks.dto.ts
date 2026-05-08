@@ -1,6 +1,6 @@
-import { IsString, IsOptional, IsEnum, IsDateString, IsUUID, IsInt, Min, Max, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsDateString, IsUUID, Min, Max, IsNumber } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { TaskStatus, TaskPriority } from '@prisma/client';
+import { TaskStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
 
 export class CreateTaskDto {
@@ -12,11 +12,6 @@ export class CreateTaskDto {
   @IsOptional()
   @IsString()
   description?: string;
-
-  @ApiPropertyOptional({ enum: TaskPriority, default: 'medium' })
-  @IsOptional()
-  @IsEnum(TaskPriority)
-  priority?: TaskPriority;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -37,12 +32,6 @@ export class CreateTaskDto {
   @IsOptional()
   @IsDateString()
   dueDate?: string;
-
-  @ApiPropertyOptional({ example: 8, description: 'Орієнтовний час виконання (години)' })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  executionHours?: number;
 }
 
 export class UpdateTaskDto {
@@ -55,11 +44,6 @@ export class UpdateTaskDto {
   @IsOptional()
   @IsString()
   description?: string;
-
-  @ApiPropertyOptional({ enum: TaskPriority })
-  @IsOptional()
-  @IsEnum(TaskPriority)
-  priority?: TaskPriority;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -80,12 +64,6 @@ export class UpdateTaskDto {
   @IsOptional()
   @IsString()
   dueDateClear?: boolean;
-
-  @ApiPropertyOptional({ example: 6, description: 'Орієнтовний час виконання (години)' })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  executionHours?: number;
 }
 
 export class TaskQueryDto {
@@ -108,11 +86,6 @@ export class TaskQueryDto {
   @IsOptional()
   @IsEnum(TaskStatus)
   status?: TaskStatus;
-
-  @ApiPropertyOptional({ enum: TaskPriority })
-  @IsOptional()
-  @IsEnum(TaskPriority)
-  priority?: TaskPriority;
 
   @ApiPropertyOptional()
   @IsOptional()

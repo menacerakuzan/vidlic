@@ -13,7 +13,7 @@ type Task = {
   dueDate?: string
   assignee?: { id: string; firstName: string; lastName: string } | null
   reporter?: { id: string; firstName: string; lastName: string } | null
-  department?: { id: string; name?: string } | null
+  department?: { id: string; name?: string; nameUk?: string } | null
   createdAt?: string
   startedAt?: string | null
 }
@@ -30,9 +30,47 @@ type TeamUser = {
   } | null
 }
 
+type DepartmentOption = {
+  id: string
+  name?: string
+  nameUk?: string
+}
+
+function urgencyLevel(task: Task): 'overdue' | 'critical' | 'soon' | 'normal' {
+  if (task.status === 'done') return 'normal'
+  if (!task.dueDate) return 'normal'
+  const now = Date.now()
+  const due = new Date(task.dueDate).getTime()
+  const hoursLeft = (due - now) / 3_600_000
+  if (hoursLeft < 0) return 'overdue'
+  if (hoursLeft < 24) return 'critical'
+  if (hoursLeft < 72) return 'soon'
+  return 'normal'
+}
+
+function UrgencyBadge({ level }: { level: ReturnType<typeof urgencyLevel> }) {
+  if (level === 'overdue') return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+      🔴 Прострочено
+    </span>
+  )
+  if (level === 'critical') return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+      🟠 &lt;24 год
+    </span>
+  )
+  if (level === 'soon') return (
+    <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+      🟡 &lt;3 дні
+    </span>
+  )
+  return null
+}
+
 export default function TaskListPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<TeamUser[]>([])
+  const [departments, setDepartments] = useState<DepartmentOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedTaskId, setSelectedTaskId] = useState('')
@@ -42,6 +80,9 @@ export default function TaskListPage() {
   const [selectedAssignees, setSelectedAssignees] = useState<Record<string, string>>({})
   const [selectedStatuses, setSelectedStatuses] = useState<Record<string, Task['status']>>({})
   const [actionToast, setActionToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [filterDepartmentId, setFilterDepartmentId] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [filterUrgency, setFilterUrgency] = useState('')
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const loadTasks = async () => {
@@ -90,6 +131,14 @@ export default function TaskListPage() {
     const list = Array.isArray(data?.data) ? data.data : []
     setUsers(list)
   }
+
+  useEffect(() => {
+    if (!accessToken) return
+    fetch('/api/v1/departments', { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then((r) => r.json())
+      .then((data) => setDepartments(Array.isArray(data) ? data : []))
+      .catch(() => {})
+  }, [accessToken])
 
   useEffect(() => {
     loadTasks()
@@ -181,17 +230,31 @@ export default function TaskListPage() {
     return () => window.clearTimeout(timer)
   }, [actionToast])
 
+  const urgencyOrder = { overdue: 0, critical: 1, soon: 2, normal: 3 }
+
   const orderedTasks = useMemo(() => {
-    return [...tasks].sort((a, b) => {
-      if (a.status !== b.status) {
-        const order = { todo: 0, in_progress: 1, done: 2 }
-        return order[a.status] - order[b.status]
-      }
-      const aDue = a.dueDate ? new Date(a.dueDate).getTime() : Number.POSITIVE_INFINITY
-      const bDue = b.dueDate ? new Date(b.dueDate).getTime() : Number.POSITIVE_INFINITY
-      return aDue - bDue
-    })
-  }, [tasks])
+    return [...tasks]
+      .filter((t) => {
+        if (filterDepartmentId && t.department?.id !== filterDepartmentId) return false
+        if (filterStatus && t.status !== filterStatus) return false
+        if (filterUrgency && urgencyLevel(t) !== filterUrgency) return false
+        return true
+      })
+      .sort((a, b) => {
+        const ua = urgencyOrder[urgencyLevel(a)]
+        const ub = urgencyOrder[urgencyLevel(b)]
+        if (ua !== ub) return ua - ub
+        if (a.status !== b.status) {
+          const order = { todo: 0, in_progress: 1, done: 2 }
+          return order[a.status] - order[b.status]
+        }
+        const aDue = a.dueDate ? new Date(a.dueDate).getTime() : Number.POSITIVE_INFINITY
+        const bDue = b.dueDate ? new Date(b.dueDate).getTime() : Number.POSITIVE_INFINITY
+        return aDue - bDue
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, filterDepartmentId, filterStatus, filterUrgency])
+
   const selectedTask = useMemo(
     () => orderedTasks.find((task) => task.id === selectedTaskId) || orderedTasks[0] || null,
     [orderedTasks, selectedTaskId],
@@ -208,6 +271,16 @@ export default function TaskListPage() {
     if (status === 'in_progress') return 'В роботі'
     return 'Виконано'
   }
+
+  const sidebarBorderClass = (task: Task, isSelected: boolean) => {
+    const u = urgencyLevel(task)
+    if (u === 'overdue') return isSelected ? 'bg-rose-50 dark:bg-rose-950/30 border-l-4 border-l-rose-500' : 'border-l-4 border-l-rose-400 hover:bg-rose-50/50 dark:hover:bg-rose-950/20'
+    if (u === 'critical') return isSelected ? 'bg-orange-50 dark:bg-orange-950/20 border-l-4 border-l-orange-500' : 'border-l-4 border-l-orange-400 hover:bg-orange-50/50 dark:hover:bg-orange-950/20'
+    if (u === 'soon') return isSelected ? 'bg-amber-50 dark:bg-amber-950/20 border-l-4 border-l-amber-400' : 'border-l-4 border-l-amber-300 hover:bg-amber-50/40 dark:hover:bg-amber-950/10'
+    return isSelected ? 'bg-slate-100 dark:bg-slate-800/70' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+  }
+
+  const hasActiveFilters = filterDepartmentId || filterStatus || filterUrgency
 
   return (
     <DashboardLayout>
@@ -235,6 +308,51 @@ export default function TaskListPage() {
           <p className="text-slate-500 mt-1">Усі задачі у вигляді списку</p>
         </div>
 
+        {/* Filters */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <select
+              value={filterDepartmentId}
+              onChange={(e) => setFilterDepartmentId(e.target.value)}
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            >
+              <option value="">Усі відділи</option>
+              {departments.map((dep) => (
+                <option key={dep.id} value={dep.id}>{dep.nameUk || dep.name || dep.id}</option>
+              ))}
+            </select>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            >
+              <option value="">Усі статуси</option>
+              <option value="todo">Нове</option>
+              <option value="in_progress">В роботі</option>
+              <option value="done">Виконано</option>
+            </select>
+            <select
+              value={filterUrgency}
+              onChange={(e) => setFilterUrgency(e.target.value)}
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            >
+              <option value="">Усі терміновості</option>
+              <option value="overdue">🔴 Прострочено</option>
+              <option value="critical">🟠 Менш ніж 24 год</option>
+              <option value="soon">🟡 Менш ніж 3 дні</option>
+              <option value="normal">Без загрози</option>
+            </select>
+            {hasActiveFilters && (
+              <button
+                onClick={() => { setFilterDepartmentId(''); setFilterStatus(''); setFilterUrgency('') }}
+                className="h-10 rounded-lg border border-slate-300 text-sm dark:border-slate-600"
+              >
+                Скинути фільтри
+              </button>
+            )}
+          </div>
+        </div>
+
         {error && (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300">
             {error}
@@ -245,45 +363,79 @@ export default function TaskListPage() {
           {loading ? (
             <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">Завантаження...</div>
           ) : orderedTasks.length === 0 ? (
-            <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">Задач поки немає.</div>
+            <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
+              {hasActiveFilters ? 'Немає задач з обраними фільтрами.' : 'Задач поки немає.'}
+            </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] min-h-[520px]">
+              {/* Sidebar list */}
               <div className="border-r border-slate-200 dark:border-slate-700 max-h-[70vh] overflow-y-auto">
-                {orderedTasks.map((task) => (
-                  <button
-                    key={task.id}
-                    onClick={() => setSelectedTaskId(task.id)}
-                    className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 ${selectedTask?.id === task.id ? 'bg-slate-100 dark:bg-slate-800/70' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}`}
-                  >
-                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2">{task.title}</p>
-                  </button>
-                ))}
+                {orderedTasks.map((task) => {
+                  const isSelected = selectedTask?.id === task.id
+                  const u = urgencyLevel(task)
+                  return (
+                    <button
+                      key={task.id}
+                      onClick={() => setSelectedTaskId(task.id)}
+                      className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${sidebarBorderClass(task, isSelected)}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2 flex-1">{task.title}</p>
+                        {u !== 'normal' && <UrgencyBadge level={u} />}
+                      </div>
+                      {task.dueDate && u !== 'normal' && (
+                        <p className={`text-xs mt-0.5 ${u === 'overdue' ? 'text-rose-600' : u === 'critical' ? 'text-orange-600' : 'text-amber-600'}`}>
+                          {u === 'overdue' ? 'Прострочено: ' : 'Термін: '}
+                          {new Date(task.dueDate).toLocaleDateString('uk-UA')}
+                        </p>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
 
+              {/* Detail panel */}
               <div className="p-4">
                 {!selectedTask ? (
                   <p className="text-sm text-slate-500 dark:text-slate-400">Оберіть задачу зі списку.</p>
                 ) : (
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-start justify-between gap-3">
                       <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{selectedTask.title}</p>
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadge(selectedTask.status)}`}>
-                        {statusLabel(selectedTask.status)}
-                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <UrgencyBadge level={urgencyLevel(selectedTask)} />
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadge(selectedTask.status)}`}>
+                          {statusLabel(selectedTask.status)}
+                        </span>
+                      </div>
                     </div>
-                    {selectedTask.description && <p className="text-sm whitespace-pre-wrap text-slate-600 dark:text-slate-300">{selectedTask.description}</p>}
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {selectedTask.assignee ? `Виконавець: ${selectedTask.assignee.firstName} ${selectedTask.assignee.lastName}` : 'Без виконавця'}
-                      {' · '}
-                      {selectedTask.department?.name || 'Без підрозділу'}
-                      {' · '}
-                      {selectedTask.dueDate ? `Термін: ${new Date(selectedTask.dueDate).toLocaleDateString('uk-UA')}` : 'Без терміну'}
-                    </p>
-                    {selectedTask.startedAt && (
-                      <p className="text-xs text-emerald-700 dark:text-emerald-400">
-                        Початок роботи: {new Date(selectedTask.startedAt).toLocaleString('uk-UA')}
-                      </p>
+
+                    {selectedTask.description && (
+                      <p className="text-sm whitespace-pre-wrap text-slate-600 dark:text-slate-300">{selectedTask.description}</p>
                     )}
+
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs space-y-1 dark:border-slate-700 dark:bg-slate-800/50">
+                      <p className="text-slate-600 dark:text-slate-300">
+                        <span className="font-medium">Виконавець:</span>{' '}
+                        {selectedTask.assignee ? `${selectedTask.assignee.firstName} ${selectedTask.assignee.lastName}` : 'Без виконавця'}
+                      </p>
+                      <p className="text-slate-600 dark:text-slate-300">
+                        <span className="font-medium">Підрозділ:</span>{' '}
+                        {selectedTask.department?.nameUk || selectedTask.department?.name || 'Без підрозділу'}
+                      </p>
+                      {selectedTask.dueDate && (
+                        <p className={urgencyLevel(selectedTask) === 'overdue' ? 'text-rose-600 font-medium' : urgencyLevel(selectedTask) === 'critical' ? 'text-orange-600 font-medium' : 'text-slate-600 dark:text-slate-300'}>
+                          <span className="font-medium">Дедлайн:</span>{' '}
+                          {new Date(selectedTask.dueDate).toLocaleString('uk-UA')}
+                        </p>
+                      )}
+                      {selectedTask.startedAt && (
+                        <p className="text-emerald-700 dark:text-emerald-400">
+                          <span className="font-medium">Початок роботи:</span>{' '}
+                          {new Date(selectedTask.startedAt).toLocaleString('uk-UA')}
+                        </p>
+                      )}
+                    </div>
 
                     <div className="flex flex-wrap items-center gap-2 pt-2">
                       <select

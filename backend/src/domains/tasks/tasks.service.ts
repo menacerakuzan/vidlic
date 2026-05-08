@@ -12,7 +12,7 @@ export class TasksService {
   ) {}
 
   async findAll(query: TaskQueryDto, user: any) {
-    const { page = 1, limit = 50, status, priority, departmentId, assigneeId, reporterId, dueDateFrom, dueDateTo } = query;
+    const { page = 1, limit = 50, status, departmentId, assigneeId, reporterId, dueDateFrom, dueDateTo } = query;
     const skip = (page - 1) * limit;
 
     const where: any = {};
@@ -42,7 +42,6 @@ export class TasksService {
     }
 
     if (status) andFilters.push({ status });
-    if (priority) andFilters.push({ priority });
     if (departmentId && user.role !== 'specialist') {
       if (user.role === 'admin' || user.role === 'deputy_head') {
         andFilters.push({ departmentId });
@@ -82,7 +81,6 @@ export class TasksService {
           report: { select: { id: true, title: true, reportType: true } },
         },
         orderBy: [
-          { priority: 'desc' },
           { dueDate: 'asc' },
           { createdAt: 'desc' },
         ],
@@ -133,8 +131,8 @@ export class TasksService {
         department: { select: { id: true, nameUk: true } },
       },
       orderBy: [
-        { priority: 'desc' },
         { dueDate: 'asc' },
+        { createdAt: 'desc' },
       ],
     });
 
@@ -202,9 +200,7 @@ export class TasksService {
       data: {
         title: dto.title,
         description: dto.description,
-        priority: dto.priority || 'medium',
         status: 'todo',
-        executionHours: dto.executionHours,
         isPrivate: isPrivateSpecialistTask,
         departmentId: targetDepartmentId,
         assigneeId: dto.assigneeId,
@@ -247,8 +243,6 @@ export class TasksService {
       dto.assigneeId !== undefined &&
       dto.title === undefined &&
       dto.description === undefined &&
-      dto.priority === undefined &&
-      dto.executionHours === undefined &&
       dto.departmentId === undefined &&
       dto.dueDate === undefined;
 
@@ -285,8 +279,6 @@ export class TasksService {
       data: {
         title: dto.title ?? task.title,
         description: dto.description ?? task.description,
-        priority: dto.priority ?? task.priority,
-        executionHours: dto.executionHours ?? task.executionHours,
         departmentId: dto.departmentId ?? task.departmentId,
         assigneeId: dto.assigneeId ?? task.assigneeId,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : (dto.dueDate === null ? null : task.dueDate),
@@ -420,8 +412,6 @@ export class TasksService {
       title: task.title,
       description: task.description,
       status: task.status,
-      priority: task.priority,
-      executionHours: task.executionHours ?? null,
       isPrivate: Boolean(task.isPrivate),
       dueDate: task.dueDate,
       assignee: task.assignee ? {
@@ -577,7 +567,6 @@ export class TasksService {
       select: {
         id: true,
         status: true,
-        priority: true,
         departmentId: true,
         department: { select: { id: true, nameUk: true, code: true } },
       },
@@ -594,19 +583,11 @@ export class TasksService {
         todo: 0,
         inProgress: 0,
         done: 0,
-        high: 0,
-        medium: 0,
-        low: 0,
-        critical: 0,
       };
       current.total += 1;
       if (task.status === 'todo') current.todo += 1;
       if (task.status === 'in_progress') current.inProgress += 1;
       if (task.status === 'done') current.done += 1;
-      if (task.priority === 'critical') current.critical += 1;
-      if (task.priority === 'high') current.high += 1;
-      if (task.priority === 'medium') current.medium += 1;
-      if (task.priority === 'low') current.low += 1;
       summary.set(key, current);
     }
 

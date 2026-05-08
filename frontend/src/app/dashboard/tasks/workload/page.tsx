@@ -34,6 +34,18 @@ const statusFilters: Array<{ id: 'todo' | 'in_progress' | 'done'; label: string;
   { id: 'done', label: 'Виконано', dot: 'bg-emerald-500' },
 ]
 
+function urgencyLevel(task: Task): 'overdue' | 'critical' | 'soon' | 'normal' {
+  if (task.status === 'done') return 'normal'
+  if (!task.dueDate) return 'normal'
+  const now = Date.now()
+  const due = new Date(task.dueDate).getTime()
+  const hoursLeft = (due - now) / 3_600_000
+  if (hoursLeft < 0) return 'overdue'
+  if (hoursLeft < 24) return 'critical'
+  if (hoursLeft < 72) return 'soon'
+  return 'normal'
+}
+
 export default function WorkloadPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [departments, setDepartments] = useState<DepartmentOption[]>([])
@@ -117,11 +129,16 @@ export default function WorkloadPage() {
       map.set(departmentId, item)
     })
 
+    const urgencyOrder = { overdue: 0, critical: 1, soon: 2, normal: 3 }
+
     const prepared = Array.from(map.values())
       .map((col) => ({
         ...col,
         divisionTag: departments.find((dep) => dep.id === col.departmentId)?.divisionTag || null,
         tasks: [...col.tasks].sort((a, b) => {
+          const ua = urgencyOrder[urgencyLevel(a)]
+          const ub = urgencyOrder[urgencyLevel(b)]
+          if (ua !== ub) return ua - ub
           if (a.status !== b.status) {
             const order = { todo: 0, in_progress: 1, done: 2 }
             return order[a.status] - order[b.status]
@@ -129,7 +146,14 @@ export default function WorkloadPage() {
           return a.title.localeCompare(b.title, 'uk')
         }),
       }))
-      .sort((a, b) => a.departmentName.localeCompare(b.departmentName, 'uk'))
+      .sort((a, b) => {
+        // Sort columns: ones with overdue/critical tasks first
+        const aFire = a.tasks.some((t) => urgencyLevel(t) === 'overdue' || urgencyLevel(t) === 'critical') ? 0 : 1
+        const bFire = b.tasks.some((t) => urgencyLevel(t) === 'overdue' || urgencyLevel(t) === 'critical') ? 0 : 1
+        if (aFire !== bFire) return aFire - bFire
+        return a.departmentName.localeCompare(b.departmentName, 'uk')
+      })
+
     return prepared.filter((col) => {
       if (selectedDepartmentId && col.departmentId !== selectedDepartmentId) return false
       if (selectedManagement && (col.divisionTag || '') !== selectedManagement) return false
@@ -158,6 +182,43 @@ export default function WorkloadPage() {
     return { label: 'Виконано', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' }
   }
 
+  const urgencyStyle = (u: ReturnType<typeof urgencyLevel>) => {
+    if (u === 'overdue') return {
+      card: 'border-rose-400 bg-rose-50/60 dark:border-rose-600 dark:bg-rose-950/30',
+      badge: 'bg-rose-500 text-white',
+      label: 'ПРОСТРОЧЕНО',
+      dot: '🔴',
+    }
+    if (u === 'critical') return {
+      card: 'border-orange-400 bg-orange-50/50 dark:border-orange-600 dark:bg-orange-950/20',
+      badge: 'bg-orange-500 text-white',
+      label: '< 24 год',
+      dot: '🟠',
+    }
+    if (u === 'soon') return {
+      card: 'border-amber-300 dark:border-amber-700',
+      badge: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+      label: '< 3 дні',
+      dot: '🟡',
+    }
+    return {
+      card: 'border-slate-200 dark:border-slate-700',
+      badge: '',
+      label: '',
+      dot: '',
+    }
+  }
+
+  // Summary totals across all shown columns
+  const totals = useMemo(() => {
+    const all = columns.flatMap((c) => c.tasks)
+    return {
+      overdue: all.filter((t) => urgencyLevel(t) === 'overdue').length,
+      critical: all.filter((t) => urgencyLevel(t) === 'critical').length,
+      soon: all.filter((t) => urgencyLevel(t) === 'soon').length,
+    }
+  }, [columns])
+
   return (
     <DashboardLayout>
       <div className="max-w-[1500px] mx-auto space-y-6">
@@ -166,9 +227,42 @@ export default function WorkloadPage() {
           <p className="text-slate-500 mt-1">Всі відділи, їх поточні задачі та статуси</p>
         </div>
 
+        {/* Urgency summary bar */}
+        {(totals.overdue > 0 || totals.critical > 0 || totals.soon > 0) && (
+          <div className="flex flex-wrap gap-3">
+            {totals.overdue > 0 && (
+              <div className="flex items-center gap-2 rounded-xl border border-rose-300 bg-rose-50 px-4 py-2 dark:border-rose-700 dark:bg-rose-950/30">
+                <span className="text-lg">🔴</span>
+                <div>
+                  <p className="text-xs font-semibold text-rose-700 dark:text-rose-400">Прострочено</p>
+                  <p className="text-xl font-bold text-rose-600 leading-none">{totals.overdue}</p>
+                </div>
+              </div>
+            )}
+            {totals.critical > 0 && (
+              <div className="flex items-center gap-2 rounded-xl border border-orange-300 bg-orange-50 px-4 py-2 dark:border-orange-700 dark:bg-orange-950/30">
+                <span className="text-lg">🟠</span>
+                <div>
+                  <p className="text-xs font-semibold text-orange-700 dark:text-orange-400">Менш ніж 24 год</p>
+                  <p className="text-xl font-bold text-orange-600 leading-none">{totals.critical}</p>
+                </div>
+              </div>
+            )}
+            {totals.soon > 0 && (
+              <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 dark:border-amber-700 dark:bg-amber-950/30">
+                <span className="text-lg">🟡</span>
+                <div>
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Менш ніж 3 дні</p>
+                  <p className="text-xl font-bold text-amber-600 leading-none">{totals.soon}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-          <p className="text-sm font-semibold mb-3">Фільтр статусів</p>
-          <div className="flex flex-wrap gap-2">
+          <p className="text-sm font-semibold mb-3">Фільтри</p>
+          <div className="flex flex-wrap gap-2 mb-3">
             {statusFilters.map((item) => {
               const active = selectedStatuses.includes(item.id)
               return (
@@ -183,7 +277,7 @@ export default function WorkloadPage() {
               )
             })}
           </div>
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             <select
               value={selectedManagement}
               onChange={(e) => {
@@ -230,50 +324,88 @@ export default function WorkloadPage() {
         ) : (
           <div className="overflow-x-auto">
             <div className="min-w-max flex items-start gap-3 pb-2">
-              {columns.map((column) => (
-                <div
-                  key={column.departmentId}
-                  className="w-[320px] rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900"
-                >
-                  <div className="mb-3 border-b border-slate-200 pb-2 dark:border-slate-700">
-                    <p className="text-sm font-semibold">{column.departmentName}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Задач: {column.tasks.length}</p>
-                  </div>
+              {columns.map((column) => {
+                const colOverdue = column.tasks.filter((t) => urgencyLevel(t) === 'overdue').length
+                const colCritical = column.tasks.filter((t) => urgencyLevel(t) === 'critical').length
+                const colSoon = column.tasks.filter((t) => urgencyLevel(t) === 'soon').length
+                const colIsFiring = colOverdue > 0 || colCritical > 0
 
-                  <div className="space-y-2 max-h-[68vh] overflow-y-auto pr-1">
-                    {column.tasks.map((task) => {
-                      const meta = statusMeta(task.status)
-                      return (
-                        <div key={task.id} className="rounded-xl border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800/50">
-                          <p className="text-sm font-medium leading-snug">{task.title}</p>
-                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            {task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : 'Без виконавця'}
-                          </p>
-                          <div className="mt-2 flex items-center justify-between">
-                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.cls}`}>
-                              {meta.label}
+                return (
+                  <div
+                    key={column.departmentId}
+                    className={`w-[320px] rounded-2xl border p-3 ${colIsFiring ? 'border-rose-300 bg-white dark:border-rose-700 dark:bg-slate-900' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'}`}
+                  >
+                    <div className="mb-3 border-b border-slate-200 pb-2 dark:border-slate-700">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold">{column.departmentName}</p>
+                        <div className="flex items-center gap-1">
+                          {colOverdue > 0 && (
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                              🔴 {colOverdue}
                             </span>
-                            <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                              {task.dueDate ? new Date(task.dueDate).toLocaleDateString('uk-UA') : 'Без терміну'}
+                          )}
+                          {colCritical > 0 && (
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                              🟠 {colCritical}
                             </span>
-                          </div>
-                          {task.startedAt && (
-                            <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">
-                              Почато: {new Date(task.startedAt).toLocaleString('uk-UA')}
-                            </p>
+                          )}
+                          {colSoon > 0 && !colIsFiring && (
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                              🟡 {colSoon}
+                            </span>
                           )}
                         </div>
-                      )
-                    })}
-                    {column.tasks.length === 0 && (
-                      <p className="text-sm text-slate-500 dark:text-slate-400">Немає задач для обраних статусів.</p>
-                    )}
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Задач: {column.tasks.length}</p>
+                    </div>
+
+                    <div className="space-y-2 max-h-[68vh] overflow-y-auto pr-1">
+                      {column.tasks.map((task) => {
+                        const meta = statusMeta(task.status)
+                        const u = urgencyLevel(task)
+                        const us = urgencyStyle(u)
+                        return (
+                          <div
+                            key={task.id}
+                            className={`rounded-xl border p-2 ${us.card} dark:bg-slate-800/50`}
+                          >
+                            <div className="flex items-start justify-between gap-1">
+                              <p className="text-sm font-medium leading-snug">{task.title}</p>
+                              {u !== 'normal' && (
+                                <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${us.badge}`}>
+                                  {us.label}
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                              {task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : 'Без виконавця'}
+                            </p>
+                            <div className="mt-2 flex items-center justify-between">
+                              <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.cls}`}>
+                                {meta.label}
+                              </span>
+                              <span className={`text-[11px] font-medium ${u === 'overdue' ? 'text-rose-600' : u === 'critical' ? 'text-orange-600' : u === 'soon' ? 'text-amber-600' : 'text-slate-400 dark:text-slate-500'}`}>
+                                {task.dueDate ? new Date(task.dueDate).toLocaleDateString('uk-UA') : 'Без терміну'}
+                              </span>
+                            </div>
+                            {task.startedAt && (
+                              <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">
+                                Почато: {new Date(task.startedAt).toLocaleString('uk-UA')}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      })}
+                      {column.tasks.length === 0 && (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Немає задач для обраних статусів.</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
               {columns.length === 0 && (
                 <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-                  Дані відсутні для обраних статусів.
+                  Дані відсутні для обраних фільтрів.
                 </div>
               )}
             </div>
