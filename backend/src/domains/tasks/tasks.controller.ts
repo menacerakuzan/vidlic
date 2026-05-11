@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { TasksService } from './tasks.service';
-import { CreateTaskDto, UpdateTaskDto, TaskQueryDto, UpdateTaskStatusDto, CreateTaskCommentDto } from './dto/tasks.dto';
+import { CreateTaskDto, CreateSubtaskDto, UpdateTaskDto, TaskQueryDto, UpdateTaskStatusDto, CreateTaskCommentDto } from './dto/tasks.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Permissions } from '../auth/decorators/roles.decorator';
@@ -68,6 +68,22 @@ export class TasksController {
   @ApiResponse({ status: 200, description: 'Статус оновлено' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdateTaskStatusDto, @Req() req: any) {
     return this.tasksService.updateStatus(id, dto, req.user);
+  }
+
+  @Get(':id/subtasks')
+  @Permissions('tasks:read')
+  @ApiOperation({ summary: 'Підзадачі задачі' })
+  @ApiResponse({ status: 200, description: 'Список підзадач' })
+  getSubtasks(@Param('id') id: string, @Req() req: any) {
+    return this.tasksService.getSubtasks(id, req.user);
+  }
+
+  @Post(':id/subtasks')
+  @Permissions('tasks:write')
+  @ApiOperation({ summary: 'Створити підзадачу' })
+  @ApiResponse({ status: 201, description: 'Підзадачу створено' })
+  createSubtask(@Param('id') id: string, @Body() dto: CreateSubtaskDto, @Req() req: any) {
+    return this.tasksService.createSubtask(id, dto as any, req.user);
   }
 
   @Post(':id/comments')

@@ -278,6 +278,7 @@ model Task {
   coAssigneeIds Json?
   reporterId    String
   reportId     String?
+  parentId     String?
   dueDate      DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
@@ -288,6 +289,8 @@ model Task {
   assignee     User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
   reporter     User         @relation("TaskReporter", fields: [reporterId], references: [id])
   report       Report?      @relation(fields: [reportId], references: [id])
+  parent       Task?        @relation("TaskSubtasks", fields: [parentId], references: [id])
+  subtasks     Task[]       @relation("TaskSubtasks")
   comments     TaskComment[]
   attachments  Attachment[]
 
@@ -296,6 +299,7 @@ model Task {
   @@index([status])
   @@index([dueDate])
   @@index([isPrivate])
+  @@index([parentId])
   @@map("tasks")
 }
 

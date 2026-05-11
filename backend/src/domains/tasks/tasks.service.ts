@@ -155,6 +155,13 @@ export class TasksService {
         reporter: true,
         department: true,
         report: true,
+        parent: { select: { id: true, title: true } },
+        subtasks: {
+          include: {
+            assignee: { select: { id: true, firstName: true, lastName: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
         comments: {
           include: { user: { select: { id: true, firstName: true, lastName: true } } },
           orderBy: { createdAt: 'asc' },
@@ -171,6 +178,73 @@ export class TasksService {
     }
 
     return this.mapTaskFull(task);
+  }
+
+  async getSubtasks(parentId: string, user: any) {
+    const parent = await this.prisma.task.findUnique({ where: { id: parentId } });
+    if (!parent) throw new NotFoundException('Задачу не знайдено');
+    if (!(await this.canViewTask(parent, user))) throw new ForbiddenException('Немає доступу');
+
+    const subtasks = await this.prisma.task.findMany({
+      where: { parentId },
+      include: {
+        assignee: { select: { id: true, firstName: true, lastName: true } },
+        reporter: { select: { id: true, firstName: true, lastName: true } },
+        department: { select: { id: true, name: true, nameUk: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    return subtasks.map(t => this.mapTask(t));
+  }
+
+  async createSubtask(parentId: string, dto: CreateTaskDto, user: any) {
+    const parent = await this.prisma.task.findUnique({ where: { id: parentId } });
+    if (!parent) throw new NotFoundException('Батьківську задачу не знайдено');
+    if (!(await this.canViewTask(parent, user))) throw new ForbiddenException('Немає доступу до батьківської задачі');
+    if (parent.parentId) throw new BadRequestException('Підзадача не може мати власні підзадачі');
+
+    // inherit department from parent if not provided
+    const targetDepartmentId = dto.departmentId || parent.departmentId;
+    if (!targetDepartmentId) throw new BadRequestException('Підрозділ не визначено');
+
+    if (!(await this.canCreateTaskInDepartment(user, targetDepartmentId))) {
+      throw new ForbiddenException('Немає доступу до створення задачі в цьому підрозділі');
+    }
+
+    if (dto.assigneeId) {
+      const assignee = await this.prisma.user.findUnique({ where: { id: dto.assigneeId } });
+      if (!assignee) throw new BadRequestException('Виконавця не знайдено');
+      const secondary = Array.isArray(assignee.secondaryDepartmentIds) ? assignee.secondaryDepartmentIds as string[] : [];
+      if (assignee.departmentId !== targetDepartmentId && !secondary.includes(targetDepartmentId)) {
+        throw new BadRequestException('Виконавець має бути з того ж підрозділу');
+      }
+      this.assertTaskAssignmentAllowed(user, assignee.role);
+    }
+
+    const subtask = await this.prisma.task.create({
+      data: {
+        title: dto.title,
+        description: dto.description,
+        status: 'todo',
+        isPrivate: false,
+        departmentId: targetDepartmentId,
+        assigneeId: dto.assigneeId || null,
+        coAssigneeIds: [],
+        reporterId: user.id,
+        reportId: parent.reportId || null,
+        parentId,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+      },
+      include: {
+        assignee: { select: { id: true, firstName: true, lastName: true } },
+        reporter: { select: { id: true, firstName: true, lastName: true } },
+        department: { select: { id: true, name: true, nameUk: true } },
+      },
+    });
+
+    this.eventEmitter.emit('task.created', new TaskCreatedEvent(subtask.id, user.id, dto.assigneeId));
+
+    return this.mapTask(subtask);
   }
 
   async create(dto: CreateTaskDto, user: any) {
@@ -427,6 +501,8 @@ export class TasksService {
       status: task.status,
       coAssigneeIds: Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds : [],
       isPrivate: Boolean(task.isPrivate),
+      parentId: task.parentId ?? null,
+      subtasksCount: Array.isArray(task.subtasks) ? task.subtasks.length : undefined,
       dueDate: task.dueDate,
       assignee: task.assignee ? {
         id: task.assignee.id,
@@ -457,7 +533,15 @@ export class TasksService {
   private mapTaskFull(task: any) {
     return {
       ...this.mapTask(task),
-      comments: task.comments?.map(c => ({
+      parent: task.parent ? { id: task.parent.id, title: task.parent.title } : null,
+      subtasks: Array.isArray(task.subtasks) ? task.subtasks.map((s: any) => ({
+        id: s.id,
+        title: s.title,
+        status: s.status,
+        dueDate: s.dueDate,
+        assignee: s.assignee ? { id: s.assignee.id, firstName: s.assignee.firstName, lastName: s.assignee.lastName } : null,
+      })) : [],
+      comments: task.comments?.map((c: any) => ({
         id: c.id,
         content: c.content,
         user: {

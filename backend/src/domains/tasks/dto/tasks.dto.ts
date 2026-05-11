@@ -34,7 +34,33 @@ export class CreateTaskDto {
   @IsUUID()
   reportId?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  parentId?: string;
+
   @ApiPropertyOptional({ example: '2024-12-31' })
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string;
+}
+
+export class CreateSubtaskDto {
+  @ApiProperty({ example: 'Підготувати матеріали' })
+  @IsString()
+  title: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  assigneeId?: string;
+
+  @ApiPropertyOptional()
   @IsOptional()
   @IsDateString()
   dueDate?: string;

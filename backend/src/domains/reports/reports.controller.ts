@@ -108,6 +108,20 @@ export class ReportsController {
     return this.reportsService.updateDailyReport(id, body.text || '', req.user);
   }
 
+  @Post('daily/:id/tasks/:taskId')
+  @Permissions('reports:write')
+  @ApiOperation({ summary: 'Прикріпити задачу до денного звіту' })
+  attachTaskToDaily(@Param('id') id: string, @Param('taskId') taskId: string, @Req() req: any) {
+    return this.reportsService.attachTaskToDaily(id, taskId, req.user);
+  }
+
+  @Delete('daily/:id/tasks/:taskId')
+  @Permissions('reports:write')
+  @ApiOperation({ summary: 'Відкріпити задачу від денного звіту' })
+  detachTaskFromDaily(@Param('id') id: string, @Param('taskId') taskId: string, @Req() req: any) {
+    return this.reportsService.detachTaskFromDaily(id, taskId, req.user);
+  }
+
   @Get('activities/plan/:id/export')
   @Permissions('reports:read')
   @ApiOperation({ summary: 'Експорт плану заходів у CSV' })

@@ -2369,9 +2369,15 @@ export class ReportsService {
 
     const title = this.buildDailyReportTitle(dateStr);
 
+    const dailyInclude = {
+      department: { select: { id: true, nameUk: true, name: true } },
+      author: { select: { id: true, firstName: true, lastName: true } },
+      tasks: { select: { id: true, title: true, status: true, dueDate: true, assignee: { select: { id: true, firstName: true, lastName: true } } } },
+    };
+
     let report = await this.prisma.report.findFirst({
       where: { departmentId, title, authorId: user.id, periodStart: start },
-      include: { department: { select: { id: true, nameUk: true, name: true } }, author: { select: { id: true, firstName: true, lastName: true } } },
+      include: dailyInclude,
     });
 
     if (!report) {
@@ -2386,12 +2392,18 @@ export class ReportsService {
           authorId: user.id,
           content: { dailyReport: { date: dateStr, text: '' } },
         },
-        include: { department: { select: { id: true, nameUk: true, name: true } }, author: { select: { id: true, firstName: true, lastName: true } } },
+        include: dailyInclude,
       });
     }
 
     return this.mapDailyReport(report);
   }
+
+  private dailyInclude = {
+    department: { select: { id: true, nameUk: true, name: true } },
+    author: { select: { id: true, firstName: true, lastName: true } },
+    tasks: { select: { id: true, title: true, status: true, dueDate: true, assignee: { select: { id: true, firstName: true, lastName: true } } } },
+  };
 
   async updateDailyReport(reportId: string, text: string, user: any) {
     const report = await this.prisma.report.findUnique({ where: { id: reportId } });
@@ -2404,8 +2416,33 @@ export class ReportsService {
     const updated = await this.prisma.report.update({
       where: { id: reportId },
       data: { content: { ...content, dailyReport: { ...content.dailyReport, text } }, updatedAt: new Date() },
-      include: { department: { select: { id: true, nameUk: true, name: true } }, author: { select: { id: true, firstName: true, lastName: true } } },
+      include: this.dailyInclude,
     });
+    return this.mapDailyReport(updated);
+  }
+
+  async attachTaskToDaily(reportId: string, taskId: string, user: any) {
+    const report = await this.prisma.report.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('Денний звіт не знайдено');
+    if (report.authorId !== user.id) throw new ForbiddenException('Можна редагувати лише свій денний звіт');
+    if (!String(report.title || '').startsWith(this.dailyReportTitlePrefix())) {
+      throw new BadRequestException('Це не денний звіт');
+    }
+    const task = await this.prisma.task.findUnique({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('Задачу не знайдено');
+    await this.prisma.task.update({ where: { id: taskId }, data: { reportId } });
+    const updated = await this.prisma.report.findUnique({ where: { id: reportId }, include: this.dailyInclude });
+    return this.mapDailyReport(updated);
+  }
+
+  async detachTaskFromDaily(reportId: string, taskId: string, user: any) {
+    const report = await this.prisma.report.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('Денний звіт не знайдено');
+    if (report.authorId !== user.id) throw new ForbiddenException('Можна редагувати лише свій денний звіт');
+    const task = await this.prisma.task.findUnique({ where: { id: taskId } });
+    if (!task || task.reportId !== reportId) throw new NotFoundException('Задачу не прикріплено до цього звіту');
+    await this.prisma.task.update({ where: { id: taskId }, data: { reportId: null } });
+    const updated = await this.prisma.report.findUnique({ where: { id: reportId }, include: this.dailyInclude });
     return this.mapDailyReport(updated);
   }
 
@@ -2439,10 +2476,7 @@ export class ReportsService {
 
     const reports = await this.prisma.report.findMany({
       where,
-      include: {
-        department: { select: { id: true, nameUk: true, name: true } },
-        author: { select: { id: true, firstName: true, lastName: true } },
-      },
+      include: this.dailyInclude,
       orderBy: { periodStart: 'desc' },
       take: 200,
     });
@@ -2453,12 +2487,21 @@ export class ReportsService {
   private mapDailyReport(report: any) {
     const content = this.ensureObject(report.content) as any;
     const dr = content.dailyReport || {};
+    const statusLabel: Record<string, string> = { todo: 'Нове', in_progress: 'В роботі', done: 'Виконано' };
     return {
       id: report.id,
       date: dr.date || report.periodStart?.toISOString().slice(0, 10),
       text: dr.text || '',
       author: report.author ? { id: report.author.id, firstName: report.author.firstName, lastName: report.author.lastName } : null,
       department: report.department ? { id: report.department.id, nameUk: report.department.nameUk || report.department.name } : null,
+      tasks: Array.isArray(report.tasks) ? report.tasks.map((t: any) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        statusLabel: statusLabel[t.status] || t.status,
+        dueDate: t.dueDate,
+        assignee: t.assignee ? { id: t.assignee.id, firstName: t.assignee.firstName, lastName: t.assignee.lastName } : null,
+      })) : [],
       updatedAt: report.updatedAt,
     };
   }

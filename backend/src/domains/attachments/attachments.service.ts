@@ -28,8 +28,8 @@ export class AttachmentsService {
     const safeName = this.safeFileName(dto.fileName || 'attachment.bin');
     const buffer = this.decodeBase64(dto.contentBase64);
     if (!buffer.length) throw new BadRequestException('Порожній файл');
-    if (buffer.length > 10 * 1024 * 1024) {
-      throw new BadRequestException('Файл перевищує 10MB');
+    if (buffer.length > 50 * 1024 * 1024) {
+      throw new BadRequestException('Файл перевищує 50MB');
     }
 
     const storageRoot = path.join(process.cwd(), 'storage', 'attachments', dto.entityType, entity.id);

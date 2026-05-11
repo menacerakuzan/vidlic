@@ -18,6 +18,16 @@ type Task = {
   createdAt?: string
   startedAt?: string | null
   coAssigneeIds?: string[]
+  parentId?: string | null
+  subtasksCount?: number
+}
+
+type Subtask = {
+  id: string
+  title: string
+  status: 'todo' | 'in_progress' | 'done'
+  dueDate?: string | null
+  assignee?: { id: string; firstName: string; lastName: string } | null
 }
 
 type TeamUser = {
@@ -36,6 +46,21 @@ type DepartmentOption = {
   id: string
   name?: string
   nameUk?: string
+}
+
+type TaskAttachment = {
+  id: string
+  fileName: string
+  mimeType: string
+  fileSize: number
+  createdAt: string
+  uploader?: string
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} Б`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`
+  return `${(bytes / 1024 / 1024).toFixed(1)} МБ`
 }
 
 function urgencyLevel(task: Task): 'overdue' | 'critical' | 'soon' | 'normal' {
@@ -91,6 +116,17 @@ export default function TaskListPage() {
   const [editDescription, setEditDescription] = useState('')
   const [editDueDate, setEditDueDate] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
+  const [attachments, setAttachments] = useState<TaskAttachment[]>([])
+  const [loadingAttachments, setLoadingAttachments] = useState(false)
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const [deletingAttachmentId, setDeletingAttachmentId] = useState('')
+  const [subtasks, setSubtasks] = useState<Subtask[]>([])
+  const [loadingSubtasks, setLoadingSubtasks] = useState(false)
+  const [subtaskFormOpen, setSubtaskFormOpen] = useState(false)
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
+  const [newSubtaskAssigneeId, setNewSubtaskAssigneeId] = useState('')
+  const [newSubtaskDueDate, setNewSubtaskDueDate] = useState('')
+  const [creatingSubtask, setCreatingSubtask] = useState(false)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const loadTasks = async () => {
@@ -161,6 +197,20 @@ export default function TaskListPage() {
 
   useEffect(() => {
     setEditMode(false)
+    setAttachments([])
+    setSubtasks([])
+    setSubtaskFormOpen(false)
+    setNewSubtaskTitle('')
+    setNewSubtaskAssigneeId('')
+    setNewSubtaskDueDate('')
+    if (selectedTaskId && accessToken) {
+      loadAttachments(selectedTaskId)
+      const task = tasks.find(t => t.id === selectedTaskId)
+      if (!task?.parentId) {
+        loadSubtasks(selectedTaskId)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTaskId])
 
   const deleteTask = async (id: string) => {
@@ -269,6 +319,144 @@ export default function TaskListPage() {
     }
     const err = await resp.json().catch(() => null)
     setActionToast({ type: 'error', message: extractApiErrorMessage(resp.status, err, 'Не вдалося оновити задачу') })
+  }
+
+  const loadAttachments = async (taskId: string) => {
+    if (!accessToken) return
+    setLoadingAttachments(true)
+    const resp = await fetch(`/api/v1/attachments?entityType=task&entityId=${taskId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (resp.ok) {
+      const data = await resp.json()
+      setAttachments(Array.isArray(data) ? data : [])
+    }
+    setLoadingAttachments(false)
+  }
+
+  const uploadFile = async (taskId: string, file: File) => {
+    if (!accessToken) return
+    if (file.size > 50 * 1024 * 1024) {
+      setActionToast({ type: 'error', message: 'Файл перевищує 50 МБ' })
+      return
+    }
+    setUploadingFile(true)
+    const reader = new FileReader()
+    reader.onload = async () => {
+      const contentBase64 = reader.result as string
+      const resp = await fetch('/api/v1/attachments', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entityType: 'task',
+          taskId,
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          contentBase64,
+        }),
+      })
+      setUploadingFile(false)
+      if (resp.ok) {
+        await loadAttachments(taskId)
+        setActionToast({ type: 'success', message: 'Файл завантажено' })
+        return
+      }
+      const err = await resp.json().catch(() => null)
+      setActionToast({ type: 'error', message: extractApiErrorMessage(resp.status, err, 'Не вдалося завантажити файл') })
+    }
+    reader.onerror = () => {
+      setUploadingFile(false)
+      setActionToast({ type: 'error', message: 'Помилка читання файлу' })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const deleteAttachment = async (attachmentId: string, taskId: string) => {
+    if (!accessToken) return
+    setDeletingAttachmentId(attachmentId)
+    const resp = await fetch(`/api/v1/attachments/${attachmentId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    setDeletingAttachmentId('')
+    if (resp.ok) {
+      await loadAttachments(taskId)
+      setActionToast({ type: 'success', message: 'Файл видалено' })
+      return
+    }
+    const err = await resp.json().catch(() => null)
+    setActionToast({ type: 'error', message: extractApiErrorMessage(resp.status, err, 'Не вдалося видалити файл') })
+  }
+
+  const downloadAttachment = async (attachmentId: string, fileName: string) => {
+    if (!accessToken) return
+    const resp = await fetch(`/api/v1/attachments/${attachmentId}/download`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!resp.ok) {
+      setActionToast({ type: 'error', message: 'Не вдалося завантажити файл' })
+      return
+    }
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const loadSubtasks = async (taskId: string) => {
+    if (!accessToken) return
+    setLoadingSubtasks(true)
+    const resp = await fetch(`/api/v1/tasks/${taskId}/subtasks`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (resp.ok) {
+      const data = await resp.json()
+      setSubtasks(Array.isArray(data) ? data : [])
+    }
+    setLoadingSubtasks(false)
+  }
+
+  const createSubtask = async (parentId: string) => {
+    if (!accessToken || !newSubtaskTitle.trim()) return
+    setCreatingSubtask(true)
+    const resp = await fetch(`/api/v1/tasks/${parentId}/subtasks`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: newSubtaskTitle.trim(),
+        assigneeId: newSubtaskAssigneeId || undefined,
+        dueDate: newSubtaskDueDate || undefined,
+      }),
+    })
+    setCreatingSubtask(false)
+    if (resp.ok) {
+      setNewSubtaskTitle('')
+      setNewSubtaskAssigneeId('')
+      setNewSubtaskDueDate('')
+      setSubtaskFormOpen(false)
+      await loadSubtasks(parentId)
+      await loadTasks()
+      setActionToast({ type: 'success', message: 'Підзадачу створено' })
+      return
+    }
+    const err = await resp.json().catch(() => null)
+    setActionToast({ type: 'error', message: extractApiErrorMessage(resp.status, err, 'Не вдалося створити підзадачу') })
+  }
+
+  const updateSubtaskStatus = async (subtaskId: string, status: Task['status'], parentId: string) => {
+    if (!accessToken) return
+    const resp = await fetch(`/api/v1/tasks/${subtaskId}/status`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    })
+    if (resp.ok) {
+      await loadSubtasks(parentId)
+      await loadTasks()
+    }
   }
 
   useEffect(() => {
@@ -429,7 +617,12 @@ export default function TaskListPage() {
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-start gap-2 flex-1 min-w-0">
                           <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mt-0.5 shrink-0 w-5 text-right">{idx + 1}</span>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2 flex-1">{task.title}</p>
+                          <div className="flex-1 min-w-0">
+                            {task.parentId && (
+                              <span className="inline-block rounded bg-amber-100 dark:bg-amber-950/40 px-1 text-[9px] font-semibold text-amber-600 dark:text-amber-400 mb-0.5">підзадача</span>
+                            )}
+                            <p className={`text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2 ${task.parentId ? 'pl-1' : ''}`}>{task.title}</p>
+                          </div>
                         </div>
                         {u !== 'normal' && <UrgencyBadge level={u} />}
                       </div>
@@ -601,6 +794,160 @@ export default function TaskListPage() {
                           >
                             {deletingTaskId === selectedTask.id ? 'Видалення...' : 'Видалити'}
                           </button>
+                        </div>
+
+                        {/* Subtasks — only for top-level tasks */}
+                        {!selectedTask.parentId && (
+                          <div className="pt-2 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                                Підзадачі {subtasks.length > 0 && `(${subtasks.length})`}
+                              </p>
+                              <button
+                                onClick={() => setSubtaskFormOpen((v) => !v)}
+                                className="text-xs text-primary hover:underline"
+                              >
+                                {subtaskFormOpen ? 'Скасувати' : '+ Підзадача'}
+                              </button>
+                            </div>
+
+                            {subtaskFormOpen && (
+                              <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+                                <input
+                                  type="text"
+                                  placeholder="Назва підзадачі"
+                                  value={newSubtaskTitle}
+                                  onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                                  onKeyDown={(e) => { if (e.key === 'Enter') createSubtask(selectedTask.id) }}
+                                />
+                                <div className="flex flex-wrap gap-2">
+                                  <select
+                                    value={newSubtaskAssigneeId}
+                                    onChange={(e) => setNewSubtaskAssigneeId(e.target.value)}
+                                    className="flex-1 min-w-[160px] h-8 rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                                  >
+                                    <option value="">Без виконавця</option>
+                                    {users.map((u) => (
+                                      <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
+                                    ))}
+                                  </select>
+                                  <input
+                                    type="datetime-local"
+                                    value={newSubtaskDueDate}
+                                    onChange={(e) => setNewSubtaskDueDate(e.target.value)}
+                                    className="h-8 rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                                  />
+                                </div>
+                                <button
+                                  onClick={() => createSubtask(selectedTask.id)}
+                                  disabled={!newSubtaskTitle.trim() || creatingSubtask}
+                                  className="h-7 rounded bg-primary px-3 text-xs font-medium text-white disabled:opacity-60"
+                                >
+                                  {creatingSubtask ? 'Створення...' : 'Створити'}
+                                </button>
+                              </div>
+                            )}
+
+                            {loadingSubtasks && <p className="text-xs text-slate-400">Завантаження...</p>}
+
+                            {!loadingSubtasks && subtasks.length === 0 && !subtaskFormOpen && (
+                              <p className="text-xs text-slate-400 dark:text-slate-500">Підзадач немає.</p>
+                            )}
+
+                            {subtasks.map((s) => (
+                              <div key={s.id} className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
+                                <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                                  s.status === 'done' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' :
+                                  s.status === 'in_progress' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' :
+                                  'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300'
+                                }`}>
+                                  {s.status === 'done' ? 'Виконано' : s.status === 'in_progress' ? 'В роботі' : 'Нове'}
+                                </span>
+                                <span className="flex-1 text-xs text-slate-800 dark:text-slate-200 line-clamp-1">{s.title}</span>
+                                {s.assignee && (
+                                  <span className="shrink-0 text-[10px] text-slate-400">{s.assignee.firstName} {s.assignee.lastName}</span>
+                                )}
+                                {s.dueDate && (
+                                  <span className="shrink-0 text-[10px] text-slate-400">{new Date(s.dueDate).toLocaleDateString('uk-UA')}</span>
+                                )}
+                                <select
+                                  value={s.status}
+                                  onChange={(e) => updateSubtaskStatus(s.id, e.target.value as Task['status'], selectedTask.id)}
+                                  className="h-6 rounded border border-slate-200 px-1 text-[10px] bg-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                                >
+                                  <option value="todo">Нове</option>
+                                  <option value="in_progress">В роботі</option>
+                                  <option value="done">Виконано</option>
+                                </select>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Parent task link for subtasks */}
+                        {selectedTask.parentId && (
+                          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/20 px-3 py-2">
+                            <p className="text-xs text-amber-700 dark:text-amber-400">
+                              Це підзадача.{' '}
+                              <button
+                                onClick={() => setSelectedTaskId(selectedTask.parentId!)}
+                                className="underline hover:no-underline"
+                              >
+                                Перейти до батьківської задачі
+                              </button>
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Attachments */}
+                        <div className="pt-2 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                              Файли {attachments.length > 0 && `(${attachments.length})`}
+                            </p>
+                            <label className={`cursor-pointer rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition ${uploadingFile ? 'opacity-50 pointer-events-none' : ''}`}>
+                              {uploadingFile ? 'Завантаження...' : '+ Додати файл'}
+                              <input
+                                type="file"
+                                className="hidden"
+                                disabled={uploadingFile}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0]
+                                  if (file) uploadFile(selectedTask.id, file)
+                                  e.target.value = ''
+                                }}
+                              />
+                            </label>
+                          </div>
+                          {loadingAttachments && (
+                            <p className="text-xs text-slate-400">Завантаження файлів...</p>
+                          )}
+                          {!loadingAttachments && attachments.length === 0 && (
+                            <p className="text-xs text-slate-400 dark:text-slate-500">Файлів немає. Макс. розмір: 50 МБ.</p>
+                          )}
+                          {attachments.map((att) => (
+                            <div key={att.id} className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{att.fileName}</p>
+                                <p className="text-[10px] text-slate-400">{formatBytes(att.fileSize)} · {att.uploader || ''} · {new Date(att.createdAt).toLocaleDateString('uk-UA')}</p>
+                              </div>
+                              <button
+                                onClick={() => downloadAttachment(att.id, att.fileName)}
+                                className="shrink-0 text-xs text-primary hover:underline"
+                              >
+                                Завантажити
+                              </button>
+                              <button
+                                onClick={() => deleteAttachment(att.id, selectedTask.id)}
+                                disabled={deletingAttachmentId === att.id}
+                                className="shrink-0 text-xs text-slate-400 hover:text-rose-600 transition disabled:opacity-50"
+                                title="Видалити файл"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
                         </div>
                       </>
                     )}
