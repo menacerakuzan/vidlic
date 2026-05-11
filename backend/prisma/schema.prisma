@@ -117,6 +117,7 @@ model User {
   firstName    String
   lastName     String
   patronymic   String?
+  avatarBase64 String?
   passwordHash String
   role         UserRole @default(specialist)
   scopeDepartmentIds     Json?

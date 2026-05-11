@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto, UpdateUserDto, UserQueryDto, UpdateUserPasswordDto } from './dto/users.dto';
+import { CreateUserDto, UpdateUserDto, UserQueryDto, UpdateUserPasswordDto, UpdateOwnProfileDto } from './dto/users.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, Permissions } from '../auth/decorators/roles.decorator';
@@ -37,6 +37,13 @@ export class UsersController {
   @ApiResponse({ status: 201, description: 'Користувач створений' })
   create(@Body() dto: CreateUserDto, @Req() req: any) {
     return this.usersService.create(dto, req.user, req.ip);
+  }
+
+  @Put('me/profile')
+  @ApiOperation({ summary: 'Оновити власний профіль (аватар)' })
+  @ApiResponse({ status: 200, description: 'Профіль оновлено' })
+  updateOwnProfile(@Body() dto: UpdateOwnProfileDto, @Req() req: any) {
+    return this.usersService.updateOwnProfile(req.user.id, dto);
   }
 
   @Put('me/password')

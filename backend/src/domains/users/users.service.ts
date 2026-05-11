@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma.service';
-import { CreateUserDto, UpdateUserDto, UserQueryDto, UpdateUserPasswordDto } from './dto/users.dto';
+import { CreateUserDto, UpdateUserDto, UserQueryDto, UpdateUserPasswordDto, UpdateOwnProfileDto } from './dto/users.dto';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -270,6 +270,24 @@ export class UsersService {
     return { success: true };
   }
 
+  async updateOwnProfile(id: string, dto: UpdateOwnProfileDto) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('Користувача не знайдено');
+
+    if (dto.avatarBase64 !== undefined) {
+      if (dto.avatarBase64 !== null && dto.avatarBase64.length > 5 * 1024 * 1024) {
+        throw new BadRequestException('Зображення перевищує 5MB');
+      }
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: { avatarBase64: dto.avatarBase64 },
+      include: { department: true, position: true },
+    });
+    return this.mapUser(updated);
+  }
+
   async findByDepartment(departmentId: string) {
     const users = await this.prisma.user.findMany({
       where: { departmentId, isActive: true },
@@ -288,6 +306,7 @@ export class UsersService {
       firstName: user.firstName,
       lastName: user.lastName,
       patronymic: user.patronymic,
+      avatarBase64: user.avatarBase64 ?? null,
       role: user.role,
       isActive: user.isActive,
       department: user.department ? {

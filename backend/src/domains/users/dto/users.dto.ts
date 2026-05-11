@@ -139,3 +139,10 @@ export class UpdateUserPasswordDto {
   @MinLength(8)
   password: string;
 }
+
+export class UpdateOwnProfileDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  avatarBase64?: string | null;
+}

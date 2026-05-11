@@ -124,8 +124,7 @@ export class AttachmentsService {
       if (scopedDepartmentIds.includes(task.departmentId)) return task;
     }
     if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
-      if (mode === 'read' && (task.assigneeId === user.id || task.reporterId === user.id)) return task;
-      if (mode === 'write' && task.reporterId === user.id) return task;
+      if (task.assigneeId === user.id || task.reporterId === user.id) return task;
     }
     throw new ForbiddenException('Немає доступу до цієї задачі');
   }
