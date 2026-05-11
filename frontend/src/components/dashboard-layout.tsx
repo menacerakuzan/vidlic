@@ -5,39 +5,75 @@ import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth-store'
 import { Button } from '@/components/ui/button'
-import { 
-  LayoutDashboard, 
-  FileText, 
-  CheckSquare, 
+import {
+  LayoutDashboard,
+  FileText,
+  FileClock,
   CalendarDays,
-  Users, 
-  Settings, 
+  ListTodo,
+  BarChart2,
+  Archive,
+  PlusSquare,
   Bell,
+  Building2,
+  Layers,
+  Settings,
+  UserCircle,
   LogOut,
   Menu,
   X,
   Moon,
-  Sun
+  Sun,
 } from 'lucide-react'
-import { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect } from 'react'
 import { BrandLogo } from '@/components/brand-logo'
 
-const navigation = [
-  { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Звіти', href: '/dashboard/reports', icon: FileText },
-  { name: 'Денний звіт', href: '/dashboard/reports/daily', icon: FileText },
-  { name: 'Заходи', href: '/dashboard/activities', icon: CalendarDays },
-  { name: 'Створити задачу', href: '/dashboard/tasks/create', icon: CheckSquare },
-  { name: 'Список задач', href: '/dashboard/tasks/list', icon: CheckSquare },
-  { name: 'Навантаження співробітників', href: '/dashboard/tasks/workload', icon: CheckSquare },
-  { name: 'Архів задач', href: '/dashboard/tasks/archive', icon: CheckSquare },
-  { name: 'Сповіщення', href: '/dashboard/notifications', icon: Bell },
-  { name: 'Підрозділи', href: '/dashboard/departments', icon: Users, roles: ['specialist', 'manager', 'director', 'deputy_director', 'deputy_head', 'admin', 'clerk', 'lawyer', 'accountant', 'hr'] },
-  { name: 'Конструктор', href: '/dashboard/layouts', icon: Settings, roles: ['admin'] },
-  { name: 'Налаштування', href: '/dashboard/settings', icon: Settings },
-  { name: 'Мій профіль', href: '/dashboard/profile', icon: Users },
+type NavItem = {
+  name: string
+  href: string
+  icon: React.ElementType
+  roles?: string[]
+}
+
+type NavGroup = {
+  label: string
+  items: NavItem[]
+}
+
+const navGroups: NavGroup[] = [
+  {
+    label: '',
+    items: [
+      { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: 'Звітність',
+    items: [
+      { name: 'Звіти', href: '/dashboard/reports', icon: FileText },
+      { name: 'Денний звіт', href: '/dashboard/reports/daily', icon: FileClock },
+      { name: 'Заходи', href: '/dashboard/activities', icon: CalendarDays },
+    ],
+  },
+  {
+    label: 'Задачі',
+    items: [
+      { name: 'Нова задача', href: '/dashboard/tasks/create', icon: PlusSquare },
+      { name: 'Список задач', href: '/dashboard/tasks/list', icon: ListTodo },
+      { name: 'Навантаження', href: '/dashboard/tasks/workload', icon: BarChart2 },
+      { name: 'Архів', href: '/dashboard/tasks/archive', icon: Archive },
+    ],
+  },
+  {
+    label: 'Інше',
+    items: [
+      { name: 'Сповіщення', href: '/dashboard/notifications', icon: Bell },
+      { name: 'Підрозділи', href: '/dashboard/departments', icon: Building2, roles: ['specialist', 'manager', 'director', 'deputy_director', 'deputy_head', 'admin', 'clerk', 'lawyer', 'accountant', 'hr'] },
+      { name: 'Конструктор', href: '/dashboard/layouts', icon: Layers, roles: ['admin'] },
+      { name: 'Налаштування', href: '/dashboard/settings', icon: Settings },
+    ],
+  },
 ]
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -154,10 +190,12 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     setIsDark(isDarkNow)
   }, [])
 
-  const filteredNav = navigation.filter(item => {
-    if (!item.roles) return true
-    return user && item.roles.includes(user.role)
-  })
+  const filteredGroups = navGroups
+    .map(group => ({
+      ...group,
+      items: group.items.filter(item => !item.roles || (user && item.roles.includes(user.role))),
+    }))
+    .filter(group => group.items.length > 0)
 
   const handleLogout = () => {
     logout()
@@ -217,22 +255,33 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <nav className="p-4 space-y-1">
-                {filteredNav.map(item => (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    onClick={() => setSidebarOpen(false)}
-                    className={cn(
-                      'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                      pathname === item.href
-                        ? 'bg-primary text-white'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+              <nav className="p-3 space-y-4 overflow-y-auto flex-1">
+                {filteredGroups.map(group => (
+                  <div key={group.label || '_top'}>
+                    {group.label && (
+                      <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                        {group.label}
+                      </p>
                     )}
-                  >
-                    <item.icon className="w-5 h-5" />
-                    {item.name}
-                  </Link>
+                    <div className="space-y-0.5">
+                      {group.items.map(item => (
+                        <Link
+                          key={item.name}
+                          href={item.href}
+                          onClick={() => setSidebarOpen(false)}
+                          className={cn(
+                            'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                            pathname === item.href
+                              ? 'bg-primary text-white'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                          )}
+                        >
+                          <item.icon className="w-4 h-4 shrink-0" />
+                          {item.name}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </nav>
             </div>
@@ -249,32 +298,54 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
               ВІДЛІК
             </span>
           </div>
-          <nav className="flex-1 p-4 space-y-1">
-            {filteredNav.map(item => (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
-                  pathname === item.href
-                    ? 'bg-primary text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+          <nav className="flex-1 overflow-y-auto p-3 space-y-4">
+            {filteredGroups.map(group => (
+              <div key={group.label || '_top'}>
+                {group.label && (
+                  <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                    {group.label}
+                  </p>
                 )}
-              >
-                <item.icon className="w-5 h-5" />
-                {item.name}
-              </Link>
+                <div className="space-y-0.5">
+                  {group.items.map(item => (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      className={cn(
+                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+                        pathname === item.href
+                          ? 'bg-primary text-white shadow-sm'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60'
+                      )}
+                    >
+                      <item.icon className="w-4 h-4 shrink-0" />
+                      {item.name}
+                    </Link>
+                  ))}
+                </div>
+              </div>
             ))}
           </nav>
-          <div className="p-4 border-t">
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
-              onClick={handleLogout}
+          <div className="p-3 border-t border-slate-100 dark:border-slate-800 space-y-0.5">
+            <Link
+              href="/dashboard/profile"
+              className={cn(
+                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+                pathname === '/dashboard/profile'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60'
+              )}
             >
-              <LogOut className="w-5 h-5 mr-3" />
+              <UserCircle className="w-4 h-4 shrink-0" />
+              Мій профіль
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all duration-150"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
               Вийти
-            </Button>
+            </button>
           </div>
         </div>
       </div>
