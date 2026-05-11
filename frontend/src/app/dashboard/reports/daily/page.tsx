@@ -15,13 +15,13 @@ type LinkedTask = {
 }
 
 type DailyReport = {
-  id: string
+  id: string | null
   date: string
   text: string
   author: { id: string; firstName: string; lastName: string } | null
   department: { id: string; nameUk: string } | null
   tasks: LinkedTask[]
-  updatedAt: string
+  updatedAt: string | null
 }
 
 type MyTask = {
@@ -136,10 +136,11 @@ export default function DailyReportsPage() {
   const saveReport = async () => {
     if (!accessToken || !myReport) return
     setSaving(true)
-    const resp = await fetch(`/api/v1/reports/daily/${myReport.id}`, {
+    const reportId = myReport.id ?? 'null'
+    const resp = await fetch(`/api/v1/reports/daily/${reportId}`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, date: myReport.date }),
     })
     setSaving(false)
     if (resp.ok) {
@@ -152,10 +153,32 @@ export default function DailyReportsPage() {
     setToast({ type: 'error', message: extractApiErrorMessage(resp.status, err, 'Не вдалося зберегти') })
   }
 
+  // Ensure report exists in DB before attaching tasks (lazy create)
+  const ensureReportSaved = async (): Promise<DailyReport | null> => {
+    if (!accessToken || !myReport) return null
+    if (myReport.id) return myReport
+    // save empty text to trigger creation
+    const resp = await fetch(`/api/v1/reports/daily/null`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text || '', date: myReport.date }),
+    })
+    if (!resp.ok) return null
+    const data: DailyReport = await resp.json()
+    setMyReport(data)
+    return data
+  }
+
   const attachTask = async (taskId: string) => {
     if (!accessToken || !myReport || attachingTaskId) return
     setAttachingTaskId(taskId)
-    const resp = await fetch(`/api/v1/reports/daily/${myReport.id}/tasks/${taskId}`, {
+    const report = await ensureReportSaved()
+    if (!report?.id) {
+      setAttachingTaskId('')
+      setToast({ type: 'error', message: 'Не вдалося зберегти звіт перед прикріпленням задачі' })
+      return
+    }
+    const resp = await fetch(`/api/v1/reports/daily/${report.id}/tasks/${taskId}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
     })
@@ -172,7 +195,7 @@ export default function DailyReportsPage() {
   }
 
   const detachTask = async (taskId: string) => {
-    if (!accessToken || !myReport) return
+    if (!accessToken || !myReport?.id) return
     const resp = await fetch(`/api/v1/reports/daily/${myReport.id}/tasks/${taskId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${accessToken}` },

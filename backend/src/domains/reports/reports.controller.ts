@@ -103,9 +103,9 @@ export class ReportsController {
 
   @Put('daily/:id')
   @Permissions('reports:write')
-  @ApiOperation({ summary: 'Оновити денний звіт' })
-  updateDailyReport(@Param('id') id: string, @Body() body: { text: string }, @Req() req: any) {
-    return this.reportsService.updateDailyReport(id, body.text || '', req.user);
+  @ApiOperation({ summary: 'Оновити денний звіт (створює якщо не існує)' })
+  updateDailyReport(@Param('id') id: string, @Body() body: { text: string; date?: string }, @Req() req: any) {
+    return this.reportsService.updateDailyReport(id === 'null' ? null : id, body.text || '', req.user, body.date);
   }
 
   @Post('daily/:id/tasks/:taskId')

@@ -2362,22 +2362,37 @@ export class ReportsService {
     }
     const [y, m, d] = dateStr.split('-').map(Number);
     const start = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
-    const end = new Date(Date.UTC(y, m - 1, d, 23, 59, 59));
 
     const departmentId = user.departmentId;
     if (!departmentId) throw new ForbiddenException('Немає відділу');
 
     const title = this.buildDailyReportTitle(dateStr);
 
-    const dailyInclude = {
-      department: { select: { id: true, nameUk: true, name: true } },
-      author: { select: { id: true, firstName: true, lastName: true } },
-      tasks: { select: { id: true, title: true, status: true, dueDate: true, assignee: { select: { id: true, firstName: true, lastName: true } } } },
-    };
+    // Only return existing report — do NOT create one just by viewing
+    const report = await this.prisma.report.findFirst({
+      where: { departmentId, title, authorId: user.id, periodStart: start },
+      include: this.dailyInclude,
+    });
+
+    if (!report) {
+      // Return a virtual empty draft without persisting it
+      return { id: null, date: dateStr, text: '', author: null, department: null, tasks: [], updatedAt: null };
+    }
+
+    return this.mapDailyReport(report);
+  }
+
+  private async ensureOrCreateDailyReport(dateStr: string, user: any) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const start = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+    const end = new Date(Date.UTC(y, m - 1, d, 23, 59, 59));
+    const departmentId = user.departmentId;
+    if (!departmentId) throw new ForbiddenException('Немає відділу');
+    const title = this.buildDailyReportTitle(dateStr);
 
     let report = await this.prisma.report.findFirst({
       where: { departmentId, title, authorId: user.id, periodStart: start },
-      include: dailyInclude,
+      include: this.dailyInclude,
     });
 
     if (!report) {
@@ -2392,11 +2407,11 @@ export class ReportsService {
           authorId: user.id,
           content: { dailyReport: { date: dateStr, text: '' } },
         },
-        include: dailyInclude,
+        include: this.dailyInclude,
       });
     }
 
-    return this.mapDailyReport(report);
+    return report;
   }
 
   private dailyInclude = {
@@ -2405,16 +2420,26 @@ export class ReportsService {
     tasks: { select: { id: true, title: true, status: true, dueDate: true, assignee: { select: { id: true, firstName: true, lastName: true } } } },
   };
 
-  async updateDailyReport(reportId: string, text: string, user: any) {
-    const report = await this.prisma.report.findUnique({ where: { id: reportId } });
-    if (!report) throw new NotFoundException('Денний звіт не знайдено');
-    if (report.authorId !== user.id) throw new ForbiddenException('Можна редагувати лише свій денний звіт');
-    if (!String(report.title || '').startsWith(this.dailyReportTitlePrefix())) {
-      throw new BadRequestException('Це не денний звіт');
+  async updateDailyReport(reportId: string | null, text: string, user: any, dateStr?: string) {
+    let report: any;
+
+    if (!reportId || reportId === 'null') {
+      // First save — lazy create using dateStr
+      if (!dateStr) throw new BadRequestException('Дата обов\'язкова для першого збереження');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) throw new BadRequestException('Невірний формат дати');
+      report = await this.ensureOrCreateDailyReport(dateStr, user);
+    } else {
+      report = await this.prisma.report.findUnique({ where: { id: reportId } });
+      if (!report) throw new NotFoundException('Денний звіт не знайдено');
+      if (report.authorId !== user.id) throw new ForbiddenException('Можна редагувати лише свій денний звіт');
+      if (!String(report.title || '').startsWith(this.dailyReportTitlePrefix())) {
+        throw new BadRequestException('Це не денний звіт');
+      }
     }
+
     const content = this.ensureObject(report.content) as any;
     const updated = await this.prisma.report.update({
-      where: { id: reportId },
+      where: { id: report.id },
       data: { content: { ...content, dailyReport: { ...content.dailyReport, text } }, updatedAt: new Date() },
       include: this.dailyInclude,
     });
