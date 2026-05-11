@@ -10,6 +10,9 @@ type Task = {
   status: 'todo' | 'in_progress' | 'done'
   dueDate?: string
   startedAt?: string | null
+  parentId?: string | null
+  subtasksCount?: number
+  subtasksDone?: number
   assignee?: { id: string; firstName: string; lastName: string }
   department?: { id: string; name?: string; nameUk?: string }
 }
@@ -446,6 +449,20 @@ export default function WorkloadPage() {
                               <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">
                                 Почато: {new Date(task.startedAt).toLocaleString('uk-UA')}
                               </p>
+                            )}
+                            {!task.parentId && (task.subtasksCount ?? 0) > 0 && (
+                              <div className="mt-2">
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <span className="text-[10px] text-slate-400 dark:text-slate-500">{task.subtasksDone ?? 0}/{task.subtasksCount} підзадач</span>
+                                  <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">{Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%</span>
+                                </div>
+                                <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-emerald-500 transition-all"
+                                    style={{ width: `${Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%` }}
+                                  />
+                                </div>
+                              </div>
                             )}
                           </div>
                         )

@@ -13,6 +13,9 @@ type Task = {
   status: 'todo' | 'in_progress' | 'done'
   dueDate?: string
   isPrivate?: boolean
+  parentId?: string | null
+  subtasksCount?: number
+  subtasksDone?: number
   assignee?: { id: string; firstName: string; lastName: string }
   reporter?: { id: string; firstName: string; lastName: string }
   department?: { id: string; name?: string }
@@ -59,6 +62,14 @@ export default function CreateTaskPage() {
   const [selectedAssignDepartmentId, setSelectedAssignDepartmentId] = useState('')
   const [overrideDepartmentId, setOverrideDepartmentId] = useState('')
   const [coAssigneeIds, setCoAssigneeIds] = useState<string[]>([])
+  // Subtask form
+  const [subtaskMode, setSubtaskMode] = useState(false)
+  const [subtaskParentId, setSubtaskParentId] = useState('')
+  const [subtaskTitle, setSubtaskTitle] = useState('')
+  const [subtaskDescription, setSubtaskDescription] = useState('')
+  const [subtaskAssigneeId, setSubtaskAssigneeId] = useState('')
+  const [subtaskDueDate, setSubtaskDueDate] = useState('')
+  const [creatingSubtask, setCreatingSubtask] = useState(false)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const loadAll = async () => {
@@ -211,6 +222,33 @@ export default function CreateTaskPage() {
     setActionToast({ type: 'error', message })
   }
 
+  const createSubtaskFromPage = async () => {
+    if (!accessToken || !subtaskParentId || !subtaskTitle.trim()) return
+    setCreatingSubtask(true)
+    const resp = await fetch(`/api/v1/tasks/${subtaskParentId}/subtasks`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: subtaskTitle.trim(),
+        description: subtaskDescription.trim() || undefined,
+        assigneeId: subtaskAssigneeId || undefined,
+        dueDate: subtaskDueDate || undefined,
+      }),
+    })
+    setCreatingSubtask(false)
+    if (resp.ok) {
+      setSubtaskTitle('')
+      setSubtaskDescription('')
+      setSubtaskAssigneeId('')
+      setSubtaskDueDate('')
+      await loadAll()
+      setActionToast({ type: 'success', message: 'Підзадачу створено' })
+      return
+    }
+    const err = await resp.json().catch(() => null)
+    setActionToast({ type: 'error', message: extractApiErrorMessage(resp.status, err, 'Не вдалося створити підзадачу') })
+  }
+
   const loadTaskAttachments = async (taskId: string) => {
     if (!accessToken || !taskId) return
     setAttachmentsLoading(true)
@@ -327,6 +365,106 @@ export default function CreateTaskPage() {
           <p className="text-slate-500 mt-1">Створення і призначення задач</p>
         </div>
 
+        {/* Mode toggle */}
+        <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1 w-fit dark:border-slate-700 dark:bg-slate-800">
+          <button
+            onClick={() => setSubtaskMode(false)}
+            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition ${!subtaskMode ? 'bg-white shadow-sm text-slate-900 dark:bg-slate-900 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+          >
+            Нова задача
+          </button>
+          <button
+            onClick={() => setSubtaskMode(true)}
+            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition ${subtaskMode ? 'bg-white shadow-sm text-slate-900 dark:bg-slate-900 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+          >
+            Підзадача
+          </button>
+        </div>
+
+        {/* Subtask form */}
+        {subtaskMode && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/10 p-4 space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">Вибери глобальну задачу</p>
+              <select
+                value={subtaskParentId}
+                onChange={(e) => setSubtaskParentId(e.target.value)}
+                className="h-10 w-full rounded-lg border border-amber-300 px-3 text-sm bg-white text-slate-900 dark:border-amber-700 dark:bg-slate-800 dark:text-slate-100"
+              >
+                <option value="">Оберіть задачу...</option>
+                {tasks.filter(t => !t.parentId).map((t) => {
+                  const done = t.subtasksDone ?? 0
+                  const total = t.subtasksCount ?? 0
+                  const label = total > 0 ? ` [${done}/${total}]` : ''
+                  return (
+                    <option key={t.id} value={t.id}>
+                      {t.title}{label}
+                    </option>
+                  )
+                })}
+              </select>
+              {subtaskParentId && (() => {
+                const parent = tasks.find(t => t.id === subtaskParentId)
+                if (!parent || (parent.subtasksCount ?? 0) === 0) return null
+                const pct = Math.round(((parent.subtasksDone ?? 0) / (parent.subtasksCount ?? 1)) * 100)
+                return (
+                  <div className="mt-2 space-y-1">
+                    <div className="flex justify-between text-xs text-amber-700 dark:text-amber-400">
+                      <span>Прогрес: {parent.subtasksDone}/{parent.subtasksCount} підзадач виконано</span>
+                      <span>{pct}%</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-amber-200 dark:bg-amber-900/50 overflow-hidden">
+                      <div className="h-full rounded-full bg-amber-500" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <textarea
+                value={subtaskTitle}
+                onChange={(e) => setSubtaskTitle(e.target.value)}
+                rows={2}
+                placeholder="Назва підзадачі"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
+              />
+              <textarea
+                value={subtaskDescription}
+                onChange={(e) => setSubtaskDescription(e.target.value)}
+                rows={2}
+                placeholder="Опис (необов'язково)"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
+              />
+              <select
+                value={subtaskAssigneeId}
+                onChange={(e) => setSubtaskAssigneeId(e.target.value)}
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              >
+                <option value="">Без виконавця</option>
+                {availableForAssignment.map((m) => (
+                  <option key={m.id} value={m.id}>{m.firstName} {m.lastName} ({loads[m.id] || 0})</option>
+                ))}
+              </select>
+              <input
+                type="datetime-local"
+                value={subtaskDueDate}
+                onChange={(e) => setSubtaskDueDate(e.target.value)}
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              />
+            </div>
+            <button
+              onClick={createSubtaskFromPage}
+              disabled={creatingSubtask || !subtaskParentId || !subtaskTitle.trim()}
+              className="h-10 w-full rounded-lg bg-amber-500 text-white text-sm font-medium disabled:opacity-60 hover:bg-amber-600 transition"
+            >
+              {creatingSubtask ? 'Створення...' : 'Створити підзадачу'}
+            </button>
+          </div>
+        )}
+
+        {/* Main task form */}
+        {!subtaskMode && (
         <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-4 gap-3 dark:border-slate-700 dark:bg-slate-900">
           <textarea
             value={title}
@@ -444,6 +582,7 @@ export default function CreateTaskPage() {
             {creating ? 'Створення...' : 'Створити задачу'}
           </button>
         </div>
+        )}
 
         {loading && (
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Завантаження...</div>

@@ -47,7 +47,7 @@ export default function DashboardPage() {
       value: analytics?.tasks?.total ?? 0,
       subtitle: 'Всього в роботі',
       icon: CheckSquare,
-      href: '/dashboard/tasks',
+      href: '/dashboard/tasks/list',
     },
     {
       title: 'На погодженні',
@@ -61,7 +61,7 @@ export default function DashboardPage() {
       value: analytics?.tasks?.overdue ?? 0,
       subtitle: 'Задачі з ризиком',
       icon: AlertTriangle,
-      href: '/dashboard/tasks',
+      href: '/dashboard/tasks/list',
     },
   ]), [analytics])
 

@@ -20,6 +20,7 @@ type Task = {
   coAssigneeIds?: string[]
   parentId?: string | null
   subtasksCount?: number
+  subtasksDone?: number
 }
 
 type Subtask = {
@@ -632,6 +633,20 @@ export default function TaskListPage() {
                           {new Date(task.dueDate).toLocaleDateString('uk-UA')}
                         </p>
                       )}
+                      {!task.parentId && (task.subtasksCount ?? 0) > 0 && (
+                        <div className="mt-1.5">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className="text-[9px] text-slate-400">{task.subtasksDone ?? 0}/{task.subtasksCount} підзадач</span>
+                            <span className="text-[9px] text-slate-400">{Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%</span>
+                          </div>
+                          <div className="h-1 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-emerald-400"
+                              style={{ width: `${Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </button>
                   )
                 })}
@@ -704,6 +719,22 @@ export default function TaskListPage() {
                             </span>
                           </div>
                         </div>
+
+                        {/* Progress bar for tasks with subtasks */}
+                        {(selectedTask.subtasksCount ?? 0) > 0 && (
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                              <span>Прогрес підзадач</span>
+                              <span className="font-medium">{selectedTask.subtasksDone ?? 0} / {selectedTask.subtasksCount} виконано</span>
+                            </div>
+                            <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-emerald-500 transition-all"
+                                style={{ width: `${Math.round(((selectedTask.subtasksDone ?? 0) / (selectedTask.subtasksCount ?? 1)) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
 
                         {selectedTask.description && (
                           <p className="text-sm whitespace-pre-wrap text-slate-600 dark:text-slate-300">{selectedTask.description}</p>
@@ -885,20 +916,35 @@ export default function TaskListPage() {
                           </div>
                         )}
 
-                        {/* Parent task link for subtasks */}
-                        {selectedTask.parentId && (
-                          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/20 px-3 py-2">
-                            <p className="text-xs text-amber-700 dark:text-amber-400">
-                              Це підзадача.{' '}
+                        {/* Parent task block for subtasks */}
+                        {selectedTask.parentId && (() => {
+                          const parentTask = tasks.find(t => t.id === selectedTask.parentId)
+                          return (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/20 px-3 py-2 space-y-1.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">Глобальна задача</p>
                               <button
                                 onClick={() => setSelectedTaskId(selectedTask.parentId!)}
-                                className="underline hover:no-underline"
+                                className="text-sm font-medium text-amber-800 dark:text-amber-200 hover:underline text-left"
                               >
-                                Перейти до батьківської задачі
+                                {parentTask?.title ?? 'Переглянути батьківську задачу'}
                               </button>
-                            </p>
-                          </div>
-                        )}
+                              {parentTask && (parentTask.subtasksCount ?? 0) > 0 && (
+                                <div>
+                                  <div className="flex items-center justify-between mb-0.5">
+                                    <span className="text-[10px] text-amber-600 dark:text-amber-400">{parentTask.subtasksDone ?? 0} / {parentTask.subtasksCount} підзадач виконано</span>
+                                    <span className="text-[10px] font-medium text-amber-700 dark:text-amber-300">{Math.round(((parentTask.subtasksDone ?? 0) / (parentTask.subtasksCount ?? 1)) * 100)}%</span>
+                                  </div>
+                                  <div className="h-1.5 w-full rounded-full bg-amber-200 dark:bg-amber-900/50 overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full bg-amber-500"
+                                      style={{ width: `${Math.round(((parentTask.subtasksDone ?? 0) / (parentTask.subtasksCount ?? 1)) * 100)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
 
                         {/* Attachments */}
                         <div className="pt-2 space-y-2">

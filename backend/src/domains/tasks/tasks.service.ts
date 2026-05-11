@@ -23,6 +23,8 @@ export class TasksService {
       visibilityClauses.push(
         { assigneeId: user.id },
         { reporterId: user.id },
+        // parent tasks whose subtasks are assigned to this user
+        { subtasks: { some: { OR: [{ assigneeId: user.id }, { reporterId: user.id }] } } },
       );
     } else if (['manager', 'director', 'deputy_director', 'deputy_head'].includes(user.role)) {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
@@ -79,6 +81,7 @@ export class TasksService {
           reporter: { select: { id: true, firstName: true, lastName: true, role: true } },
           department: { select: { id: true, name: true, nameUk: true } },
           report: { select: { id: true, title: true, reportType: true } },
+          subtasks: { select: { id: true, status: true } },
         },
         orderBy: [
           { dueDate: 'asc' },
@@ -503,6 +506,7 @@ export class TasksService {
       isPrivate: Boolean(task.isPrivate),
       parentId: task.parentId ?? null,
       subtasksCount: Array.isArray(task.subtasks) ? task.subtasks.length : undefined,
+      subtasksDone: Array.isArray(task.subtasks) ? task.subtasks.filter((s: any) => s.status === 'done').length : undefined,
       dueDate: task.dueDate,
       assignee: task.assignee ? {
         id: task.assignee.id,
