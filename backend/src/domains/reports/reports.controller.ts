@@ -35,14 +35,15 @@ export class ReportsController {
 
   @Get('activities/plan')
   @Permissions('reports:read')
-  @ApiOperation({ summary: 'Отримати або створити план заходів на місяць' })
+  @ApiOperation({ summary: 'Отримати або створити план заходів' })
   getActivitiesPlan(
     @Query('period') period: string,
     @Query('month') month: string,
     @Query('periodType') periodType: string,
     @Req() req: any,
   ) {
-    const normalizedType = periodType === 'weekly' ? 'weekly' : 'monthly';
+    const normalizedType: 'weekly' | 'monthly' | 'quarterly' =
+      periodType === 'weekly' ? 'weekly' : periodType === 'quarterly' ? 'quarterly' : 'monthly';
     return this.reportsService.getOrCreateActivitiesPlan(period || month, normalizedType, req.user);
   }
 
@@ -50,7 +51,8 @@ export class ReportsController {
   @Permissions('reports:read')
   @ApiOperation({ summary: 'Список документів плану заходів' })
   listActivitiesPlans(@Query('periodType') periodType: string, @Req() req: any) {
-    const normalizedType = periodType === 'weekly' ? 'weekly' : 'monthly';
+    const normalizedType: 'weekly' | 'monthly' | 'quarterly' =
+      periodType === 'weekly' ? 'weekly' : periodType === 'quarterly' ? 'quarterly' : 'monthly';
     return this.reportsService.listActivitiesPlans(normalizedType, req.user);
   }
 
@@ -78,6 +80,32 @@ export class ReportsController {
     @Req() req: any,
   ) {
     return this.reportsService.deleteActivitiesRow(id, rowId, req.user, Number(expectedVersion) || undefined);
+  }
+
+  @Get('daily')
+  @Permissions('reports:read')
+  @ApiOperation({ summary: 'Список денних звітів' })
+  listDailyReports(
+    @Query('departmentId') departmentId: string,
+    @Query('dateFrom') dateFrom: string,
+    @Query('dateTo') dateTo: string,
+    @Req() req: any,
+  ) {
+    return this.reportsService.listDailyReports(departmentId || undefined, dateFrom || undefined, dateTo || undefined, req.user);
+  }
+
+  @Get('daily/:date')
+  @Permissions('reports:read')
+  @ApiOperation({ summary: 'Отримати або створити денний звіт' })
+  getOrCreateDailyReport(@Param('date') date: string, @Req() req: any) {
+    return this.reportsService.getOrCreateDailyReport(date, req.user);
+  }
+
+  @Put('daily/:id')
+  @Permissions('reports:write')
+  @ApiOperation({ summary: 'Оновити денний звіт' })
+  updateDailyReport(@Param('id') id: string, @Body() body: { text: string }, @Req() req: any) {
+    return this.reportsService.updateDailyReport(id, body.text || '', req.user);
   }
 
   @Get('activities/plan/:id/export')

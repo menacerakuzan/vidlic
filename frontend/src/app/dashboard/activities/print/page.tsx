@@ -14,7 +14,7 @@ type ActivityRow = {
 
 type ActivityPlanResponse = {
   reportId: string
-  periodType: 'weekly' | 'monthly'
+  periodType: 'weekly' | 'monthly' | 'quarterly'
   period: string
   title: string
   department?: { id: string; nameUk: string }
@@ -22,9 +22,12 @@ type ActivityPlanResponse = {
   updatedAt: string
 }
 
-function formatPeriodLabel(periodType: 'weekly' | 'monthly', period: string) {
+function formatPeriodLabel(periodType: 'weekly' | 'monthly' | 'quarterly', period: string) {
   if (periodType === 'weekly') {
     return `за тиждень ${period}`
+  }
+  if (periodType === 'quarterly') {
+    return `за квартал ${period}`
   }
   const [yearRaw, monthRaw] = period.split('-')
   const year = Number(yearRaw)
@@ -58,7 +61,8 @@ export default function ActivitiesPrintPage() {
       return { periodType: 'monthly' as const, period: '' }
     }
     const params = new URLSearchParams(window.location.search)
-    const periodType = params.get('periodType') === 'weekly' ? 'weekly' : 'monthly'
+    const pt = params.get('periodType')
+    const periodType: 'weekly' | 'monthly' | 'quarterly' = pt === 'weekly' ? 'weekly' : pt === 'quarterly' ? 'quarterly' : 'monthly'
     const period = params.get('period') || ''
     return { periodType, period }
   }, [])

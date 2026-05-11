@@ -27,6 +27,7 @@ import { BrandLogo } from '@/components/brand-logo'
 const navigation = [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Звіти', href: '/dashboard/reports', icon: FileText },
+  { name: 'Денний звіт', href: '/dashboard/reports/daily', icon: FileText },
   { name: 'Заходи', href: '/dashboard/activities', icon: CalendarDays },
   { name: 'Створити задачу', href: '/dashboard/tasks/create', icon: CheckSquare },
   { name: 'Список задач', href: '/dashboard/tasks/list', icon: CheckSquare },
@@ -34,7 +35,7 @@ const navigation = [
   { name: 'Сповіщення', href: '/dashboard/notifications', icon: Bell },
   { name: 'Підрозділи', href: '/dashboard/departments', icon: Users, roles: ['specialist', 'manager', 'director', 'deputy_director', 'deputy_head', 'admin', 'clerk', 'lawyer', 'accountant', 'hr'] },
   { name: 'Конструктор', href: '/dashboard/layouts', icon: Settings, roles: ['admin'] },
-  { name: 'Налаштування', href: '/dashboard/settings', icon: Settings, roles: ['admin'] },
+  { name: 'Налаштування', href: '/dashboard/settings', icon: Settings },
 ]
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {

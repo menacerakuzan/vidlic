@@ -31,6 +31,13 @@ export class ReportsService {
           },
         },
       },
+      {
+        NOT: {
+          title: {
+            startsWith: this.dailyReportTitlePrefix(),
+          },
+        },
+      },
     ];
 
     if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
@@ -1552,12 +1559,14 @@ export class ReportsService {
     return null;
   }
 
-  async getOrCreateActivitiesPlan(period: string, periodType: 'weekly' | 'monthly', user: any) {
+  async getOrCreateActivitiesPlan(period: string, periodType: 'weekly' | 'monthly' | 'quarterly', user: any) {
     const normalizedPeriod = this.normalizePeriod(period, periodType);
     if (!normalizedPeriod) {
       throw new BadRequestException(
         periodType === 'weekly'
           ? 'Тиждень має бути у форматі YYYY-Www'
+          : periodType === 'quarterly'
+          ? 'Квартал має бути у форматі YYYY-Q1, YYYY-Q2, YYYY-Q3 або YYYY-Q4'
           : 'Місяць має бути у форматі YYYY-MM',
       );
     }
@@ -1570,11 +1579,12 @@ export class ReportsService {
     const rootDepartmentId = scopedDepartmentIds[0];
 
     const title = this.buildActivitiesPlanTitle(normalizedPeriod, periodType);
+    const reportType = periodType === 'weekly' ? 'weekly' : 'monthly';
 
     let report = await this.prisma.report.findFirst({
       where: {
         departmentId: rootDepartmentId,
-        reportType: periodType === 'weekly' ? 'weekly' : 'monthly',
+        reportType,
         periodStart: start,
         periodEnd: end,
         title,
@@ -1589,7 +1599,7 @@ export class ReportsService {
     if (!report) {
       report = await this.prisma.report.create({
         data: {
-          reportType: periodType === 'weekly' ? 'weekly' : 'monthly',
+          reportType,
           periodStart: start,
           periodEnd: end,
           title,
@@ -1640,15 +1650,17 @@ export class ReportsService {
     return this.mapActivitiesPlan(report);
   }
 
-  async listActivitiesPlans(periodType: 'weekly' | 'monthly', user: any) {
+  async listActivitiesPlans(periodType: 'weekly' | 'monthly' | 'quarterly', user: any) {
     const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
     if (!scopedDepartmentIds.length) return [];
     const rootDepartmentId = scopedDepartmentIds[0];
+    const reportType = periodType === 'weekly' ? 'weekly' : 'monthly';
+    const typeTag = periodType === 'weekly' ? '(weekly)' : periodType === 'quarterly' ? '(quarterly)' : '(monthly)';
     const reports = await this.prisma.report.findMany({
       where: {
         departmentId: rootDepartmentId,
-        reportType: periodType === 'weekly' ? 'weekly' : 'monthly',
-        title: { startsWith: this.activitiesPlanTitlePrefix() },
+        reportType,
+        title: { startsWith: this.activitiesPlanTitlePrefix(), contains: typeTag },
       },
       include: {
         department: { select: { id: true, nameUk: true, name: true } },
@@ -2252,8 +2264,8 @@ export class ReportsService {
     return '[ACTIVITY_PLAN]';
   }
 
-  private buildActivitiesPlanTitle(period: string, periodType: 'weekly' | 'monthly') {
-    const typeLabel = periodType === 'weekly' ? 'weekly' : 'monthly';
+  private buildActivitiesPlanTitle(period: string, periodType: 'weekly' | 'monthly' | 'quarterly') {
+    const typeLabel = periodType === 'weekly' ? 'weekly' : periodType === 'quarterly' ? 'quarterly' : 'monthly';
     return `${this.activitiesPlanTitlePrefix()} План заходів ${period} (${typeLabel})`;
   }
 
@@ -2270,8 +2282,15 @@ export class ReportsService {
     return str;
   }
 
-  private normalizePeriod(value?: string | null, periodType: 'weekly' | 'monthly' = 'monthly'): string | null {
+  private normalizeQuarter(value?: string | null): string | null {
+    const str = (value || '').trim();
+    if (/^\d{4}-Q[1-4]$/.test(str)) return str;
+    return null;
+  }
+
+  private normalizePeriod(value?: string | null, periodType: 'weekly' | 'monthly' | 'quarterly' = 'monthly'): string | null {
     if (periodType === 'weekly') return this.normalizeWeek(value);
+    if (periodType === 'quarterly') return this.normalizeQuarter(value);
     return this.normalizeMonth(value);
   }
 
@@ -2303,8 +2322,21 @@ export class ReportsService {
     return { start, end };
   }
 
-  private periodBounds(period: string, periodType: 'weekly' | 'monthly'): { start: Date; end: Date } {
-    return periodType === 'weekly' ? this.weekBounds(period) : this.monthBounds(period);
+  private quarterBounds(quarter: string): { start: Date; end: Date } {
+    const match = quarter.match(/^(\d{4})-Q([1-4])$/);
+    if (!match) throw new BadRequestException('Невірний формат кварталу');
+    const year = Number(match[1]);
+    const q = Number(match[2]);
+    const startMonth = (q - 1) * 3; // 0-based: Q1=0, Q2=3, Q3=6, Q4=9
+    const start = new Date(Date.UTC(year, startMonth, 1, 0, 0, 0));
+    const end = new Date(Date.UTC(year, startMonth + 3, 0, 23, 59, 59));
+    return { start, end };
+  }
+
+  private periodBounds(period: string, periodType: 'weekly' | 'monthly' | 'quarterly'): { start: Date; end: Date } {
+    if (periodType === 'weekly') return this.weekBounds(period);
+    if (periodType === 'quarterly') return this.quarterBounds(period);
+    return this.monthBounds(period);
   }
 
   private toMonth(date: Date): string {
@@ -2312,6 +2344,126 @@ export class ReportsService {
     const mon = String(date.getUTCMonth() + 1).padStart(2, '0');
     return `${year}-${mon}`;
   }
+
+  // ─── Daily reports ───────────────────────────────────────────────────────────
+
+  private dailyReportTitlePrefix() {
+    return '[DAILY_REPORT]';
+  }
+
+  private buildDailyReportTitle(dateStr: string) {
+    return `${this.dailyReportTitlePrefix()} ${dateStr}`;
+  }
+
+  async getOrCreateDailyReport(dateStr: string, user: any) {
+    // dateStr format: YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      throw new BadRequestException('Дата має бути у форматі YYYY-MM-DD');
+    }
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const start = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+    const end = new Date(Date.UTC(y, m - 1, d, 23, 59, 59));
+
+    const departmentId = user.departmentId;
+    if (!departmentId) throw new ForbiddenException('Немає відділу');
+
+    const title = this.buildDailyReportTitle(dateStr);
+
+    let report = await this.prisma.report.findFirst({
+      where: { departmentId, title, authorId: user.id, periodStart: start },
+      include: { department: { select: { id: true, nameUk: true, name: true } }, author: { select: { id: true, firstName: true, lastName: true } } },
+    });
+
+    if (!report) {
+      report = await this.prisma.report.create({
+        data: {
+          reportType: 'weekly',
+          periodStart: start,
+          periodEnd: end,
+          title,
+          status: 'draft',
+          departmentId,
+          authorId: user.id,
+          content: { dailyReport: { date: dateStr, text: '' } },
+        },
+        include: { department: { select: { id: true, nameUk: true, name: true } }, author: { select: { id: true, firstName: true, lastName: true } } },
+      });
+    }
+
+    return this.mapDailyReport(report);
+  }
+
+  async updateDailyReport(reportId: string, text: string, user: any) {
+    const report = await this.prisma.report.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('Денний звіт не знайдено');
+    if (report.authorId !== user.id) throw new ForbiddenException('Можна редагувати лише свій денний звіт');
+    if (!String(report.title || '').startsWith(this.dailyReportTitlePrefix())) {
+      throw new BadRequestException('Це не денний звіт');
+    }
+    const content = this.ensureObject(report.content) as any;
+    const updated = await this.prisma.report.update({
+      where: { id: reportId },
+      data: { content: { ...content, dailyReport: { ...content.dailyReport, text } }, updatedAt: new Date() },
+      include: { department: { select: { id: true, nameUk: true, name: true } }, author: { select: { id: true, firstName: true, lastName: true } } },
+    });
+    return this.mapDailyReport(updated);
+  }
+
+  async listDailyReports(departmentId: string | undefined, dateFrom: string | undefined, dateTo: string | undefined, user: any) {
+    // Managers, directors, deputy_directors see their dept; specialists see only own
+    const isLeadership = ['manager', 'director', 'deputy_director', 'admin'].includes(user.role);
+    const scopedDeptIds = isLeadership ? await this.resolveScopedDepartmentIdsForUser(user) : null;
+
+    const where: any = {
+      title: { startsWith: this.dailyReportTitlePrefix() },
+    };
+
+    if (isLeadership && scopedDeptIds?.length) {
+      where.departmentId = { in: scopedDeptIds };
+    } else if (!isLeadership) {
+      where.authorId = user.id;
+    }
+
+    if (departmentId && isLeadership) {
+      where.departmentId = departmentId;
+    }
+
+    if (dateFrom) {
+      const [y, m, d] = dateFrom.split('-').map(Number);
+      where.periodStart = { gte: new Date(Date.UTC(y, m - 1, d, 0, 0, 0)) };
+    }
+    if (dateTo) {
+      const [y, m, d] = dateTo.split('-').map(Number);
+      where.periodEnd = { ...where.periodEnd, lte: new Date(Date.UTC(y, m - 1, d, 23, 59, 59)) };
+    }
+
+    const reports = await this.prisma.report.findMany({
+      where,
+      include: {
+        department: { select: { id: true, nameUk: true, name: true } },
+        author: { select: { id: true, firstName: true, lastName: true } },
+      },
+      orderBy: { periodStart: 'desc' },
+      take: 200,
+    });
+
+    return reports.map((r) => this.mapDailyReport(r));
+  }
+
+  private mapDailyReport(report: any) {
+    const content = this.ensureObject(report.content) as any;
+    const dr = content.dailyReport || {};
+    return {
+      id: report.id,
+      date: dr.date || report.periodStart?.toISOString().slice(0, 10),
+      text: dr.text || '',
+      author: report.author ? { id: report.author.id, firstName: report.author.firstName, lastName: report.author.lastName } : null,
+      department: report.department ? { id: report.department.id, nameUk: report.department.nameUk || report.department.name } : null,
+      updatedAt: report.updatedAt,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
 
   private toIsoWeek(date: Date): string {
     const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -2331,9 +2483,12 @@ export class ReportsService {
     return this.toMonth(report.periodStart);
   }
 
-  private formatActivitiesPeriodLabel(periodType: 'weekly' | 'monthly', periodKey: string) {
+  private formatActivitiesPeriodLabel(periodType: 'weekly' | 'monthly' | 'quarterly', periodKey: string) {
     if (periodType === 'weekly') {
       return `які відбудуться протягом тижня ${periodKey}`;
+    }
+    if (periodType === 'quarterly') {
+      return `які відбудуться протягом кварталу ${periodKey}`;
     }
     const [yearRaw, monthRaw] = periodKey.split('-');
     const year = Number(yearRaw);

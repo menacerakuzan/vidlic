@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/auth-store'
 
 type ActivityPlanResponse = {
   reportId: string
-  periodType: 'weekly' | 'monthly'
+  periodType: 'weekly' | 'monthly' | 'quarterly'
   period: string
   title: string
   department?: { id: string; nameUk: string }
@@ -30,6 +30,12 @@ function currentMonth() {
   const year = now.getFullYear()
   const month = String(now.getMonth() + 1).padStart(2, '0')
   return `${year}-${month}`
+}
+
+function currentQuarter() {
+  const now = new Date()
+  const q = Math.ceil((now.getMonth() + 1) / 3)
+  return `${now.getFullYear()}-Q${q}`
 }
 
 function currentWeek() {
@@ -58,7 +64,7 @@ export default function ActivitiesPage() {
   const { isAuthenticated, user } = useAuthStore()
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
 
-  const [periodType, setPeriodType] = useState<'weekly' | 'monthly'>('monthly')
+  const [periodType, setPeriodType] = useState<'weekly' | 'monthly' | 'quarterly'>('monthly')
   const [period, setPeriod] = useState(currentMonth())
   const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -211,7 +217,9 @@ export default function ActivitiesPage() {
   }, [selectedPlanId, canWork])
 
   useEffect(() => {
-    setPeriod(periodType === 'weekly' ? currentWeek() : currentMonth())
+    if (periodType === 'weekly') setPeriod(currentWeek())
+    else if (periodType === 'quarterly') setPeriod(currentQuarter())
+    else setPeriod(currentMonth())
   }, [periodType])
 
   return (
@@ -227,18 +235,36 @@ export default function ActivitiesPage() {
           <div className="flex flex-wrap items-center gap-2">
             <select
               value={periodType}
-              onChange={(e) => setPeriodType(e.target.value as 'weekly' | 'monthly')}
-              className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+              onChange={(e) => setPeriodType(e.target.value as 'weekly' | 'monthly' | 'quarterly')}
+              className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
               <option value="monthly">Місяць</option>
               <option value="weekly">Тиждень</option>
+              <option value="quarterly">Квартал</option>
             </select>
-            <input
-              type={periodType === 'weekly' ? 'week' : 'month'}
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
-            />
+            {periodType === 'quarterly' ? (
+              <select
+                value={period}
+                onChange={(e) => setPeriod(e.target.value)}
+                className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              >
+                {Array.from({ length: 3 }, (_, yi) => {
+                  const year = new Date().getFullYear() - 1 + yi
+                  return [1, 2, 3, 4].map((q) => (
+                    <option key={`${year}-Q${q}`} value={`${year}-Q${q}`}>
+                      {year} Q{q} ({['Січ–Бер', 'Кві–Чер', 'Лип–Вер', 'Жов–Гру'][q - 1]})
+                    </option>
+                  ))
+                }).flat()}
+              </select>
+            ) : (
+              <input
+                type={periodType === 'weekly' ? 'week' : 'month'}
+                value={period}
+                onChange={(e) => setPeriod(e.target.value)}
+                className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              />
+            )}
             <button
               type="button"
               onClick={generatePlan}
