@@ -15,7 +15,7 @@ export class TasksService {
     const { page = 1, limit = 50, status, departmentId, assigneeId, reporterId, dueDateFrom, dueDateTo } = query;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: any = { deletedAt: null };
     const andFilters: any[] = [];
     const visibilityClauses: any[] = [];
 
@@ -98,7 +98,7 @@ export class TasksService {
   }
 
   async getKanban(departmentId: string, user: any) {
-    const where: any = {};
+    const where: any = { deletedAt: null };
     const visibilityClauses: any[] = [];
 
     if (['specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
@@ -433,6 +433,25 @@ export class TasksService {
     return this.mapTask(updated);
   }
 
+  async getComments(id: string, user: any) {
+    const task = await this.prisma.task.findUnique({ where: { id } });
+    if (!task) throw new NotFoundException('Задачу не знайдено');
+    if (!(await this.canViewTask(task, user))) throw new ForbiddenException('Немає доступу до задачі');
+
+    const comments = await this.prisma.taskComment.findMany({
+      where: { taskId: id },
+      include: { user: { select: { id: true, firstName: true, lastName: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return comments.map((c: any) => ({
+      id: c.id,
+      content: c.content,
+      user: { id: c.user.id, firstName: c.user.firstName, lastName: c.user.lastName },
+      createdAt: c.createdAt,
+    }));
+  }
+
   async addComment(id: string, dto: CreateTaskCommentDto, userId: string) {
     const task = await this.prisma.task.findUnique({
       where: { id },
@@ -489,10 +508,59 @@ export class TasksService {
       throw new ForbiddenException('Немає доступу до видалення задачі');
     }
 
-    await this.prisma.task.delete({ where: { id } });
+    await this.prisma.task.update({ where: { id }, data: { deletedAt: new Date() } });
 
     this.eventEmitter.emit('task.deleted', { taskId: id, userId: user.id });
 
+    return { success: true };
+  }
+
+  async getArchive(user: any) {
+    const visibilityClauses: any[] = [];
+
+    if (['specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
+      visibilityClauses.push({ assigneeId: user.id }, { reporterId: user.id });
+    } else if (['manager', 'director', 'deputy_director', 'deputy_head'].includes(user.role)) {
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      visibilityClauses.push(
+        { departmentId: { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) } },
+        { assigneeId: user.id },
+        { reporterId: user.id },
+      );
+    }
+
+    const where: any = { NOT: { deletedAt: null } };
+    if (visibilityClauses.length > 0) {
+      where.AND = [{ OR: visibilityClauses }];
+    }
+
+    const tasks = await this.prisma.task.findMany({
+      where,
+      include: {
+        assignee: { select: { id: true, firstName: true, lastName: true } },
+        reporter: { select: { id: true, firstName: true, lastName: true, role: true } },
+        department: { select: { id: true, name: true, nameUk: true } },
+      },
+      orderBy: { deletedAt: 'desc' },
+      take: 200,
+    });
+
+    return tasks.map((t: any) => ({ ...this.mapTask(t), deletedAt: t.deletedAt }));
+  }
+
+  async restoreTask(id: string, user: any) {
+    const task = await this.prisma.task.findUnique({ where: { id } });
+    if (!task) throw new NotFoundException('Задачу не знайдено');
+    if (!(await this.canManageTask(task, user))) throw new ForbiddenException('Немає доступу');
+    await this.prisma.task.update({ where: { id }, data: { deletedAt: null } });
+    return { success: true };
+  }
+
+  async hardDelete(id: string, user: any) {
+    if (user.role !== 'admin') throw new ForbiddenException('Лише адміністратор може остаточно видалити задачу');
+    const task = await this.prisma.task.findUnique({ where: { id } });
+    if (!task) throw new NotFoundException('Задачу не знайдено');
+    await this.prisma.task.delete({ where: { id } });
     return { success: true };
   }
 

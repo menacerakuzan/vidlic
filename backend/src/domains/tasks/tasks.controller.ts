@@ -21,6 +21,13 @@ export class TasksController {
     return this.tasksService.findAll(query, req.user);
   }
 
+  @Get('archive')
+  @Permissions('tasks:read')
+  @ApiOperation({ summary: 'Архів видалених задач' })
+  getArchive(@Req() req: any) {
+    return this.tasksService.getArchive(req.user);
+  }
+
   @Get('kanban')
   @Permissions('tasks:read')
   @ApiOperation({ summary: 'Отримати Kanban дошку' })
@@ -86,6 +93,13 @@ export class TasksController {
     return this.tasksService.createSubtask(id, dto as any, req.user);
   }
 
+  @Get(':id/comments')
+  @Permissions('tasks:read')
+  @ApiOperation({ summary: 'Отримати коментарі до задачі' })
+  getComments(@Param('id') id: string, @Req() req: any) {
+    return this.tasksService.getComments(id, req.user);
+  }
+
   @Post(':id/comments')
   @Permissions('tasks:write')
   @ApiOperation({ summary: 'Додати коментар до задачі' })
@@ -96,9 +110,23 @@ export class TasksController {
 
   @Delete(':id')
   @Permissions('tasks:write')
-  @ApiOperation({ summary: 'Видалити задачу' })
+  @ApiOperation({ summary: 'Видалити задачу (до архіву)' })
   @ApiResponse({ status: 200, description: 'Задачу видалено' })
   delete(@Param('id') id: string, @Req() req: any) {
     return this.tasksService.delete(id, req.user);
+  }
+
+  @Post(':id/restore')
+  @Permissions('tasks:write')
+  @ApiOperation({ summary: 'Відновити задачу з архіву' })
+  restore(@Param('id') id: string, @Req() req: any) {
+    return this.tasksService.restoreTask(id, req.user);
+  }
+
+  @Delete(':id/permanent')
+  @Permissions('tasks:write')
+  @ApiOperation({ summary: 'Остаточно видалити задачу (лише admin)' })
+  hardDelete(@Param('id') id: string, @Req() req: any) {
+    return this.tasksService.hardDelete(id, req.user);
   }
 }

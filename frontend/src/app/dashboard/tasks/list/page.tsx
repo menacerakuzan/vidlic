@@ -23,6 +23,13 @@ type Task = {
   subtasksDone?: number
 }
 
+type TaskComment = {
+  id: string
+  content: string
+  createdAt: string
+  user: { id: string; firstName: string; lastName: string }
+}
+
 type Subtask = {
   id: string
   title: string
@@ -129,6 +136,10 @@ export default function TaskListPage() {
   const [newSubtaskAssigneeId, setNewSubtaskAssigneeId] = useState('')
   const [newSubtaskDueDate, setNewSubtaskDueDate] = useState('')
   const [creatingSubtask, setCreatingSubtask] = useState(false)
+  const [comments, setComments] = useState<TaskComment[]>([])
+  const [loadingComments, setLoadingComments] = useState(false)
+  const [newComment, setNewComment] = useState('')
+  const [postingComment, setPostingComment] = useState(false)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const loadTasks = async () => {
@@ -202,8 +213,11 @@ export default function TaskListPage() {
     setNewSubtaskTitle('')
     setNewSubtaskAssigneeId('')
     setNewSubtaskDueDate('')
+    setComments([])
+    setNewComment('')
     if (selectedTaskId && accessToken) {
       loadAttachments(selectedTaskId)
+      loadComments(selectedTaskId)
       const task = tasks.find(t => t.id === selectedTaskId)
       if (!task?.parentId) {
         loadSubtasks(selectedTaskId)
@@ -456,6 +470,37 @@ export default function TaskListPage() {
       await loadSubtasks(parentId)
       await loadTasks()
     }
+  }
+
+  const loadComments = async (taskId: string) => {
+    if (!accessToken) return
+    setLoadingComments(true)
+    const resp = await fetch(`/api/v1/tasks/${taskId}/comments`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (resp.ok) {
+      const data = await resp.json()
+      setComments(Array.isArray(data) ? data : [])
+    }
+    setLoadingComments(false)
+  }
+
+  const postComment = async (taskId: string) => {
+    if (!accessToken || !newComment.trim()) return
+    setPostingComment(true)
+    const resp = await fetch(`/api/v1/tasks/${taskId}/comments`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: newComment.trim() }),
+    })
+    setPostingComment(false)
+    if (resp.ok) {
+      setNewComment('')
+      await loadComments(taskId)
+      return
+    }
+    const err = await resp.json().catch(() => null)
+    setActionToast({ type: 'error', message: extractApiErrorMessage(resp.status, err, 'Не вдалося додати коментар') })
   }
 
   useEffect(() => {
@@ -1056,6 +1101,54 @@ export default function TaskListPage() {
                               </button>
                             </div>
                           ))}
+                        </div>
+
+                        {/* Comments */}
+                        <div className="pt-2 space-y-2 border-t border-slate-200 dark:border-slate-700 mt-3">
+                          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 pt-2">
+                            Коментарі {comments.length > 0 && `(${comments.length})`}
+                          </p>
+                          {loadingComments && (
+                            <p className="text-xs text-slate-400">Завантаження...</p>
+                          )}
+                          {!loadingComments && comments.length === 0 && (
+                            <p className="text-xs text-slate-400 dark:text-slate-500">Коментарів немає.</p>
+                          )}
+                          <div className="space-y-2">
+                            {comments.map((c) => (
+                              <div key={c.id} className="rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 px-3 py-2 space-y-0.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                                    {c.user.firstName} {c.user.lastName}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">
+                                    {new Date(c.createdAt).toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{c.content}</p>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-2 pt-1">
+                            <textarea
+                              value={newComment}
+                              onChange={(e) => setNewComment(e.target.value)}
+                              placeholder="Написати коментар..."
+                              rows={2}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) postComment(selectedTask.id)
+                              }}
+                              className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
+                            />
+                            <button
+                              onClick={() => postComment(selectedTask.id)}
+                              disabled={!newComment.trim() || postingComment}
+                              className="self-end rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+                            >
+                              {postingComment ? '...' : 'Надіслати'}
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-slate-400">Ctrl+Enter для надсилання</p>
                         </div>
                       </>
                     )}

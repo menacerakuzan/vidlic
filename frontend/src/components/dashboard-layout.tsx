@@ -32,10 +32,12 @@ const navigation = [
   { name: 'Створити задачу', href: '/dashboard/tasks/create', icon: CheckSquare },
   { name: 'Список задач', href: '/dashboard/tasks/list', icon: CheckSquare },
   { name: 'Навантаження співробітників', href: '/dashboard/tasks/workload', icon: CheckSquare },
+  { name: 'Архів задач', href: '/dashboard/tasks/archive', icon: CheckSquare },
   { name: 'Сповіщення', href: '/dashboard/notifications', icon: Bell },
   { name: 'Підрозділи', href: '/dashboard/departments', icon: Users, roles: ['specialist', 'manager', 'director', 'deputy_director', 'deputy_head', 'admin', 'clerk', 'lawyer', 'accountant', 'hr'] },
   { name: 'Конструктор', href: '/dashboard/layouts', icon: Settings, roles: ['admin'] },
   { name: 'Налаштування', href: '/dashboard/settings', icon: Settings },
+  { name: 'Мій профіль', href: '/dashboard/profile', icon: Users },
 ]
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
