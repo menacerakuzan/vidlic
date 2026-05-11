@@ -39,13 +39,6 @@ export class UsersController {
     return this.usersService.create(dto, req.user, req.ip);
   }
 
-  @Put('me/password')
-  @ApiOperation({ summary: 'Змінити власний пароль' })
-  @ApiResponse({ status: 200, description: 'Пароль оновлено' })
-  changeOwnPassword(@Body() dto: UpdateUserPasswordDto, @Req() req: any) {
-    return this.usersService.updatePassword(req.user.id, dto, req.user, req.ip);
-  }
-
   @Put(':id')
   @Roles('admin', 'director', 'deputy_director')
   @Permissions('users:write')

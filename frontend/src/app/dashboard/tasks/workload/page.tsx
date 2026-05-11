@@ -63,6 +63,7 @@ export default function WorkloadPage() {
   const [selectedStatuses, setSelectedStatuses] = useState<Array<'todo' | 'in_progress' | 'done'>>(['todo', 'in_progress', 'done'])
   const [selectedManagement, setSelectedManagement] = useState('')
   const [selectedDepartmentId, setSelectedDepartmentId] = useState('')
+  const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(new Set())
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const loadTasks = async () => {
@@ -145,8 +146,22 @@ export default function WorkloadPage() {
     return m
   }, [userMetas])
 
+  // Build subtask index for quick lookup
+  const subtasksByParent = useMemo(() => {
+    const map = new Map<string, Task[]>()
+    tasks.forEach(t => {
+      if (t.parentId) {
+        const arr = map.get(t.parentId) || []
+        arr.push(t)
+        map.set(t.parentId, arr)
+      }
+    })
+    return map
+  }, [tasks])
+
   const columns = useMemo(() => {
-    const filtered = tasks.filter((task) => selectedStatuses.includes(task.status))
+    // Only top-level tasks in columns — subtasks rendered inside parent card
+    const filtered = tasks.filter((task) => !task.parentId && selectedStatuses.includes(task.status))
     const map = new Map<string, DepartmentColumn>()
 
     filtered.forEach((task) => {
@@ -414,54 +429,105 @@ export default function WorkloadPage() {
                         const u = urgencyLevel(task)
                         const us = urgencyStyle(u)
                         const isSecondary = !!(task as any)._secondary
+                        const children = subtasksByParent.get(task.id) || []
+                        const hasChildren = children.length > 0
+                        const isExpanded = expandedTaskIds.has(task.id)
                         return (
                           <div
                             key={`${task.id}-${isSecondary ? 'sec' : 'pri'}`}
-                            className={`rounded-xl border p-2 ${us.card} dark:bg-slate-800/50`}
+                            className={`rounded-xl border ${us.card} dark:bg-slate-800/50`}
                           >
-                            <div className="flex items-start justify-between gap-1">
-                              <p className="text-sm font-medium leading-snug">{task.title}</p>
-                              {u !== 'normal' && (
-                                <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${us.badge}`}>
-                                  {us.label}
+                            {/* Main task header — clickable to expand if has subtasks */}
+                            <div
+                              className={`p-2 ${hasChildren ? 'cursor-pointer select-none' : ''}`}
+                              onClick={hasChildren ? () => setExpandedTaskIds(prev => {
+                                const next = new Set(prev)
+                                next.has(task.id) ? next.delete(task.id) : next.add(task.id)
+                                return next
+                              }) : undefined}
+                            >
+                              <div className="flex items-start justify-between gap-1">
+                                <div className="flex items-center gap-1 flex-1 min-w-0">
+                                  {hasChildren && (
+                                    <span className="shrink-0 text-[11px] text-slate-400 dark:text-slate-500 leading-none">
+                                      {isExpanded ? '▾' : '▸'}
+                                    </span>
+                                  )}
+                                  <p className="text-sm font-medium leading-snug">{task.title}</p>
+                                </div>
+                                {u !== 'normal' && (
+                                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${us.badge}`}>
+                                    {us.label}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="mt-1 flex items-center gap-1.5">
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                  {task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : 'Без виконавця'}
+                                </p>
+                                {isSecondary && (
+                                  <span className="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300">
+                                    Суміщення
+                                  </span>
+                                )}
+                              </div>
+                              <div className="mt-2 flex items-center justify-between">
+                                <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.cls}`}>
+                                  {meta.label}
                                 </span>
+                                <span className={`text-[11px] font-medium ${u === 'overdue' ? 'text-rose-600' : u === 'critical' ? 'text-orange-600' : u === 'soon' ? 'text-amber-600' : 'text-slate-400 dark:text-slate-500'}`}>
+                                  {task.dueDate ? new Date(task.dueDate).toLocaleDateString('uk-UA') : 'Без терміну'}
+                                </span>
+                              </div>
+                              {task.startedAt && (
+                                <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">
+                                  Почато: {new Date(task.startedAt).toLocaleString('uk-UA')}
+                                </p>
+                              )}
+                              {hasChildren && (
+                                <div className="mt-2">
+                                  <div className="flex items-center justify-between mb-0.5">
+                                    <span className="text-[10px] text-slate-400 dark:text-slate-500">{task.subtasksDone ?? 0}/{task.subtasksCount} підзадач</span>
+                                    <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">{Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%</span>
+                                  </div>
+                                  <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                    <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%` }} />
+                                  </div>
+                                </div>
                               )}
                             </div>
-                            <div className="mt-1 flex items-center gap-1.5">
-                              <p className="text-xs text-slate-500 dark:text-slate-400">
-                                {task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : 'Без виконавця'}
-                              </p>
-                              {isSecondary && (
-                                <span className="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300">
-                                  Суміщення
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-2 flex items-center justify-between">
-                              <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.cls}`}>
-                                {meta.label}
-                              </span>
-                              <span className={`text-[11px] font-medium ${u === 'overdue' ? 'text-rose-600' : u === 'critical' ? 'text-orange-600' : u === 'soon' ? 'text-amber-600' : 'text-slate-400 dark:text-slate-500'}`}>
-                                {task.dueDate ? new Date(task.dueDate).toLocaleDateString('uk-UA') : 'Без терміну'}
-                              </span>
-                            </div>
-                            {task.startedAt && (
-                              <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">
-                                Почато: {new Date(task.startedAt).toLocaleString('uk-UA')}
-                              </p>
-                            )}
-                            {!task.parentId && (task.subtasksCount ?? 0) > 0 && (
-                              <div className="mt-2">
-                                <div className="flex items-center justify-between mb-0.5">
-                                  <span className="text-[10px] text-slate-400 dark:text-slate-500">{task.subtasksDone ?? 0}/{task.subtasksCount} підзадач</span>
-                                  <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">{Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%</span>
-                                </div>
-                                <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full bg-emerald-500 transition-all"
-                                    style={{ width: `${Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%` }}
-                                  />
-                                </div>
+
+                            {/* Subtasks — shown on expand */}
+                            {hasChildren && isExpanded && (
+                              <div className="border-t border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-800">
+                                {children.map((sub) => {
+                                  const sm = statusMeta(sub.status)
+                                  const su = urgencyLevel(sub)
+                                  return (
+                                    <div key={sub.id} className="px-3 py-2 bg-slate-50 dark:bg-slate-800/30">
+                                      <div className="flex items-start gap-1.5">
+                                        <span className="text-[10px] text-slate-300 dark:text-slate-600 mt-0.5 shrink-0">└</span>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-xs font-medium text-slate-800 dark:text-slate-200 line-clamp-2">{sub.title}</p>
+                                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                            <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${sm.cls}`}>{sm.label}</span>
+                                            {sub.assignee && (
+                                              <span className="text-[10px] text-slate-400">{sub.assignee.firstName} {sub.assignee.lastName}</span>
+                                            )}
+                                            {su !== 'normal' && (
+                                              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${urgencyStyle(su).badge}`}>{urgencyStyle(su).label}</span>
+                                            )}
+                                            {sub.dueDate && (
+                                              <span className={`text-[10px] ${su === 'overdue' ? 'text-rose-600' : su === 'critical' ? 'text-orange-600' : 'text-slate-400'}`}>
+                                                {new Date(sub.dueDate).toLocaleDateString('uk-UA')}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
                               </div>
                             )}
                           </div>

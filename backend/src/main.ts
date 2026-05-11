@@ -5,9 +5,14 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
 
   app.use(helmet());
+
+  // Base64 uploads inflate file size by ~33%, so 50MB file → ~67MB JSON body
+  const express = require('express');
+  app.use(express.json({ limit: '70mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '70mb' }));
   
   app.enableCors({
     origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'],

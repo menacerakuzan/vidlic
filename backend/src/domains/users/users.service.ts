@@ -246,8 +246,9 @@ export class UsersService {
       throw new NotFoundException('Користувача не знайдено');
     }
 
-    if (actor?.role !== 'admin') {
-      throw new ForbiddenException('Лише адміністратор може змінювати пароль користувача');
+    // own password change is always allowed; changing someone else's requires admin
+    if (actor?.id !== id && actor?.role !== 'admin') {
+      throw new ForbiddenException('Лише адміністратор може змінювати пароль іншого користувача');
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);

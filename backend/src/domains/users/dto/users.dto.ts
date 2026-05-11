@@ -134,8 +134,8 @@ export class UserQueryDto {
 }
 
 export class UpdateUserPasswordDto {
-  @ApiProperty({ example: 'N3wStrongP@ssw0rd!' })
+  @ApiProperty({ example: 'MyPassword1!' })
   @IsString()
-  @MinLength(12)
+  @MinLength(8)
   password: string;
 }

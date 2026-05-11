@@ -112,6 +112,7 @@ export default function TaskListPage() {
   const [filterDepartmentId, setFilterDepartmentId] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterUrgency, setFilterUrgency] = useState('')
+  const [expandedParentIds, setExpandedParentIds] = useState<Set<string>>(new Set())
   const [editMode, setEditMode] = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const [editDescription, setEditDescription] = useState('')
@@ -191,10 +192,7 @@ export default function TaskListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken])
 
-  useEffect(() => {
-    if (selectedTaskId) return
-    if (tasks.length > 0) setSelectedTaskId(tasks[0].id)
-  }, [tasks, selectedTaskId])
+  // No auto-selection — user clicks to open
 
   useEffect(() => {
     setEditMode(false)
@@ -492,8 +490,8 @@ export default function TaskListPage() {
   }, [tasks, filterDepartmentId, filterStatus, filterUrgency])
 
   const selectedTask = useMemo(
-    () => orderedTasks.find((task) => task.id === selectedTaskId) || orderedTasks[0] || null,
-    [orderedTasks, selectedTaskId],
+    () => tasks.find((task) => task.id === selectedTaskId) || null,
+    [tasks, selectedTaskId],
   )
 
   const statusBadge = (status: Task['status']) => {
@@ -604,52 +602,116 @@ export default function TaskListPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] min-h-[520px]">
-              {/* Sidebar list */}
+              {/* Sidebar list — tree view */}
               <div className="border-r border-slate-200 dark:border-slate-700 max-h-[70vh] overflow-y-auto">
-                {orderedTasks.map((task, idx) => {
-                  const isSelected = selectedTask?.id === task.id
-                  const u = urgencyLevel(task)
-                  return (
-                    <button
-                      key={task.id}
-                      onClick={() => setSelectedTaskId(task.id)}
-                      className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${sidebarBorderClass(task, isSelected)}`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-start gap-2 flex-1 min-w-0">
-                          <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mt-0.5 shrink-0 w-5 text-right">{idx + 1}</span>
-                          <div className="flex-1 min-w-0">
-                            {task.parentId && (
-                              <span className="inline-block rounded bg-amber-100 dark:bg-amber-950/40 px-1 text-[9px] font-semibold text-amber-600 dark:text-amber-400 mb-0.5">підзадача</span>
+                {(() => {
+                  // Build tree: top-level tasks ordered, subtasks grouped under parent
+                  const subtaskMap = new Map<string, Task[]>()
+                  tasks.forEach(t => {
+                    if (t.parentId) {
+                      const arr = subtaskMap.get(t.parentId) || []
+                      arr.push(t)
+                      subtaskMap.set(t.parentId, arr)
+                    }
+                  })
+
+                  const topLevel = orderedTasks.filter(t => !t.parentId)
+
+                  let globalIdx = 0
+                  return topLevel.map((task) => {
+                    globalIdx++
+                    const idx = globalIdx
+                    const isSelected = selectedTask?.id === task.id
+                    const u = urgencyLevel(task)
+                    const children = subtaskMap.get(task.id) || []
+                    const hasChildren = children.length > 0
+                    const isExpanded = expandedParentIds.has(task.id)
+
+                    return (
+                      <div key={task.id}>
+                        {/* Parent task row */}
+                        <div
+                          className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${sidebarBorderClass(task, isSelected)}`}
+                        >
+                          <div className="flex items-start gap-2">
+                            {/* Expand toggle */}
+                            {hasChildren ? (
+                              <button
+                                onClick={() => setExpandedParentIds(prev => {
+                                  const next = new Set(prev)
+                                  next.has(task.id) ? next.delete(task.id) : next.add(task.id)
+                                  return next
+                                })}
+                                className="shrink-0 mt-0.5 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 text-xs w-4 text-center leading-none"
+                                title={isExpanded ? 'Згорнути' : 'Розгорнути'}
+                              >
+                                {isExpanded ? '▾' : '▸'}
+                              </button>
+                            ) : (
+                              <span className="shrink-0 w-4" />
                             )}
-                            <p className={`text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2 ${task.parentId ? 'pl-1' : ''}`}>{task.title}</p>
+                            <button
+                              onClick={() => setSelectedTaskId(task.id)}
+                              className="flex-1 min-w-0 text-left"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                                  <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mt-0.5 shrink-0 w-4 text-right">{idx}</span>
+                                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2 flex-1">{task.title}</p>
+                                </div>
+                                {u !== 'normal' && <UrgencyBadge level={u} />}
+                              </div>
+                              {task.dueDate && u !== 'normal' && (
+                                <p className={`text-xs mt-0.5 pl-5 ${u === 'overdue' ? 'text-rose-600' : u === 'critical' ? 'text-orange-600' : 'text-amber-600'}`}>
+                                  {u === 'overdue' ? 'Прострочено: ' : 'Термін: '}
+                                  {new Date(task.dueDate).toLocaleDateString('uk-UA')}
+                                </p>
+                              )}
+                              {hasChildren && (
+                                <div className="mt-1.5 pl-5">
+                                  <div className="flex items-center justify-between mb-0.5">
+                                    <span className="text-[9px] text-slate-400">{task.subtasksDone ?? 0}/{task.subtasksCount} підзадач</span>
+                                    <span className="text-[9px] text-slate-400">{Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%</span>
+                                  </div>
+                                  <div className="h-1 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                    <div className="h-full rounded-full bg-emerald-400" style={{ width: `${Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%` }} />
+                                  </div>
+                                </div>
+                              )}
+                            </button>
                           </div>
                         </div>
-                        {u !== 'normal' && <UrgencyBadge level={u} />}
+
+                        {/* Subtasks — shown when expanded */}
+                        {hasChildren && isExpanded && children.map((sub) => {
+                          const isSubSelected = selectedTask?.id === sub.id
+                          const su = urgencyLevel(sub)
+                          return (
+                            <button
+                              key={sub.id}
+                              onClick={() => setSelectedTaskId(sub.id)}
+                              className={`w-full text-left pl-10 pr-4 py-2.5 border-b border-slate-100 dark:border-slate-800 transition-colors ${sidebarBorderClass(sub, isSubSelected)}`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                                  <span className="shrink-0 mt-0.5 text-[9px] text-slate-300 dark:text-slate-600">└</span>
+                                  <div className="flex-1 min-w-0">
+                                    <span className="inline-block rounded bg-amber-100 dark:bg-amber-950/40 px-1 text-[9px] font-semibold text-amber-600 dark:text-amber-400 mb-0.5">підзадача</span>
+                                    <p className="text-xs font-medium text-slate-800 dark:text-slate-200 line-clamp-2">{sub.title}</p>
+                                    {sub.assignee && (
+                                      <p className="text-[10px] text-slate-400 mt-0.5">{sub.assignee.firstName} {sub.assignee.lastName}</p>
+                                    )}
+                                  </div>
+                                </div>
+                                {su !== 'normal' && <UrgencyBadge level={su} />}
+                              </div>
+                            </button>
+                          )
+                        })}
                       </div>
-                      {task.dueDate && u !== 'normal' && (
-                        <p className={`text-xs mt-0.5 ${u === 'overdue' ? 'text-rose-600' : u === 'critical' ? 'text-orange-600' : 'text-amber-600'}`}>
-                          {u === 'overdue' ? 'Прострочено: ' : 'Термін: '}
-                          {new Date(task.dueDate).toLocaleDateString('uk-UA')}
-                        </p>
-                      )}
-                      {!task.parentId && (task.subtasksCount ?? 0) > 0 && (
-                        <div className="mt-1.5">
-                          <div className="flex items-center justify-between mb-0.5">
-                            <span className="text-[9px] text-slate-400">{task.subtasksDone ?? 0}/{task.subtasksCount} підзадач</span>
-                            <span className="text-[9px] text-slate-400">{Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%</span>
-                          </div>
-                          <div className="h-1 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-emerald-400"
-                              style={{ width: `${Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </button>
-                  )
-                })}
+                    )
+                  })
+                })()}
               </div>
 
               {/* Detail panel */}
