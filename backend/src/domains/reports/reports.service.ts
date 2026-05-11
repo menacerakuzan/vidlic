@@ -49,10 +49,16 @@ export class ReportsService {
       ];
     } else if (user.role === 'manager' || user.role === 'director' || user.role === 'deputy_director') {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      // draft reports are only visible to their author; non-draft reports are visible if in scoped dept or assigned for approval
       where.OR = [
         { authorId: user.id },
-        { departmentId: { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) } },
-        { currentApproverId: user.id },
+        {
+          status: { not: 'draft' },
+          OR: [
+            { departmentId: { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) } },
+            { currentApproverId: user.id },
+          ],
+        },
       ];
     }
 
@@ -992,8 +998,9 @@ export class ReportsService {
       return false;
     }
     if (user.role === 'manager' || user.role === 'director' || user.role === 'deputy_director') {
+      if (report.authorId === user.id) return true;
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
-      if (scopedDepartmentIds.includes(report.departmentId)) return true;
+      if (scopedDepartmentIds.includes(report.departmentId) && report.status !== 'draft') return true;
     }
     if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role) && report.authorId === user.id) return true;
     if (report.authorId === user.id) return true;

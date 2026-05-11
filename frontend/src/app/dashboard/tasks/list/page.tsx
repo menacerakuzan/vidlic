@@ -52,18 +52,18 @@ function urgencyLevel(task: Task): 'overdue' | 'critical' | 'soon' | 'normal' {
 
 function UrgencyBadge({ level }: { level: ReturnType<typeof urgencyLevel> }) {
   if (level === 'overdue') return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
-      🔴 Прострочено
+    <span className="inline-flex shrink-0 items-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white whitespace-nowrap">
+      Прострочено
     </span>
   )
   if (level === 'critical') return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
-      🟠 &lt;24 год
+    <span className="inline-flex shrink-0 items-center rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-bold text-white whitespace-nowrap">
+      &lt;24 год
     </span>
   )
   if (level === 'soon') return (
-    <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-      🟡 &lt;3 дні
+    <span className="inline-flex shrink-0 items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 whitespace-nowrap">
+      &lt;3 дні
     </span>
   )
   return null

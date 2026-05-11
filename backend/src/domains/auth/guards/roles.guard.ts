@@ -84,24 +84,28 @@ export class RolesGuard implements CanActivate {
         specialist: [
           'reports:read', 'reports:write',
           'tasks:read', 'tasks:write',
+          'departments:read',
           'notifications:read', 'notifications:write',
           'ai:read', 'ui:read',
         ],
         lawyer: [
           'reports:read', 'reports:write',
           'tasks:read',
+          'departments:read',
           'notifications:read', 'notifications:write',
           'ai:read', 'ui:read',
         ],
         accountant: [
           'reports:read', 'reports:write',
           'tasks:read',
+          'departments:read',
           'notifications:read', 'notifications:write',
           'ai:read', 'ui:read',
         ],
         hr: [
           'reports:read', 'reports:write',
           'tasks:read',
+          'departments:read',
           'notifications:read', 'notifications:write',
           'ai:read', 'ui:read',
         ],
