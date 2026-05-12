@@ -660,10 +660,50 @@ export default function TaskListPage() {
                     }
                   })
 
+                  const topLevelIds = new Set(orderedTasks.filter(t => !t.parentId).map(t => t.id))
+                  // subtasks whose parent is NOT visible to this user — show them standalone
+                  const orphanSubtasks = orderedTasks.filter(t => t.parentId && !topLevelIds.has(t.parentId))
                   const topLevel = orderedTasks.filter(t => !t.parentId)
 
                   let globalIdx = 0
-                  return topLevel.map((task) => {
+                  const renderOrphan = (task: Task) => {
+                    globalIdx++
+                    const idx = globalIdx
+                    const isSelected = selectedTask?.id === task.id
+                    const u = urgencyLevel(task)
+                    return (
+                      <div key={task.id}>
+                        <button
+                          onClick={() => setSelectedTaskId(task.id)}
+                          className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${sidebarBorderClass(task, isSelected)}`}
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className="shrink-0 w-4" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                                  <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mt-0.5 shrink-0 w-4 text-right">{idx}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <span className="inline-block text-[9px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded mb-0.5">підзадача</span>
+                                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2">{task.title}</p>
+                                  </div>
+                                </div>
+                                {u !== 'normal' && <UrgencyBadge level={u} />}
+                              </div>
+                              <div className="flex items-center gap-1 mt-1 pl-5">
+                                <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusBadge(task.status)}`}>{statusLabel(task.status)}</span>
+                                {task.assignee && <span className="text-[10px] text-slate-400">{task.assignee.firstName} {task.assignee.lastName}</span>}
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      </div>
+                    )
+                  }
+
+                  return [
+                    ...orphanSubtasks.map(renderOrphan),
+                    ...topLevel.map((task) => {
                     globalIdx++
                     const idx = globalIdx
                     const isSelected = selectedTask?.id === task.id
@@ -755,7 +795,7 @@ export default function TaskListPage() {
                         })}
                       </div>
                     )
-                  })
+                  })]
                 })()}
               </div>
 
@@ -966,7 +1006,10 @@ export default function TaskListPage() {
                                     className="flex-1 min-w-[160px] h-8 rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                                   >
                                     <option value="">Без виконавця</option>
-                                    {users.map((u) => (
+                                    {user && (
+                                      <option value={user.id}>{user.firstName} {user.lastName} (я)</option>
+                                    )}
+                                    {users.filter(u => u.id !== user?.id).map((u) => (
                                       <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
                                     ))}
                                   </select>
@@ -994,15 +1037,15 @@ export default function TaskListPage() {
                             )}
 
                             {subtasks.map((s) => (
-                              <div key={s.id} className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
-                                <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                              <div key={s.id} className="flex items-start gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
+                                <span className={`shrink-0 mt-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
                                   s.status === 'done' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' :
                                   s.status === 'in_progress' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' :
                                   'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300'
                                 }`}>
                                   {s.status === 'done' ? 'Виконано' : s.status === 'in_progress' ? 'В роботі' : 'Нове'}
                                 </span>
-                                <span className="flex-1 text-xs text-slate-800 dark:text-slate-200 line-clamp-1">{s.title}</span>
+                                <span className="flex-1 min-w-0 text-xs text-slate-800 dark:text-slate-200 break-words leading-relaxed">{s.title}</span>
                                 {s.assignee && (
                                   <span className="shrink-0 text-[10px] text-slate-400">{s.assignee.firstName} {s.assignee.lastName}</span>
                                 )}

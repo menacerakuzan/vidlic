@@ -210,18 +210,20 @@ export class TasksService {
     const targetDepartmentId = dto.departmentId || parent.departmentId;
     if (!targetDepartmentId) throw new BadRequestException('Підрозділ не визначено');
 
-    if (!(await this.canCreateTaskInDepartment(user, targetDepartmentId))) {
+    // allow self-assignment even if the parent task is in a different department
+    const assigningSelf = dto.assigneeId === user.id;
+    if (!assigningSelf && !(await this.canCreateTaskInDepartment(user, targetDepartmentId))) {
       throw new ForbiddenException('Немає доступу до створення задачі в цьому підрозділі');
     }
 
-    if (dto.assigneeId) {
+    if (dto.assigneeId && !assigningSelf) {
       const assignee = await this.prisma.user.findUnique({ where: { id: dto.assigneeId } });
       if (!assignee) throw new BadRequestException('Виконавця не знайдено');
       const secondary = Array.isArray(assignee.secondaryDepartmentIds) ? assignee.secondaryDepartmentIds as string[] : [];
       if (assignee.departmentId !== targetDepartmentId && !secondary.includes(targetDepartmentId)) {
         throw new BadRequestException('Виконавець має бути з того ж підрозділу');
       }
-      this.assertTaskAssignmentAllowed(user, assignee.role);
+      this.assertTaskAssignmentAllowed(user, assignee.role, dto.assigneeId);
     }
 
     const subtask = await this.prisma.task.create({
@@ -269,10 +271,10 @@ export class TasksService {
       }
       const assigneeSecondary = Array.isArray(assignee.secondaryDepartmentIds) ? assignee.secondaryDepartmentIds as string[] : [];
       const assigneeBelongs = assignee.departmentId === targetDepartmentId || assigneeSecondary.includes(targetDepartmentId);
-      if (!assigneeBelongs) {
+      if (!assigneeBelongs && dto.assigneeId !== user.id) {
         throw new BadRequestException('Виконавець має бути з того ж підрозділу або бути сумісником у ньому');
       }
-      this.assertTaskAssignmentAllowed(user, assignee.role);
+      this.assertTaskAssignmentAllowed(user, assignee.role, dto.assigneeId);
     }
 
     const isPrivateSpecialistTask =
@@ -853,8 +855,10 @@ export class TasksService {
     return [user.departmentId];
   }
 
-  private assertTaskAssignmentAllowed(actor: any, assigneeRole: string) {
+  private assertTaskAssignmentAllowed(actor: any, assigneeRole: string, assigneeId?: string) {
     if (actor?.role === 'admin') return;
+    // anyone can assign to themselves
+    if (assigneeId && assigneeId === actor?.id) return;
     if (actor?.role === 'director') {
       if (['deputy_director', 'manager', 'specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(assigneeRole)) return;
       throw new ForbiddenException('Директор може призначати задачі лише співробітникам операційних ролей');
@@ -867,9 +871,8 @@ export class TasksService {
       if (['specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(assigneeRole)) return;
       throw new ForbiddenException('Керівник може призначати задачі лише співробітникам свого відділу');
     }
-    if (actor?.role === 'specialist' || actor?.role === 'clerk') {
-      if (!assigneeRole || assigneeRole === actor?.role) return;
-      throw new ForbiddenException('Недостатньо прав для призначення задачі іншому користувачу');
-    }
+    // specialist/clerk/etc — can only assign to themselves (handled above) or same role
+    if (assigneeRole === actor?.role) return;
+    throw new ForbiddenException('Недостатньо прав для призначення задачі іншому користувачу');
   }
 }

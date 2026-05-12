@@ -123,9 +123,8 @@ export class AttachmentsService {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
       if (scopedDepartmentIds.includes(task.departmentId)) return task;
     }
-    if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
-      if (task.assigneeId === user.id || task.reporterId === user.id) return task;
-    }
+    const coIds = Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds as string[] : [];
+    if (task.assigneeId === user.id || task.reporterId === user.id || coIds.includes(user.id)) return task;
     throw new ForbiddenException('Немає доступу до цієї задачі');
   }
 

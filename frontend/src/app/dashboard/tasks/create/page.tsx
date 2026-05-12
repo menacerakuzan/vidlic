@@ -442,7 +442,12 @@ export default function CreateTaskPage() {
                 className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               >
                 <option value="">Без виконавця</option>
-                {availableForAssignment.map((m) => (
+                {user && (
+                  <option value={user.id}>
+                    {user.firstName} {user.lastName} (я)
+                  </option>
+                )}
+                {availableForAssignment.filter(m => m.id !== user?.id).map((m) => (
                   <option key={m.id} value={m.id}>{m.firstName} {m.lastName} ({loads[m.id] || 0})</option>
                 ))}
               </select>
