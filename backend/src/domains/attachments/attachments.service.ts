@@ -93,7 +93,20 @@ export class AttachmentsService {
       const buffer = await fs.readFile(item.filePath);
       return { meta: this.map(item), buffer };
     } catch (err) {
-      this.logger.error(`File not found on disk: ${item.filePath}`, err)
+      this.logger.error(`File not found on disk. DB path: "${item.filePath}", cwd: "${process.cwd()}"`)
+      // try relative fallback: strip old cwd prefix and resolve from current cwd
+      const storageIdx = item.filePath.indexOf('storage/attachments')
+      if (storageIdx !== -1) {
+        const relativePath = item.filePath.slice(storageIdx)
+        const fallbackPath = path.join(process.cwd(), relativePath)
+        try {
+          const buffer = await fs.readFile(fallbackPath)
+          this.logger.warn(`Fallback path worked: "${fallbackPath}" — consider updating filePath in DB`)
+          return { meta: this.map(item), buffer }
+        } catch {
+          this.logger.error(`Fallback also failed: "${fallbackPath}"`)
+        }
+      }
       throw new NotFoundException('Файл не знайдено на диску')
     }
   }
