@@ -203,6 +203,20 @@ export default function TaskListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken])
 
+  // Auto-expand parent tasks that have subtasks assigned to the current user
+  useEffect(() => {
+    if (!user?.id || tasks.length === 0) return
+    const parentIdsToExpand = new Set<string>()
+    tasks.forEach(t => {
+      if (t.parentId && t.assignee?.id === user.id) {
+        parentIdsToExpand.add(t.parentId)
+      }
+    })
+    if (parentIdsToExpand.size > 0) {
+      setExpandedParentIds(prev => new Set([...prev, ...parentIdsToExpand]))
+    }
+  }, [tasks, user?.id])
+
   // No auto-selection — user clicks to open
 
   useEffect(() => {
@@ -661,8 +675,11 @@ export default function TaskListPage() {
                   })
 
                   const topLevelIds = new Set(orderedTasks.filter(t => !t.parentId).map(t => t.id))
-                  // subtasks whose parent is NOT visible to this user — show them standalone
-                  const orphanSubtasks = orderedTasks.filter(t => t.parentId && !topLevelIds.has(t.parentId))
+                  // subtasks to show standalone: either parent is not visible OR subtask is directly assigned to current user
+                  const orphanSubtasks = orderedTasks.filter(t =>
+                    t.parentId && (!topLevelIds.has(t.parentId) || t.assignee?.id === user?.id)
+                  )
+                  const orphanSubtaskIds = new Set(orphanSubtasks.map(t => t.id))
                   const topLevel = orderedTasks.filter(t => !t.parentId)
 
                   let globalIdx = 0
@@ -767,8 +784,8 @@ export default function TaskListPage() {
                           </div>
                         </div>
 
-                        {/* Subtasks — shown when expanded */}
-                        {hasChildren && isExpanded && children.map((sub) => {
+                        {/* Subtasks — shown when expanded, skip those already shown as standalone orphans */}
+                        {hasChildren && isExpanded && children.filter(sub => !orphanSubtaskIds.has(sub.id)).map((sub) => {
                           const isSubSelected = selectedTask?.id === sub.id
                           const su = urgencyLevel(sub)
                           return (
