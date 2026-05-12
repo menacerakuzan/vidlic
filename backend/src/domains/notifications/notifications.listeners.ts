@@ -114,42 +114,59 @@ export class NotificationsListener {
 
   @OnEvent('task.created')
   async handleTaskCreated(event: TaskCreatedEvent) {
-    if (!event.assigneeId || event.assigneeId === event.reporterId) return;
-
-    const task = await this.prisma.task.findUnique({
-      where: { id: event.taskId },
-    });
-
+    const task = await this.prisma.task.findUnique({ where: { id: event.taskId } });
     if (!task) return;
 
-    await this.notifications.create({
-      userId: event.assigneeId,
-      type: 'task_assigned',
-      title: 'Нова задача',
-      message: `Вам призначено задачу: ${task.title}`,
-      referenceType: 'task',
-      referenceId: task.id,
-    });
+    const notifyIds = new Set<string>();
+    if (event.assigneeId && event.assigneeId !== event.reporterId) {
+      notifyIds.add(event.assigneeId);
+    }
+    const coIds = Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds as string[] : [];
+    for (const coId of coIds) {
+      if (coId && coId !== event.reporterId) notifyIds.add(coId);
+    }
+
+    for (const userId of notifyIds) {
+      await this.notifications.create({
+        userId,
+        type: 'task_assigned',
+        title: 'Нова задача',
+        message: `Вам призначено задачу: ${task.title}`,
+        referenceType: 'task',
+        referenceId: task.id,
+      });
+    }
   }
 
   @OnEvent('task.updated')
   async handleTaskUpdated(event: TaskUpdatedEvent) {
-    if (!event.newAssigneeId) return;
-
-    const task = await this.prisma.task.findUnique({
-      where: { id: event.taskId },
-    });
-
+    const task = await this.prisma.task.findUnique({ where: { id: event.taskId } });
     if (!task) return;
 
-    await this.notifications.create({
-      userId: event.newAssigneeId,
-      type: 'task_assigned',
-      title: 'Змінено виконавця задачі',
-      message: `Ви призначені виконавцем: ${task.title}`,
-      referenceType: 'task',
-      referenceId: task.id,
-    });
+    if (event.newAssigneeId && event.newAssigneeId !== event.actorId) {
+      await this.notifications.create({
+        userId: event.newAssigneeId,
+        type: 'task_assigned',
+        title: 'Змінено виконавця задачі',
+        message: `Ви призначені виконавцем: ${task.title}`,
+        referenceType: 'task',
+        referenceId: task.id,
+      });
+    }
+
+    const coIds = Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds as string[] : [];
+    for (const coId of coIds) {
+      if (coId && coId !== event.actorId && coId !== event.newAssigneeId) {
+        await this.notifications.create({
+          userId: coId,
+          type: 'task_assigned',
+          title: 'Вас додано як співвиконавця',
+          message: `Вас додано як співвиконавця до задачі: ${task.title}`,
+          referenceType: 'task',
+          referenceId: task.id,
+        });
+      }
+    }
   }
 
   @OnEvent('task.completed')

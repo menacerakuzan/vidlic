@@ -23,8 +23,9 @@ export class TasksService {
       visibilityClauses.push(
         { assigneeId: user.id },
         { reporterId: user.id },
+        { coAssigneeIds: { array_contains: user.id } },
         // parent tasks whose subtasks are assigned to this user
-        { subtasks: { some: { OR: [{ assigneeId: user.id }, { reporterId: user.id }] } } },
+        { subtasks: { some: { OR: [{ assigneeId: user.id }, { reporterId: user.id }, { coAssigneeIds: { array_contains: user.id } }] } } },
       );
     } else if (['manager', 'director', 'deputy_director', 'deputy_head'].includes(user.role)) {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
@@ -37,6 +38,7 @@ export class TasksService {
         },
         { assigneeId: user.id },
         { reporterId: user.id },
+        { coAssigneeIds: { array_contains: user.id } },
       );
     }
     if (visibilityClauses.length > 0) {
@@ -521,13 +523,14 @@ export class TasksService {
     const visibilityClauses: any[] = [];
 
     if (['specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
-      visibilityClauses.push({ assigneeId: user.id }, { reporterId: user.id });
+      visibilityClauses.push({ assigneeId: user.id }, { reporterId: user.id }, { coAssigneeIds: { array_contains: user.id } });
     } else if (['manager', 'director', 'deputy_director', 'deputy_head'].includes(user.role)) {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
       visibilityClauses.push(
         { departmentId: { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) } },
         { assigneeId: user.id },
         { reporterId: user.id },
+        { coAssigneeIds: { array_contains: user.id } },
       );
     }
 
