@@ -10,6 +10,7 @@ export interface UserResponse {
   role: UserRole;
   departmentId?: string | null;
   scopeDepartmentIds?: string[] | null;
+  secondaryDepartmentIds?: string[] | null;
   department?: {
     id: string;
     name: string;
