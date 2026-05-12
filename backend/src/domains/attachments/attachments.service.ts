@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { AttachmentEntityType } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
@@ -7,6 +7,7 @@ import { PrismaService } from '../../shared/prisma.service';
 
 @Injectable()
 export class AttachmentsService {
+  private readonly logger = new Logger(AttachmentsService.name)
   constructor(private prisma: PrismaService) {}
 
   async create(
@@ -88,11 +89,13 @@ export class AttachmentsService {
     if (!item) throw new NotFoundException('Вкладення не знайдено');
     await this.ensureAccess(item.entityType, item.reportId || undefined, item.taskId || undefined, user, 'read');
 
-    const buffer = await fs.readFile(item.filePath);
-    return {
-      meta: this.map(item),
-      buffer,
-    };
+    try {
+      const buffer = await fs.readFile(item.filePath);
+      return { meta: this.map(item), buffer };
+    } catch (err) {
+      this.logger.error(`File not found on disk: ${item.filePath}`, err)
+      throw new NotFoundException('Файл не знайдено на диску')
+    }
   }
 
   private async ensureAccess(
@@ -116,15 +119,19 @@ export class AttachmentsService {
       throw new ForbiddenException('Немає доступу до цього звіту');
     }
 
-    const task = await this.prisma.task.findUnique({ where: { id: taskId } });
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      include: { parent: { select: { departmentId: true } } },
+    });
     if (!task) throw new NotFoundException('Задачу не знайдено');
     if (user.role === 'admin' || user.role === 'deputy_head') return task;
-    if (['director', 'deputy_director', 'manager', 'clerk'].includes(user.role)) {
-      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
-      if (scopedDepartmentIds.includes(task.departmentId)) return task;
-    }
     const coIds = Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds as string[] : [];
     if (task.assigneeId === user.id || task.reporterId === user.id || coIds.includes(user.id)) return task;
+    if (['director', 'deputy_director', 'manager', 'clerk'].includes(user.role)) {
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      const deptId = task.departmentId || (task as any).parent?.departmentId;
+      if (deptId && scopedDepartmentIds.includes(deptId)) return task;
+    }
     throw new ForbiddenException('Немає доступу до цієї задачі');
   }
 

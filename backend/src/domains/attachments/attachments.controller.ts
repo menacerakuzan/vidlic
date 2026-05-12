@@ -30,10 +30,15 @@ export class AttachmentsController {
   @Get(':id/download')
   @ApiOperation({ summary: 'Завантажити файл вкладення' })
   async download(@Param('id') id: string, @Req() req: any, @Res() res: Response) {
-    const data = await this.attachmentsService.readFile(id, req.user);
-    res.setHeader('Content-Type', data.meta.mimeType || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(data.meta.fileName)}"`);
-    res.send(data.buffer);
+    try {
+      const data = await this.attachmentsService.readFile(id, req.user);
+      res.setHeader('Content-Type', data.meta.mimeType || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(data.meta.fileName)}"`);
+      res.send(data.buffer);
+    } catch (err: any) {
+      const status = err?.status ?? 500;
+      res.status(status).json({ message: err?.message ?? 'Помилка завантаження файлу' });
+    }
   }
 
   @Delete(':id')
