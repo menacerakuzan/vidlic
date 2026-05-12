@@ -33,6 +33,7 @@ type TaskComment = {
 type Subtask = {
   id: string
   title: string
+  description?: string | null
   status: 'todo' | 'in_progress' | 'done'
   dueDate?: string | null
   assignee?: { id: string; firstName: string; lastName: string } | null
@@ -1079,13 +1080,20 @@ export default function TaskListPage() {
                                   }`}>
                                     {s.status === 'done' ? 'Виконано' : s.status === 'in_progress' ? 'В роботі' : 'Нове'}
                                   </span>
-                                  <span className="flex-1 min-w-0 text-xs text-slate-800 dark:text-slate-200 break-words leading-relaxed">{s.title}</span>
-                                  {s.assignee && (
-                                    <span className="shrink-0 text-[10px] text-slate-400">{s.assignee.firstName} {s.assignee.lastName}</span>
-                                  )}
-                                  {s.dueDate && (
-                                    <span className="shrink-0 text-[10px] text-slate-400">{new Date(s.dueDate).toLocaleDateString('uk-UA')}</span>
-                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-xs text-slate-800 dark:text-slate-200 break-words leading-relaxed">{s.title}</span>
+                                    {s.description && (
+                                      <p className="text-[11px] text-slate-500 dark:text-slate-400 whitespace-pre-wrap break-words mt-0.5">{s.description}</p>
+                                    )}
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      {s.assignee && (
+                                        <span className="text-[10px] text-slate-400">{s.assignee.firstName} {s.assignee.lastName}</span>
+                                      )}
+                                      {s.dueDate && (
+                                        <span className="text-[10px] text-slate-400">{new Date(s.dueDate).toLocaleDateString('uk-UA')}</span>
+                                      )}
+                                    </div>
+                                  </div>
                                 </button>
                                 <div className="px-3 pb-2 flex items-center gap-2 border-t border-slate-100 dark:border-slate-700/50 pt-1.5">
                                   <select
@@ -1163,7 +1171,7 @@ export default function TaskListPage() {
                           {attachments.map((att) => (
                             <div key={att.id} className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{att.fileName}</p>
+                                <p className="text-xs font-medium text-slate-800 dark:text-slate-200 break-all">{att.fileName}</p>
                                 <p className="text-[10px] text-slate-400">{formatBytes(att.fileSize)} · {att.uploader || ''} · {new Date(att.createdAt).toLocaleDateString('uk-UA')}</p>
                               </div>
                               <button

@@ -175,7 +175,7 @@ export class AttachmentsService {
   }
 
   private safeFileName(value: string) {
-    return value.replace(/[^\w.\- ]+/g, '_').slice(0, 180);
+    return value.replace(/[^\wЀ-ӿ.\- ]+/g, '_').slice(0, 180);
   }
 
   private decodeBase64(value: string): Buffer {
