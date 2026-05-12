@@ -233,8 +233,17 @@ export default function TaskListPage() {
       loadAttachments(selectedTaskId)
       loadComments(selectedTaskId)
       const task = tasks.find(t => t.id === selectedTaskId)
-      if (!task?.parentId) {
-        loadSubtasks(selectedTaskId)
+      if (task) {
+        setSelectedTaskFull(null)
+        if (!task.parentId) {
+          loadSubtasks(selectedTaskId)
+        }
+      } else {
+        // task not in local list (e.g. deputy viewing subtask from accordion) — fetch it directly
+        fetch(`/api/v1/tasks/${selectedTaskId}`, { headers: { Authorization: `Bearer ${accessToken}` } })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => { if (data) setSelectedTaskFull(data) })
+          .catch(() => {})
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -548,9 +557,11 @@ export default function TaskListPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks, filterDepartmentId, filterStatus, filterUrgency])
 
+  const [selectedTaskFull, setSelectedTaskFull] = useState<Task | null>(null)
+
   const selectedTask = useMemo(
-    () => tasks.find((task) => task.id === selectedTaskId) || null,
-    [tasks, selectedTaskId],
+    () => tasks.find((task) => task.id === selectedTaskId) || selectedTaskFull || null,
+    [tasks, selectedTaskId, selectedTaskFull],
   )
 
   const statusBadge = (status: Task['status']) => {
@@ -1054,30 +1065,38 @@ export default function TaskListPage() {
                             )}
 
                             {subtasks.map((s) => (
-                              <div key={s.id} className="flex items-start gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
-                                <span className={`shrink-0 mt-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                                  s.status === 'done' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' :
-                                  s.status === 'in_progress' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' :
-                                  'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300'
-                                }`}>
-                                  {s.status === 'done' ? 'Виконано' : s.status === 'in_progress' ? 'В роботі' : 'Нове'}
-                                </span>
-                                <span className="flex-1 min-w-0 text-xs text-slate-800 dark:text-slate-200 break-words leading-relaxed">{s.title}</span>
-                                {s.assignee && (
-                                  <span className="shrink-0 text-[10px] text-slate-400">{s.assignee.firstName} {s.assignee.lastName}</span>
-                                )}
-                                {s.dueDate && (
-                                  <span className="shrink-0 text-[10px] text-slate-400">{new Date(s.dueDate).toLocaleDateString('uk-UA')}</span>
-                                )}
-                                <select
-                                  value={s.status}
-                                  onChange={(e) => updateSubtaskStatus(s.id, e.target.value as Task['status'], selectedTask.id)}
-                                  className="h-6 rounded border border-slate-200 px-1 text-[10px] bg-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                              <div key={s.id} className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                                <button
+                                  onClick={() => setSelectedTaskId(s.id)}
+                                  className="w-full text-left flex items-start gap-2 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                                 >
-                                  <option value="todo">Нове</option>
-                                  <option value="in_progress">В роботі</option>
-                                  <option value="done">Виконано</option>
-                                </select>
+                                  <span className={`shrink-0 mt-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                                    s.status === 'done' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' :
+                                    s.status === 'in_progress' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' :
+                                    'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300'
+                                  }`}>
+                                    {s.status === 'done' ? 'Виконано' : s.status === 'in_progress' ? 'В роботі' : 'Нове'}
+                                  </span>
+                                  <span className="flex-1 min-w-0 text-xs text-slate-800 dark:text-slate-200 break-words leading-relaxed">{s.title}</span>
+                                  {s.assignee && (
+                                    <span className="shrink-0 text-[10px] text-slate-400">{s.assignee.firstName} {s.assignee.lastName}</span>
+                                  )}
+                                  {s.dueDate && (
+                                    <span className="shrink-0 text-[10px] text-slate-400">{new Date(s.dueDate).toLocaleDateString('uk-UA')}</span>
+                                  )}
+                                </button>
+                                <div className="px-3 pb-2 flex items-center gap-2 border-t border-slate-100 dark:border-slate-700/50 pt-1.5">
+                                  <select
+                                    value={s.status}
+                                    onChange={(e) => updateSubtaskStatus(s.id, e.target.value as Task['status'], selectedTask.id)}
+                                    className="h-6 rounded border border-slate-200 px-1 text-[10px] bg-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                                  >
+                                    <option value="todo">Нове</option>
+                                    <option value="in_progress">В роботі</option>
+                                    <option value="done">Виконано</option>
+                                  </select>
+                                  <span className="text-[10px] text-slate-400">Натисніть щоб переглянути деталі →</span>
+                                </div>
                               </div>
                             ))}
                           </div>
