@@ -430,7 +430,9 @@ export default function TaskListPage() {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
     if (!resp.ok) {
-      setActionToast({ type: 'error', message: 'Не вдалося завантажити файл' })
+      const errBody = await resp.text().catch(() => '')
+      console.error('[download] status:', resp.status, 'body:', errBody)
+      setActionToast({ type: 'error', message: `Не вдалося завантажити файл (${resp.status})` })
       return
     }
     const blob = await resp.blob()
