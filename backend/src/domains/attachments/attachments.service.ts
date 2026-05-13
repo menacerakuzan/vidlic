@@ -137,14 +137,7 @@ export class AttachmentsService {
       include: { parent: { select: { departmentId: true } } },
     });
     if (!task) throw new NotFoundException('Задачу не знайдено');
-    if (user.role === 'admin' || user.role === 'deputy_head') return task;
-    const coIds = Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds as string[] : [];
-    if (task.assigneeId === user.id || task.reporterId === user.id || coIds.includes(user.id)) return task;
-    if (['director', 'deputy_director', 'manager', 'clerk'].includes(user.role)) {
-      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
-      const deptId = task.departmentId || (task as any).parent?.departmentId;
-      if (deptId && scopedDepartmentIds.includes(deptId)) return task;
-    }
+    if (await this.canViewTask(task, user)) return task;
     throw new ForbiddenException('Немає доступу до цієї задачі');
   }
 
@@ -166,12 +159,28 @@ export class AttachmentsService {
 
   private async resolveScopedDepartmentIdsForUser(user: any): Promise<string[]> {
     if (!user?.departmentId) return [];
-    if (user.role === 'manager') return [user.departmentId];
+    if (user.role === 'manager') {
+      const secondary = Array.isArray(user.secondaryDepartmentIds) ? (user.secondaryDepartmentIds as string[]).filter(Boolean) : [];
+      return [user.departmentId, ...secondary];
+    }
     if (user.role === 'deputy_director') {
       const configured = Array.isArray(user.scopeDepartmentIds) ? user.scopeDepartmentIds.filter(Boolean) : [];
       if (configured.length > 0) return configured;
     }
     return this.resolveDepartmentScopeIds(user.departmentId);
+  }
+
+  private async canViewTask(task: any, user: any): Promise<boolean> {
+    if (user.role === 'admin') return true;
+    const coIds = Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds as string[] : [];
+    if (task.assigneeId === user.id || task.reporterId === user.id || coIds.includes(user.id)) return true;
+    if (task.isPrivate) return false;
+    if (['director', 'deputy_director', 'manager', 'deputy_head'].includes(user.role)) {
+      const scoped = await this.resolveScopedDepartmentIdsForUser(user);
+      const deptId = task.departmentId || task.parent?.departmentId;
+      if (deptId && scoped.includes(deptId)) return true;
+    }
+    return false;
   }
 
   private safeFileName(value: string) {

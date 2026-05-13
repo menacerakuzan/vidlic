@@ -874,6 +874,10 @@ export class TasksService {
       if (['specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(assigneeRole)) return;
       throw new ForbiddenException('Керівник може призначати задачі лише співробітникам свого відділу');
     }
+    if (actor?.role === 'deputy_head') {
+      if (['deputy_director', 'manager', 'specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(assigneeRole)) return;
+      throw new ForbiddenException('Відсутнє право визначити цього користувача виконавцем задачі');
+    }
     // specialist/clerk/etc — can only assign to themselves (handled above) or same role
     if (assigneeRole === actor?.role) return;
     throw new ForbiddenException('Недостатньо прав для призначення задачі іншому користувачу');
