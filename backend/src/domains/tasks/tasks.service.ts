@@ -29,10 +29,19 @@ export class TasksService {
       );
     } else if (['manager', 'director', 'deputy_director', 'deputy_head'].includes(user.role)) {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      const effectiveDeptIds = scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean);
       visibilityClauses.push(
         {
           AND: [
-            { departmentId: { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) } },
+            { departmentId: { in: effectiveDeptIds } },
+            { NOT: this.buildLeadershipExcludeFilter() },
+          ],
+        },
+        // задачі де reporter зі свого відділу але без departmentId (напр. спеціаліст сам собі)
+        {
+          AND: [
+            { departmentId: null },
+            { reporter: { departmentId: { in: effectiveDeptIds } } },
             { NOT: this.buildLeadershipExcludeFilter() },
           ],
         },
@@ -111,10 +120,18 @@ export class TasksService {
       );
     } else if (['manager', 'director', 'deputy_director', 'deputy_head'].includes(user.role)) {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      const effectiveDeptIds = scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean);
       visibilityClauses.push(
         {
           AND: [
-            { departmentId: { in: scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean) } },
+            { departmentId: { in: effectiveDeptIds } },
+            { NOT: this.buildLeadershipExcludeFilter() },
+          ],
+        },
+        {
+          AND: [
+            { departmentId: null },
+            { reporter: { departmentId: { in: effectiveDeptIds } } },
             { NOT: this.buildLeadershipExcludeFilter() },
           ],
         },
