@@ -1,1 +1,1 @@
-ALTER TABLE "Attachment" ADD COLUMN "fileData" BYTEA;
+ALTER TABLE "attachments" ADD COLUMN "fileData" BYTEA;
