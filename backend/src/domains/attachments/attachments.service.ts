@@ -67,6 +67,8 @@ export class AttachmentsService {
     return items.map((item) => ({
       ...this.map(item),
       uploader: item.uploader ? `${item.uploader.firstName} ${item.uploader.lastName}` : '',
+      _debugPath: item.filePath,
+      _debugCwd: process.cwd(),
     }));
   }
 
