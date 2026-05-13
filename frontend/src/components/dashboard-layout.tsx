@@ -25,7 +25,7 @@ import {
   Moon,
   Sun,
 } from 'lucide-react'
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { BrandLogo } from '@/components/brand-logo'
 
@@ -93,8 +93,17 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [isDark, setIsDark] = useState(false)
   const [logoClickCount, setLogoClickCount] = useState(0)
-  const logoClickTimer = typeof window !== 'undefined' ? undefined : undefined
+  const prevUnreadCount = useRef<number | null>(null)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
+
+  const playNotificationSound = () => {
+    if (typeof window === 'undefined') return
+    const sound = localStorage.getItem('vidlik-notification-sound')
+    if (!sound || sound === 'none') return
+    const audio = new Audio(sound)
+    audio.volume = 0.7
+    audio.play().catch(() => {})
+  }
 
   const handleLogoClick = () => {
     setLogoClickCount(prev => {
@@ -120,7 +129,12 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       if (!resp.ok || cancelled) return
       const data = await resp.json()
       if (!cancelled) {
-        setUnreadCount(data.unreadCount || 0)
+        const newCount = data.unreadCount || 0
+        if (prevUnreadCount.current !== null && newCount > prevUnreadCount.current) {
+          playNotificationSound()
+        }
+        prevUnreadCount.current = newCount
+        setUnreadCount(newCount)
       }
     }
 
@@ -133,7 +147,12 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         try {
           const payload = JSON.parse(event.data || '{}')
           if (typeof payload?.unreadCount === 'number' && !cancelled) {
-            setUnreadCount(payload.unreadCount)
+            const newCount = payload.unreadCount
+            if (prevUnreadCount.current !== null && newCount > prevUnreadCount.current) {
+              playNotificationSound()
+            }
+            prevUnreadCount.current = newCount
+            setUnreadCount(newCount)
           }
         } catch {
           // ignore malformed event
