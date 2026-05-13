@@ -1,13 +1,23 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useAuthStore } from '@/store/auth-store'
 import { extractApiErrorMessage } from '@/lib/error-message'
 
+const SOUND_OPTIONS = [
+  { value: 'none', label: 'Без звуку' },
+  { value: '/sounds/notification.mp3', label: 'Стандартний' },
+]
+
+const EASTER_EGG_SOUND = { value: '/sounds/easter-egg.mp3', label: '🎵 ???' }
+
 export default function SettingsPage() {
   const { user } = useAuthStore()
   const [isDark, setIsDark] = useState(false)
+  const [notificationSound, setNotificationSound] = useState('none')
+  const [hasEasterEgg, setHasEasterEgg] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -20,6 +30,9 @@ export default function SettingsPage() {
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'))
+    const saved = localStorage.getItem('vidlik-notification-sound') || 'none'
+    setNotificationSound(saved)
+    setHasEasterEgg(localStorage.getItem('vidlik-easter-egg') === '1')
   }, [])
 
   useEffect(() => {
@@ -33,6 +46,20 @@ export default function SettingsPage() {
     root.classList.toggle('dark', nextDark)
     localStorage.setItem('vidlik-theme', nextDark ? 'dark' : 'light')
     setIsDark(nextDark)
+  }
+
+  const handleSoundChange = (value: string) => {
+    setNotificationSound(value)
+    localStorage.setItem('vidlik-notification-sound', value)
+    if (value !== 'none') {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.currentTime = 0
+      }
+      const audio = new Audio(value)
+      audioRef.current = audio
+      audio.play().catch(() => {})
+    }
   }
 
   const changePassword = async () => {
@@ -62,6 +89,8 @@ export default function SettingsPage() {
     const err = await resp.json().catch(() => null)
     setPasswordError(extractApiErrorMessage(resp.status, err, 'Не вдалося змінити пароль'))
   }
+
+  const soundOptions = hasEasterEgg ? [...SOUND_OPTIONS, EASTER_EGG_SOUND] : SOUND_OPTIONS
 
   return (
     <DashboardLayout>
@@ -126,6 +155,31 @@ export default function SettingsPage() {
               Темна
             </button>
           </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-700 p-4 space-y-3">
+          <div>
+            <p className="text-sm font-semibold">Звук сповіщень</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Відтворюється при отриманні нового сповіщення</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {soundOptions.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => handleSoundChange(opt.value)}
+                className={`rounded-lg px-3 py-2 text-sm border transition-colors ${
+                  notificationSound === opt.value
+                    ? 'bg-primary text-white border-primary'
+                    : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:border-primary/50'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {notificationSound !== 'none' && (
+            <p className="text-[11px] text-slate-400 dark:text-slate-500">Натисніть на варіант щоб прослухати</p>
+          )}
         </div>
 
         {user && (

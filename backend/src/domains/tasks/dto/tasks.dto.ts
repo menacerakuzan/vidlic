@@ -177,3 +177,14 @@ export class CreateTaskCommentDto {
   @IsString()
   content: string;
 }
+
+export class GroupTasksDto {
+  @ApiProperty({ example: 'Назва глобальної задачі' })
+  @IsString()
+  title: string;
+
+  @ApiProperty({ type: [String], description: 'ID задач що стануть підзадачами' })
+  @IsArray()
+  @IsUUID('4', { each: true })
+  taskIds: string[];
+}

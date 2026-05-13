@@ -144,6 +144,10 @@ export default function TaskListPage() {
   const [postingComment, setPostingComment] = useState(false)
   const [coAssigneeSelectId, setCoAssigneeSelectId] = useState('')
   const [updatingCoAssignees, setUpdatingCoAssignees] = useState(false)
+  const [groupMode, setGroupMode] = useState(false)
+  const [groupSelected, setGroupSelected] = useState<Set<string>>(new Set())
+  const [groupTitle, setGroupTitle] = useState('')
+  const [grouping, setGrouping] = useState(false)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const loadTasks = async () => {
@@ -483,6 +487,27 @@ export default function TaskListPage() {
     if (resp.ok) loadTasks()
   }
 
+  const groupTasks = async () => {
+    if (!accessToken || !groupTitle.trim() || groupSelected.size < 2) return
+    setGrouping(true)
+    const resp = await fetch('/api/v1/tasks/group', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: groupTitle.trim(), taskIds: Array.from(groupSelected) }),
+    })
+    setGrouping(false)
+    if (resp.ok) {
+      setGroupMode(false)
+      setGroupSelected(new Set())
+      setGroupTitle('')
+      await loadTasks()
+      setActionToast({ type: 'success', message: 'Задачі згруповано' })
+      return
+    }
+    const err = await resp.json().catch(() => null)
+    setActionToast({ type: 'error', message: err?.message || 'Помилка групування' })
+  }
+
   const createSubtask = async (parentId: string) => {
     if (!accessToken || !newSubtaskTitle.trim()) return
     setCreatingSubtask(true)
@@ -690,12 +715,40 @@ export default function TaskListPage() {
             {hasActiveFilters && (
               <button
                 onClick={() => { setFilterDepartmentId(''); setFilterStatus(''); setFilterUrgency('') }}
-                className="h-10 rounded-lg border border-slate-300 text-sm dark:border-slate-600"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-slate-600"
               >
                 Скинути фільтри
               </button>
             )}
+            <button
+              onClick={() => { setGroupMode(v => !v); setGroupSelected(new Set()); setGroupTitle('') }}
+              className={`h-10 rounded-lg border px-3 text-sm transition-colors ${groupMode ? 'bg-violet-600 text-white border-violet-600' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
+            >
+              {groupMode ? 'Скасувати' : 'Групувати'}
+            </button>
           </div>
+
+          {groupMode && (
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-violet-200 bg-violet-50 dark:border-violet-800/40 dark:bg-violet-950/20 p-3">
+              <p className="text-xs text-violet-700 dark:text-violet-300 font-medium">
+                Обрано: {groupSelected.size} задач. Оберіть мінімум 2 і введіть назву глобальної задачі.
+              </p>
+              <input
+                type="text"
+                placeholder="Назва глобальної задачі..."
+                value={groupTitle}
+                onChange={e => setGroupTitle(e.target.value)}
+                className="flex-1 min-w-[200px] h-8 rounded-lg border border-violet-300 px-3 text-sm bg-white dark:bg-slate-800 dark:border-violet-700 dark:text-slate-100"
+              />
+              <button
+                onClick={groupTasks}
+                disabled={groupSelected.size < 2 || !groupTitle.trim() || grouping}
+                className="h-8 rounded-lg bg-violet-600 px-4 text-xs font-medium text-white disabled:opacity-50"
+              >
+                {grouping ? 'Групування...' : 'Створити глобальну задачу'}
+              </button>
+            </div>
+          )}
         </div>
 
         {error && (
@@ -723,10 +776,22 @@ export default function TaskListPage() {
 
                   return (
                     <div key={task.id}>
-                      <div className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${sidebarBorderClass(task, isSelected)}`}>
+                      <div className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${sidebarBorderClass(task, isSelected)} ${groupMode && groupSelected.has(task.id) ? 'ring-2 ring-inset ring-violet-400' : ''}`}>
                         <div className="flex items-start gap-2">
+                          {groupMode && (
+                            <input
+                              type="checkbox"
+                              checked={groupSelected.has(task.id)}
+                              onChange={e => setGroupSelected(prev => {
+                                const next = new Set(prev)
+                                e.target.checked ? next.add(task.id) : next.delete(task.id)
+                                return next
+                              })}
+                              className="mt-1 shrink-0 accent-violet-600 w-4 h-4 cursor-pointer"
+                            />
+                          )}
                           <button
-                            onClick={() => setSelectedTaskId(task.id)}
+                            onClick={() => groupMode ? undefined : setSelectedTaskId(task.id)}
                             className="flex-1 min-w-0 text-left"
                           >
                             <div className="flex items-start justify-between gap-2">

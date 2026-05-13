@@ -521,6 +521,41 @@ export class TasksService {
     };
   }
 
+  async groupTasks(title: string, taskIds: string[], user: any) {
+    if (!taskIds.length) throw new BadRequestException('Вкажіть хоча б одну задачу');
+
+    const tasks = await this.prisma.task.findMany({
+      where: { id: { in: taskIds }, deletedAt: null, parentId: null },
+    });
+
+    if (tasks.length === 0) throw new NotFoundException('Задачі не знайдено');
+
+    // use departmentId and reporterId from first task
+    const first = tasks[0];
+
+    const parent = await this.prisma.task.create({
+      data: {
+        title,
+        reporterId: user.id,
+        departmentId: first.departmentId,
+        priority: 'medium',
+      },
+      include: {
+        assignee: { select: { id: true, firstName: true, lastName: true } },
+        reporter: { select: { id: true, firstName: true, lastName: true } },
+        department: { select: { id: true, name: true, nameUk: true } },
+        subtasks: true,
+      },
+    });
+
+    await this.prisma.task.updateMany({
+      where: { id: { in: taskIds } },
+      data: { parentId: parent.id },
+    });
+
+    return this.mapTask(parent);
+  }
+
   async delete(id: string, user: any) {
     const task = await this.prisma.task.findUnique({ where: { id } });
 

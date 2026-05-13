@@ -92,7 +92,22 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   })
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [isDark, setIsDark] = useState(false)
+  const [logoClickCount, setLogoClickCount] = useState(0)
+  const logoClickTimer = typeof window !== 'undefined' ? undefined : undefined
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
+
+  const handleLogoClick = () => {
+    setLogoClickCount(prev => {
+      const next = prev + 1
+      if (next >= 10) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('vidlik-easter-egg', '1')
+        }
+        return 0
+      }
+      return next
+    })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -247,7 +262,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             <div className="fixed inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
             <div className="fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-800 shadow-xl">
               <div className="flex items-center justify-between p-4 border-b">
-                <span className="inline-flex items-center gap-3 text-2xl font-semibold tracking-wide">
+                <span className="inline-flex items-center gap-3 text-2xl font-semibold tracking-wide cursor-pointer select-none" onClick={handleLogoClick}>
                   <BrandLogo className="h-8 w-8 text-primary" />
                   ВІДЛІК
                 </span>
@@ -293,7 +308,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-64 lg:flex-col">
         <div className="flex flex-col flex-1 min-h-0 bg-white/80 dark:bg-slate-900/70 backdrop-blur-xl border-r border-white/10">
           <div className="flex items-center h-16 px-6 border-b border-white/10">
-            <span className="inline-flex items-center gap-3 text-2xl font-semibold font-display tracking-wide">
+            <span className="inline-flex items-center gap-3 text-2xl font-semibold font-display tracking-wide cursor-pointer select-none" onClick={handleLogoClick}>
               <BrandLogo className="h-8 w-8 text-primary" />
               ВІДЛІК
             </span>

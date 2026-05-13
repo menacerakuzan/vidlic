@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { TasksService } from './tasks.service';
-import { CreateTaskDto, CreateSubtaskDto, UpdateTaskDto, TaskQueryDto, UpdateTaskStatusDto, CreateTaskCommentDto } from './dto/tasks.dto';
+import { CreateTaskDto, CreateSubtaskDto, UpdateTaskDto, TaskQueryDto, UpdateTaskStatusDto, CreateTaskCommentDto, GroupTasksDto } from './dto/tasks.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Permissions } from '../auth/decorators/roles.decorator';
@@ -59,6 +59,13 @@ export class TasksController {
   @ApiResponse({ status: 201, description: 'Задачу створено' })
   create(@Body() dto: CreateTaskDto, @Req() req: any) {
     return this.tasksService.create(dto, req.user);
+  }
+
+  @Post('group')
+  @Permissions('tasks:write')
+  @ApiOperation({ summary: 'Згрупувати задачі в одну глобальну' })
+  groupTasks(@Body() dto: GroupTasksDto, @Req() req: any) {
+    return this.tasksService.groupTasks(dto.title, dto.taskIds, req.user);
   }
 
   @Put(':id')
