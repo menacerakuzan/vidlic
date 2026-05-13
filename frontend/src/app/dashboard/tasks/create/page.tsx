@@ -188,6 +188,7 @@ export default function CreateTaskPage() {
     }
     if (description.trim()) payload.description = description.trim()
     if (canAssign && assigneeId) payload.assigneeId = assigneeId
+    else if (!canAssign && user?.id) payload.assigneeId = user.id
     if (coAssigneeIds.length > 0) payload.coAssigneeIds = coAssigneeIds
     if (dueDate) payload.dueDate = dueDate
     payload.priority = priority

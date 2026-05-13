@@ -714,18 +714,7 @@ export class TasksService {
   }
 
   private buildLeadershipExcludeFilter() {
-    return {
-      OR: [
-        { isPrivate: true },
-        {
-          AND: [
-            { reportId: null },
-            { assigneeId: null },
-            { reporter: { is: { role: 'specialist' } } },
-          ],
-        },
-      ],
-    };
+    return { isPrivate: true };
   }
 
   private shouldHideFromLeadership(task: any, user: any) {

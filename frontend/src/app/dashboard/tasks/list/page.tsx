@@ -121,7 +121,6 @@ export default function TaskListPage() {
   const [filterDepartmentId, setFilterDepartmentId] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterUrgency, setFilterUrgency] = useState('')
-  const [expandedParentIds, setExpandedParentIds] = useState<Set<string>>(new Set())
   const [editMode, setEditMode] = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const [editDescription, setEditDescription] = useState('')
@@ -208,19 +207,6 @@ export default function TaskListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken])
 
-  // Auto-expand parent tasks that have subtasks assigned to the current user
-  useEffect(() => {
-    if (!user?.id || tasks.length === 0) return
-    const parentIdsToExpand = new Set<string>()
-    tasks.forEach(t => {
-      if (t.parentId && t.assignee?.id === user.id) {
-        parentIdsToExpand.add(t.parentId)
-      }
-    })
-    if (parentIdsToExpand.size > 0) {
-      setExpandedParentIds(prev => new Set([...prev, ...parentIdsToExpand]))
-    }
-  }, [tasks, user?.id])
 
   // No auto-selection — user clicks to open
 
@@ -581,9 +567,7 @@ export default function TaskListPage() {
   const orderedTasks = useMemo(() => {
     return [...tasks]
       .filter((t) => {
-        // subtasks are shown inside parent details, not in main list
-        // exception: subtasks assigned to current user are shown as standalone
-        if (t.parentId && t.assignee?.id !== user?.id) return false
+        if (t.parentId) return false
         if (filterDepartmentId && t.department?.id !== filterDepartmentId) return false
         if (filterStatus && t.status !== filterStatus) return false
         if (filterUrgency && urgencyLevel(t) !== filterUrgency) return false
