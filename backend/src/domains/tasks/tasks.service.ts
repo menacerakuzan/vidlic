@@ -221,10 +221,6 @@ export class TasksService {
     if (dto.assigneeId && !assigningSelf) {
       const assignee = await this.prisma.user.findUnique({ where: { id: dto.assigneeId } });
       if (!assignee) throw new BadRequestException('Виконавця не знайдено');
-      const secondary = Array.isArray(assignee.secondaryDepartmentIds) ? assignee.secondaryDepartmentIds as string[] : [];
-      if (assignee.departmentId !== targetDepartmentId && !secondary.includes(targetDepartmentId)) {
-        throw new BadRequestException('Виконавець має бути з того ж підрозділу');
-      }
       this.assertTaskAssignmentAllowed(user, assignee.role, dto.assigneeId);
     }
 
@@ -271,10 +267,13 @@ export class TasksService {
       if (!assignee) {
         throw new BadRequestException('Виконавця не знайдено');
       }
-      const assigneeSecondary = Array.isArray(assignee.secondaryDepartmentIds) ? assignee.secondaryDepartmentIds as string[] : [];
-      const assigneeBelongs = assignee.departmentId === targetDepartmentId || assigneeSecondary.includes(targetDepartmentId);
-      if (!assigneeBelongs && dto.assigneeId !== user.id) {
-        throw new BadRequestException('Виконавець має бути з того ж підрозділу або бути сумісником у ньому');
+      const canAssignAcrossDepts = ['admin', 'director', 'deputy_head', 'deputy_director'].includes(user.role);
+      if (!canAssignAcrossDepts) {
+        const assigneeSecondary = Array.isArray(assignee.secondaryDepartmentIds) ? assignee.secondaryDepartmentIds as string[] : [];
+        const assigneeBelongs = assignee.departmentId === targetDepartmentId || assigneeSecondary.includes(targetDepartmentId);
+        if (!assigneeBelongs && dto.assigneeId !== user.id) {
+          throw new BadRequestException('Виконавець має бути з того ж підрозділу або бути сумісником у ньому');
+        }
       }
       this.assertTaskAssignmentAllowed(user, assignee.role, dto.assigneeId);
     }
@@ -878,8 +877,7 @@ export class TasksService {
       if (['deputy_director', 'manager', 'specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(assigneeRole)) return;
       throw new ForbiddenException('Відсутнє право визначити цього користувача виконавцем задачі');
     }
-    // specialist/clerk/etc — can only assign to themselves (handled above) or same role
-    if (assigneeRole === actor?.role) return;
-    throw new ForbiddenException('Недостатньо прав для призначення задачі іншому користувачу');
+    // all other roles can assign subtasks to anyone
+    return;
   }
 }
