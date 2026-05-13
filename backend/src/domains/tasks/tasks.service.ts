@@ -15,7 +15,7 @@ export class TasksService {
     const { page = 1, limit = 50, status, departmentId, assigneeId, reporterId, dueDateFrom, dueDateTo } = query;
     const skip = (page - 1) * limit;
 
-    const where: any = { deletedAt: null };
+    const where: any = { deletedAt: null, archivedAt: null };
     const andFilters: any[] = [];
     const visibilityClauses: any[] = [];
 
@@ -100,7 +100,7 @@ export class TasksService {
   }
 
   async getKanban(departmentId: string, user: any) {
-    const where: any = { deletedAt: null };
+    const where: any = { deletedAt: null, archivedAt: null };
     const visibilityClauses: any[] = [];
 
     if (['specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
@@ -229,6 +229,7 @@ export class TasksService {
         title: dto.title,
         description: dto.description,
         status: 'todo',
+        priority: dto.priority ?? 'medium',
         isPrivate: false,
         departmentId: targetDepartmentId,
         assigneeId: dto.assigneeId || null,
@@ -288,6 +289,7 @@ export class TasksService {
         title: dto.title,
         description: dto.description,
         status: 'todo',
+        priority: dto.priority ?? 'medium',
         isPrivate: isPrivateSpecialistTask,
         departmentId: targetDepartmentId,
         assigneeId: dto.assigneeId,
@@ -371,6 +373,7 @@ export class TasksService {
       data: {
         title: dto.title ?? task.title,
         description: dto.description ?? task.description,
+        priority: dto.priority ?? task.priority,
         departmentId: dto.departmentId ?? task.departmentId,
         assigneeId: dto.assigneeId ?? task.assigneeId,
         coAssigneeIds: Array.isArray(dto.coAssigneeIds) ? dto.coAssigneeIds : task.coAssigneeIds,
@@ -533,10 +536,10 @@ export class TasksService {
       );
     }
 
-    const where: any = { NOT: { deletedAt: null } };
-    if (visibilityClauses.length > 0) {
-      where.AND = [{ OR: visibilityClauses }];
-    }
+    const archiveFilter = { OR: [{ NOT: { deletedAt: null } }, { NOT: { archivedAt: null } }] };
+    const where: any = visibilityClauses.length > 0
+      ? { AND: [archiveFilter, { OR: visibilityClauses }] }
+      : archiveFilter;
 
     const tasks = await this.prisma.task.findMany({
       where,
@@ -545,18 +548,23 @@ export class TasksService {
         reporter: { select: { id: true, firstName: true, lastName: true, role: true } },
         department: { select: { id: true, name: true, nameUk: true } },
       },
-      orderBy: { deletedAt: 'desc' },
+      orderBy: { updatedAt: 'desc' },
       take: 200,
     });
 
-    return tasks.map((t: any) => ({ ...this.mapTask(t), deletedAt: t.deletedAt }));
+    return tasks.map((t: any) => ({
+      ...this.mapTask(t),
+      deletedAt: t.deletedAt,
+      archivedAt: t.archivedAt,
+      archiveType: t.deletedAt ? 'deleted' : 'completed',
+    }));
   }
 
   async restoreTask(id: string, user: any) {
     const task = await this.prisma.task.findUnique({ where: { id } });
     if (!task) throw new NotFoundException('Задачу не знайдено');
     if (!(await this.canManageTask(task, user))) throw new ForbiddenException('Немає доступу');
-    await this.prisma.task.update({ where: { id }, data: { deletedAt: null } });
+    await this.prisma.task.update({ where: { id }, data: { deletedAt: null, archivedAt: null } });
     return { success: true };
   }
 
@@ -574,6 +582,7 @@ export class TasksService {
       title: task.title,
       description: task.description,
       status: task.status,
+      priority: task.priority ?? 'medium',
       coAssigneeIds: Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds : [],
       isPrivate: Boolean(task.isPrivate),
       parentId: task.parentId ?? null,

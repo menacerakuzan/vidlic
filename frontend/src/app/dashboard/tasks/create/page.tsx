@@ -62,6 +62,7 @@ export default function CreateTaskPage() {
   const [selectedAssignDepartmentId, setSelectedAssignDepartmentId] = useState('')
   const [overrideDepartmentId, setOverrideDepartmentId] = useState('')
   const [coAssigneeIds, setCoAssigneeIds] = useState<string[]>([])
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium')
   // Subtask form
   const [subtaskMode, setSubtaskMode] = useState(false)
   const [subtaskParentId, setSubtaskParentId] = useState('')
@@ -189,6 +190,7 @@ export default function CreateTaskPage() {
     if (canAssign && assigneeId) payload.assigneeId = assigneeId
     if (coAssigneeIds.length > 0) payload.coAssigneeIds = coAssigneeIds
     if (dueDate) payload.dueDate = dueDate
+    payload.priority = priority
 
     const resp = await fetch('/api/v1/tasks', {
       method: 'POST',
@@ -485,6 +487,16 @@ export default function CreateTaskPage() {
             className="md:col-span-2 min-h-[180px] rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
             placeholder="Опис задачі"
           />
+          <select
+            value={priority}
+            onChange={(e) => setPriority(e.target.value as any)}
+            className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          >
+            <option value="low">🟢 Низький пріоритет</option>
+            <option value="medium">🟡 Середній пріоритет</option>
+            <option value="high">🟠 Високий пріоритет</option>
+            <option value="critical">🔴 Критичний</option>
+          </select>
           <select
             value={selectedAssignDepartmentId}
             onChange={(e) => setSelectedAssignDepartmentId(e.target.value)}

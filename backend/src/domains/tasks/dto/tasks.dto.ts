@@ -1,6 +1,6 @@
 import { IsString, IsOptional, IsEnum, IsDateString, IsUUID, Min, Max, IsNumber, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { TaskStatus } from '@prisma/client';
+import { TaskStatus, TaskPriority } from '@prisma/client';
 import { Type } from 'class-transformer';
 
 export class CreateTaskDto {
@@ -39,6 +39,11 @@ export class CreateTaskDto {
   @IsUUID()
   parentId?: string;
 
+  @ApiPropertyOptional({ enum: TaskPriority, example: 'medium' })
+  @IsOptional()
+  @IsEnum(TaskPriority)
+  priority?: TaskPriority;
+
   @ApiPropertyOptional({ example: '2024-12-31' })
   @IsOptional()
   @IsDateString()
@@ -59,6 +64,11 @@ export class CreateSubtaskDto {
   @IsOptional()
   @IsUUID()
   assigneeId?: string;
+
+  @ApiPropertyOptional({ enum: TaskPriority, example: 'medium' })
+  @IsOptional()
+  @IsEnum(TaskPriority)
+  priority?: TaskPriority;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -92,6 +102,11 @@ export class UpdateTaskDto {
   @IsArray()
   @IsUUID('4', { each: true })
   coAssigneeIds?: string[];
+
+  @ApiPropertyOptional({ enum: TaskPriority, example: 'medium' })
+  @IsOptional()
+  @IsEnum(TaskPriority)
+  priority?: TaskPriority;
 
   @ApiPropertyOptional()
   @IsOptional()

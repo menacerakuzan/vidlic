@@ -11,6 +11,7 @@ type Task = {
   title: string
   description?: string
   status: 'todo' | 'in_progress' | 'done'
+  priority?: 'low' | 'medium' | 'high' | 'critical'
   dueDate?: string
   assignee?: { id: string; firstName: string; lastName: string } | null
   reporter?: { id: string; firstName: string; lastName: string } | null
@@ -134,6 +135,7 @@ export default function TaskListPage() {
   const [loadingSubtasks, setLoadingSubtasks] = useState(false)
   const [subtaskFormOpen, setSubtaskFormOpen] = useState(false)
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
+  const [newSubtaskDescription, setNewSubtaskDescription] = useState('')
   const [newSubtaskAssigneeId, setNewSubtaskAssigneeId] = useState('')
   const [newSubtaskDueDate, setNewSubtaskDueDate] = useState('')
   const [creatingSubtask, setCreatingSubtask] = useState(false)
@@ -141,6 +143,8 @@ export default function TaskListPage() {
   const [loadingComments, setLoadingComments] = useState(false)
   const [newComment, setNewComment] = useState('')
   const [postingComment, setPostingComment] = useState(false)
+  const [coAssigneeSelectId, setCoAssigneeSelectId] = useState('')
+  const [updatingCoAssignees, setUpdatingCoAssignees] = useState(false)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const loadTasks = async () => {
@@ -226,6 +230,7 @@ export default function TaskListPage() {
     setSubtasks([])
     setSubtaskFormOpen(false)
     setNewSubtaskTitle('')
+    setNewSubtaskDescription('')
     setNewSubtaskAssigneeId('')
     setNewSubtaskDueDate('')
     setComments([])
@@ -458,6 +463,40 @@ export default function TaskListPage() {
     setLoadingSubtasks(false)
   }
 
+  const addCoAssignee = async (taskId: string, newId: string) => {
+    if (!accessToken || !newId) return
+    const task = tasks.find(t => t.id === taskId)
+    if (!task) return
+    const current = Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds : []
+    if (current.includes(newId)) return
+    setUpdatingCoAssignees(true)
+    const resp = await fetch(`/api/v1/tasks/${taskId}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ coAssigneeIds: [...current, newId] }),
+    })
+    setUpdatingCoAssignees(false)
+    if (resp.ok) {
+      setCoAssigneeSelectId('')
+      loadTasks()
+    }
+  }
+
+  const removeCoAssignee = async (taskId: string, removeId: string) => {
+    if (!accessToken) return
+    const task = tasks.find(t => t.id === taskId)
+    if (!task) return
+    const current = Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds : []
+    setUpdatingCoAssignees(true)
+    const resp = await fetch(`/api/v1/tasks/${taskId}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ coAssigneeIds: current.filter((id: string) => id !== removeId) }),
+    })
+    setUpdatingCoAssignees(false)
+    if (resp.ok) loadTasks()
+  }
+
   const createSubtask = async (parentId: string) => {
     if (!accessToken || !newSubtaskTitle.trim()) return
     setCreatingSubtask(true)
@@ -466,6 +505,7 @@ export default function TaskListPage() {
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: newSubtaskTitle.trim(),
+        description: newSubtaskDescription.trim() || undefined,
         assigneeId: newSubtaskAssigneeId || undefined,
         dueDate: newSubtaskDueDate || undefined,
       }),
@@ -473,6 +513,7 @@ export default function TaskListPage() {
     setCreatingSubtask(false)
     if (resp.ok) {
       setNewSubtaskTitle('')
+      setNewSubtaskDescription('')
       setNewSubtaskAssigneeId('')
       setNewSubtaskDueDate('')
       setSubtaskFormOpen(false)
@@ -540,6 +581,9 @@ export default function TaskListPage() {
   const orderedTasks = useMemo(() => {
     return [...tasks]
       .filter((t) => {
+        // subtasks are shown inside parent details, not in main list
+        // exception: subtasks assigned to current user are shown as standalone
+        if (t.parentId && t.assignee?.id !== user?.id) return false
         if (filterDepartmentId && t.department?.id !== filterDepartmentId) return false
         if (filterStatus && t.status !== filterStatus) return false
         if (filterUrgency && urgencyLevel(t) !== filterUrgency) return false
@@ -566,6 +610,13 @@ export default function TaskListPage() {
     () => tasks.find((task) => task.id === selectedTaskId) || selectedTaskFull || null,
     [tasks, selectedTaskId, selectedTaskFull],
   )
+
+  const priorityLabel = (p?: Task['priority']) => {
+    if (p === 'low') return { text: 'Низький', cls: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' }
+    if (p === 'high') return { text: 'Високий', cls: 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300' }
+    if (p === 'critical') return { text: 'Критичний', cls: 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' }
+    return { text: 'Середній', cls: 'bg-sky-100 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400' }
+  }
 
   const statusBadge = (status: Task['status']) => {
     if (status === 'todo') return 'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300'
@@ -677,157 +728,58 @@ export default function TaskListPage() {
             <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] min-h-[520px]">
               {/* Sidebar list — tree view */}
               <div className="border-r border-slate-200 dark:border-slate-700 max-h-[70vh] overflow-y-auto">
-                {(() => {
-                  // Build tree: top-level tasks ordered, subtasks grouped under parent
-                  const subtaskMap = new Map<string, Task[]>()
-                  tasks.forEach(t => {
-                    if (t.parentId) {
-                      const arr = subtaskMap.get(t.parentId) || []
-                      arr.push(t)
-                      subtaskMap.set(t.parentId, arr)
-                    }
-                  })
+                {orderedTasks.map((task, idx) => {
+                  const isSelected = selectedTask?.id === task.id
+                  const u = urgencyLevel(task)
+                  const isSubtask = !!task.parentId
+                  const hasChildren = !isSubtask && (task.subtasksCount ?? 0) > 0
 
-                  const topLevelIds = new Set(orderedTasks.filter(t => !t.parentId).map(t => t.id))
-                  // subtasks to show standalone: either parent is not visible OR subtask is directly assigned to current user
-                  const orphanSubtasks = orderedTasks.filter(t =>
-                    t.parentId && (!topLevelIds.has(t.parentId) || t.assignee?.id === user?.id)
-                  )
-                  const orphanSubtaskIds = new Set(orphanSubtasks.map(t => t.id))
-                  const topLevel = orderedTasks.filter(t => !t.parentId)
-
-                  let globalIdx = 0
-                  const renderOrphan = (task: Task) => {
-                    globalIdx++
-                    const idx = globalIdx
-                    const isSelected = selectedTask?.id === task.id
-                    const u = urgencyLevel(task)
-                    return (
-                      <div key={task.id}>
-                        <button
-                          onClick={() => setSelectedTaskId(task.id)}
-                          className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${sidebarBorderClass(task, isSelected)}`}
-                        >
-                          <div className="flex items-start gap-2">
-                            <span className="shrink-0 w-4" />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-start gap-1.5 flex-1 min-w-0">
-                                  <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mt-0.5 shrink-0 w-4 text-right">{idx}</span>
-                                  <div className="flex-1 min-w-0">
+                  return (
+                    <div key={task.id}>
+                      <div className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${sidebarBorderClass(task, isSelected)}`}>
+                        <div className="flex items-start gap-2">
+                          <button
+                            onClick={() => setSelectedTaskId(task.id)}
+                            className="flex-1 min-w-0 text-left"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mt-0.5 shrink-0 w-4 text-right">{idx + 1}</span>
+                                <div className="flex-1 min-w-0">
+                                  {isSubtask && (
                                     <span className="inline-block text-[9px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded mb-0.5">підзадача</span>
-                                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2">{task.title}</p>
-                                  </div>
+                                  )}
+                                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2">{task.title}</p>
                                 </div>
-                                {u !== 'normal' && <UrgencyBadge level={u} />}
                               </div>
-                              <div className="flex items-center gap-1 mt-1 pl-5">
-                                <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusBadge(task.status)}`}>{statusLabel(task.status)}</span>
-                                {task.assignee && <span className="text-[10px] text-slate-400">{task.assignee.firstName} {task.assignee.lastName}</span>}
-                              </div>
+                              {u !== 'normal' && <UrgencyBadge level={u} />}
                             </div>
-                          </div>
-                        </button>
-                      </div>
-                    )
-                  }
-
-                  return [
-                    ...orphanSubtasks.map(renderOrphan),
-                    ...topLevel.map((task) => {
-                    globalIdx++
-                    const idx = globalIdx
-                    const isSelected = selectedTask?.id === task.id
-                    const u = urgencyLevel(task)
-                    const children = subtaskMap.get(task.id) || []
-                    const hasChildren = children.length > 0
-                    const isExpanded = expandedParentIds.has(task.id)
-
-                    return (
-                      <div key={task.id}>
-                        {/* Parent task row */}
-                        <div
-                          className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${sidebarBorderClass(task, isSelected)}`}
-                        >
-                          <div className="flex items-start gap-2">
-                            {/* Expand toggle */}
-                            {hasChildren ? (
-                              <button
-                                onClick={() => setExpandedParentIds(prev => {
-                                  const next = new Set(prev)
-                                  next.has(task.id) ? next.delete(task.id) : next.add(task.id)
-                                  return next
-                                })}
-                                className="shrink-0 mt-0.5 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 text-xs w-4 text-center leading-none"
-                                title={isExpanded ? 'Згорнути' : 'Розгорнути'}
-                              >
-                                {isExpanded ? '▾' : '▸'}
-                              </button>
-                            ) : (
-                              <span className="shrink-0 w-4" />
-                            )}
-                            <button
-                              onClick={() => setSelectedTaskId(task.id)}
-                              className="flex-1 min-w-0 text-left"
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-start gap-1.5 flex-1 min-w-0">
-                                  <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mt-0.5 shrink-0 w-4 text-right">{idx}</span>
-                                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2 flex-1">{task.title}</p>
-                                </div>
-                                {u !== 'normal' && <UrgencyBadge level={u} />}
-                              </div>
+                            <div className="flex items-center gap-1.5 mt-1 pl-5 flex-wrap">
+                              <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusBadge(task.status)}`}>{statusLabel(task.status)}</span>
+                              {task.assignee && <span className="text-[10px] text-slate-400">{task.assignee.firstName} {task.assignee.lastName}</span>}
                               {task.dueDate && u !== 'normal' && (
-                                <p className={`text-xs mt-0.5 pl-5 ${u === 'overdue' ? 'text-rose-600' : u === 'critical' ? 'text-orange-600' : 'text-amber-600'}`}>
-                                  {u === 'overdue' ? 'Прострочено: ' : 'Термін: '}
-                                  {new Date(task.dueDate).toLocaleDateString('uk-UA')}
-                                </p>
+                                <span className={`text-[10px] ${u === 'overdue' ? 'text-rose-600' : u === 'critical' ? 'text-orange-600' : 'text-amber-600'}`}>
+                                  {u === 'overdue' ? '⚠ ' : ''}{new Date(task.dueDate).toLocaleDateString('uk-UA')}
+                                </span>
                               )}
-                              {hasChildren && (
-                                <div className="mt-1.5 pl-5">
-                                  <div className="flex items-center justify-between mb-0.5">
-                                    <span className="text-[9px] text-slate-400">{task.subtasksDone ?? 0}/{task.subtasksCount} підзадач</span>
-                                    <span className="text-[9px] text-slate-400">{Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%</span>
-                                  </div>
-                                  <div className="h-1 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                    <div className="h-full rounded-full bg-emerald-400" style={{ width: `${Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%` }} />
-                                  </div>
+                            </div>
+                            {hasChildren && (
+                              <div className="mt-1.5 pl-5">
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <span className="text-[9px] text-slate-400">{task.subtasksDone ?? 0}/{task.subtasksCount} підзадач</span>
+                                  <span className="text-[9px] text-slate-400">{Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%</span>
                                 </div>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Subtasks — shown when expanded, skip those already shown as standalone orphans */}
-                        {hasChildren && isExpanded && children.filter(sub => !orphanSubtaskIds.has(sub.id)).map((sub) => {
-                          const isSubSelected = selectedTask?.id === sub.id
-                          const su = urgencyLevel(sub)
-                          return (
-                            <button
-                              key={sub.id}
-                              onClick={() => setSelectedTaskId(sub.id)}
-                              className={`w-full text-left pl-10 pr-4 py-2.5 border-b border-slate-100 dark:border-slate-800 transition-colors ${sidebarBorderClass(sub, isSubSelected)}`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-start gap-1.5 flex-1 min-w-0">
-                                  <span className="shrink-0 mt-0.5 text-[9px] text-slate-300 dark:text-slate-600">└</span>
-                                  <div className="flex-1 min-w-0">
-                                    <span className="inline-block rounded bg-amber-100 dark:bg-amber-950/40 px-1 text-[9px] font-semibold text-amber-600 dark:text-amber-400 mb-0.5">підзадача</span>
-                                    <p className="text-xs font-medium text-slate-800 dark:text-slate-200 line-clamp-2">{sub.title}</p>
-                                    {sub.assignee && (
-                                      <p className="text-[10px] text-slate-400 mt-0.5">{sub.assignee.firstName} {sub.assignee.lastName}</p>
-                                    )}
-                                  </div>
+                                <div className="h-1 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                  <div className="h-full rounded-full bg-emerald-400" style={{ width: `${Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%` }} />
                                 </div>
-                                {su !== 'normal' && <UrgencyBadge level={su} />}
                               </div>
-                            </button>
-                          )
-                        })}
+                            )}
+                          </button>
+                        </div>
                       </div>
-                    )
-                  })]
-                })()}
+                    </div>
+                  )
+                })}
               </div>
 
               {/* Detail panel */}
@@ -932,6 +884,12 @@ export default function TaskListPage() {
                               }).join(', ')}
                             </p>
                           )}
+                          <p className="text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                            <span className="font-medium">Пріоритет:</span>
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${priorityLabel(selectedTask.priority).cls}`}>
+                              {priorityLabel(selectedTask.priority).text}
+                            </span>
+                          </p>
                           <p className="text-slate-600 dark:text-slate-300">
                             <span className="font-medium">Підрозділ:</span>{' '}
                             {selectedTask.department?.nameUk || selectedTask.department?.name || 'Без підрозділу'}
@@ -1005,6 +963,41 @@ export default function TaskListPage() {
                           </button>
                         </div>
 
+                        {/* Co-assignees management */}
+                        <div className="pt-1 space-y-1.5">
+                          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">Співвиконавці</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {(selectedTask.coAssigneeIds || []).map(coId => {
+                              const u = users.find(u => u.id === coId)
+                              return u ? (
+                                <span key={coId} className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] text-slate-700 dark:text-slate-300">
+                                  {u.firstName} {u.lastName}
+                                  <button onClick={() => removeCoAssignee(selectedTask.id, coId)} className="text-slate-400 hover:text-rose-500 leading-none">×</button>
+                                </span>
+                              ) : null
+                            })}
+                          </div>
+                          <div className="flex gap-2">
+                            <select
+                              value={coAssigneeSelectId}
+                              onChange={e => setCoAssigneeSelectId(e.target.value)}
+                              className="flex-1 h-7 rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                            >
+                              <option value="">+ Додати співвиконавця</option>
+                              {users.filter(u => u.id !== selectedTask.assignee?.id && !selectedTask.coAssigneeIds?.includes(u.id)).map(u => (
+                                <option key={u.id} value={u.id}>{u.firstName} {u.lastName} · {u.department?.nameUk || u.department?.name || ''}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => addCoAssignee(selectedTask.id, coAssigneeSelectId)}
+                              disabled={!coAssigneeSelectId || updatingCoAssignees}
+                              className="h-7 rounded border border-slate-300 px-3 text-xs text-slate-700 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200"
+                            >
+                              Додати
+                            </button>
+                          </div>
+                        </div>
+
                         {/* Subtasks — only for top-level tasks */}
                         {!selectedTask.parentId && (
                           <div className="pt-2 space-y-2">
@@ -1028,7 +1021,13 @@ export default function TaskListPage() {
                                   value={newSubtaskTitle}
                                   onChange={(e) => setNewSubtaskTitle(e.target.value)}
                                   className="w-full rounded border border-slate-300 px-2 py-1.5 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                                  onKeyDown={(e) => { if (e.key === 'Enter') createSubtask(selectedTask.id) }}
+                                />
+                                <textarea
+                                  placeholder="Опис підзадачі (необов'язково)"
+                                  value={newSubtaskDescription}
+                                  onChange={(e) => setNewSubtaskDescription(e.target.value)}
+                                  rows={2}
+                                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
                                 />
                                 <div className="flex flex-wrap gap-2">
                                   <select

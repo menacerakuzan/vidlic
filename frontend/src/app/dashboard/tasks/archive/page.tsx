@@ -10,7 +10,9 @@ type ArchivedTask = {
   title: string
   description?: string
   status: 'todo' | 'in_progress' | 'done'
-  deletedAt: string
+  deletedAt?: string | null
+  archivedAt?: string | null
+  archiveType: 'deleted' | 'completed'
   assignee?: { id: string; firstName: string; lastName: string } | null
   reporter?: { id: string; firstName: string; lastName: string } | null
   department?: { id: string; name?: string; nameUk?: string } | null
@@ -24,6 +26,7 @@ export default function TaskArchivePage() {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [restoringId, setRestoringId] = useState('')
   const [deletingId, setDeletingId] = useState('')
+  const [activeTab, setActiveTab] = useState<'completed' | 'deleted'>('completed')
 
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
@@ -89,10 +92,14 @@ export default function TaskArchivePage() {
     setToast({ type: 'error', message: extractApiErrorMessage(resp.status, err, 'Не вдалося видалити задачу') })
   }
 
-  const statusLabel = (s: string) => {
-    if (s === 'todo') return 'Нове'
-    if (s === 'in_progress') return 'В роботі'
-    return 'Виконано'
+  const completedTasks = tasks.filter(t => t.archiveType === 'completed')
+  const deletedTasks = tasks.filter(t => t.archiveType === 'deleted')
+  const visibleTasks = activeTab === 'completed' ? completedTasks : deletedTasks
+
+  const tabDate = (task: ArchivedTask) => {
+    const dt = task.archiveType === 'completed' ? task.archivedAt : task.deletedAt
+    if (!dt) return ''
+    return new Date(dt).toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
   return (
@@ -105,6 +112,36 @@ export default function TaskArchivePage() {
           </p>
         </div>
 
+        {/* Tabs */}
+        <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700">
+          <button
+            onClick={() => setActiveTab('completed')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'completed'
+                ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+          >
+            ✅ Виконані ({completedTasks.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('deleted')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'deleted'
+                ? 'border-rose-500 text-rose-700 dark:text-rose-400'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+          >
+            🗑 Видалені ({deletedTasks.length})
+          </button>
+        </div>
+
+        {activeTab === 'completed' && (
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Задачі автоматично переміщуються сюди через 1 день після виконання
+          </p>
+        )}
+
         {error && (
           <div className="rounded-xl border border-rose-200 bg-rose-50 dark:border-rose-800/40 dark:bg-rose-950/20 p-4">
             <p className="text-sm text-rose-700 dark:text-rose-300">{error}</p>
@@ -115,24 +152,27 @@ export default function TaskArchivePage() {
           <p className="text-sm text-slate-500 dark:text-slate-400">Завантаження...</p>
         )}
 
-        {!loading && tasks.length === 0 && !error && (
+        {!loading && visibleTasks.length === 0 && !error && (
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 text-center">
-            <p className="text-sm text-slate-500 dark:text-slate-400">Архів порожній</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {activeTab === 'completed' ? 'Немає виконаних задач в архіві' : 'Немає видалених задач'}
+            </p>
           </div>
         )}
 
         <div className="space-y-2">
-          {tasks.map((task) => (
+          {visibleTasks.map((task) => (
             <div
               key={task.id}
-              className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 flex items-start gap-4"
+              className={`rounded-xl border bg-white dark:bg-slate-800 px-4 py-3 flex items-start gap-4 ${
+                task.archiveType === 'deleted'
+                  ? 'border-rose-200 dark:border-rose-800/40'
+                  : 'border-emerald-200 dark:border-emerald-800/40'
+              }`}
             >
               <div className="flex-1 min-w-0 space-y-0.5">
                 <p className="text-sm font-medium text-slate-800 dark:text-slate-200 line-clamp-2">{task.title}</p>
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                  <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5">
-                    {statusLabel(task.status)}
-                  </span>
                   {task.assignee && (
                     <span>{task.assignee.firstName} {task.assignee.lastName}</span>
                   )}
@@ -140,7 +180,7 @@ export default function TaskArchivePage() {
                     <span>{task.department.nameUk || task.department.name}</span>
                   )}
                   <span className="text-slate-400 dark:text-slate-500">
-                    Видалено: {new Date(task.deletedAt).toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    {task.archiveType === 'completed' ? 'Виконано та заархівовано:' : 'Видалено:'} {tabDate(task)}
                   </span>
                 </div>
               </div>

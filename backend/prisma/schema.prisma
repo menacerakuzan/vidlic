@@ -286,6 +286,7 @@ model Task {
   completedAt  DateTime?
   startedAt    DateTime?
   deletedAt    DateTime?
+  archivedAt   DateTime?
 
   department   Department?  @relation(fields: [departmentId], references: [id])
   assignee     User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
