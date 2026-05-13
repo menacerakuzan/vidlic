@@ -53,6 +53,7 @@ enum NotificationType {
   report_approved
   report_rejected
   task_assigned
+  task_updated
   task_overdue
   task_completed
   reminder

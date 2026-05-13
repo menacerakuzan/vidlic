@@ -3,7 +3,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../shared/prisma.service';
 import { NotificationsService } from './notifications.service';
 import { ReportApprovedEvent, ReportCreatedEvent, ReportRejectedEvent, ReportSubmittedEvent } from '../../events/report.events';
-import { TaskCompletedEvent, TaskCreatedEvent, TaskUpdatedEvent } from '../../events/task.events';
+import { TaskCompletedEvent, TaskCreatedEvent, TaskUpdatedEvent, TaskStatusChangedEvent, TaskCommentEvent } from '../../events/task.events';
 
 @Injectable()
 export class NotificationsListener {
@@ -187,5 +187,66 @@ export class NotificationsListener {
       referenceType: 'task',
       referenceId: task.id,
     });
+  }
+
+  @OnEvent('task.status_changed')
+  async handleTaskStatusChanged(event: TaskStatusChangedEvent) {
+    const task = await this.prisma.task.findUnique({ where: { id: event.taskId } });
+    if (!task) return;
+
+    const statusLabel: Record<string, string> = {
+      todo: 'Нове',
+      in_progress: 'В роботі',
+      done: 'Виконано',
+    };
+    const label = statusLabel[event.newStatus] ?? event.newStatus;
+
+    const recipients = new Set<string>();
+    if (task.assigneeId && task.assigneeId !== event.actorId) recipients.add(task.assigneeId);
+    if (task.reporterId && task.reporterId !== event.actorId) recipients.add(task.reporterId);
+    const coIds = Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds as string[] : [];
+    for (const coId of coIds) {
+      if (coId && coId !== event.actorId) recipients.add(coId);
+    }
+
+    for (const userId of recipients) {
+      await this.notifications.create({
+        userId,
+        type: 'task_updated',
+        title: 'Статус задачі змінено',
+        message: `Задача "${task.title}": статус змінено на "${label}"`,
+        referenceType: 'task',
+        referenceId: task.id,
+      });
+    }
+  }
+
+  @OnEvent('task.comment_added')
+  async handleTaskCommentAdded(event: TaskCommentEvent) {
+    const task = await this.prisma.task.findUnique({ where: { id: event.taskId } });
+    if (!task) return;
+
+    const recipients = new Set<string>();
+    if (task.assigneeId && task.assigneeId !== event.actorId) recipients.add(task.assigneeId);
+    if (task.reporterId && task.reporterId !== event.actorId) recipients.add(task.reporterId);
+    const coIds = Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds as string[] : [];
+    for (const coId of coIds) {
+      if (coId && coId !== event.actorId) recipients.add(coId);
+    }
+
+    const preview = event.commentContent.length > 60
+      ? event.commentContent.slice(0, 60) + '...'
+      : event.commentContent;
+
+    for (const userId of recipients) {
+      await this.notifications.create({
+        userId,
+        type: 'task_updated',
+        title: 'Новий коментар до задачі',
+        message: `Задача "${task.title}": ${preview}`,
+        referenceType: 'task',
+        referenceId: task.id,
+      });
+    }
   }
 }

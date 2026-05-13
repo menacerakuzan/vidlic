@@ -615,6 +615,9 @@ export default function TaskListPage() {
   }
 
   const sidebarBorderClass = (task: Task, isSelected: boolean) => {
+    if (task.status === 'done') return isSelected
+      ? 'bg-emerald-50 dark:bg-emerald-950/30 border-l-4 border-l-emerald-500'
+      : 'border-l-4 border-l-emerald-300 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/20'
     const u = urgencyLevel(task)
     if (u === 'overdue') return isSelected ? 'bg-rose-50 dark:bg-rose-950/30 border-l-4 border-l-rose-500' : 'border-l-4 border-l-rose-400 hover:bg-rose-50/50 dark:hover:bg-rose-950/20'
     if (u === 'critical') return isSelected ? 'bg-orange-50 dark:bg-orange-950/20 border-l-4 border-l-orange-500' : 'border-l-4 border-l-orange-400 hover:bg-orange-50/50 dark:hover:bg-orange-950/20'
@@ -733,7 +736,7 @@ export default function TaskListPage() {
                                   {isSubtask && (
                                     <span className="inline-block text-[9px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded mb-0.5">підзадача</span>
                                   )}
-                                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2">{task.title}</p>
+                                  <p className={`text-sm font-medium line-clamp-2 ${task.status === 'done' ? 'text-emerald-700 dark:text-emerald-400 line-through opacity-70' : 'text-slate-900 dark:text-slate-100'}`}>{task.title}</p>
                                 </div>
                               </div>
                               {u !== 'normal' && <UrgencyBadge level={u} />}

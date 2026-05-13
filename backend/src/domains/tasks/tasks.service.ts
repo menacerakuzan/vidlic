@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../shared/prisma.service';
 import { CreateTaskDto, UpdateTaskDto, TaskQueryDto, UpdateTaskStatusDto, CreateTaskCommentDto } from './dto/tasks.dto';
-import { TaskCompletedEvent, TaskCreatedEvent, TaskUpdatedEvent } from '../../events/task.events';
+import { TaskCompletedEvent, TaskCreatedEvent, TaskUpdatedEvent, TaskStatusChangedEvent, TaskCommentEvent } from '../../events/task.events';
 
 @Injectable()
 export class TasksService {
@@ -452,6 +452,7 @@ export class TasksService {
     } else {
       this.eventEmitter.emit('task.updated', new TaskUpdatedEvent(id, user.id, task.assigneeId));
     }
+    this.eventEmitter.emit('task.status_changed', new TaskStatusChangedEvent(id, user.id, dto.status));
 
     return this.mapTask(updated);
   }
@@ -506,7 +507,7 @@ export class TasksService {
       },
     });
 
-    this.eventEmitter.emit('task.comment', { taskId: id, userId, commentId: comment.id });
+    this.eventEmitter.emit('task.comment_added', new TaskCommentEvent(id, userId, dto.content));
 
     return {
       id: comment.id,
