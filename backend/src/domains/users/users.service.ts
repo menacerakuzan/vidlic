@@ -63,6 +63,15 @@ export class UsersService {
     };
   }
 
+  async findAllAssignees(actor: any) {
+    const users = await this.prisma.user.findMany({
+      where: { isActive: true },
+      select: { id: true, firstName: true, lastName: true, role: true, departmentId: true, department: { select: { id: true, name: true, nameUk: true } } },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+    });
+    return users;
+  }
+
   async findById(id: string, actor: any) {
     const user = await this.prisma.user.findUnique({
       where: { id },

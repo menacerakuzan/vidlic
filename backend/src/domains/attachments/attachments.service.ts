@@ -1,13 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { AttachmentEntityType } from '@prisma/client';
-import { randomUUID } from 'crypto';
-import { promises as fs } from 'fs';
-import * as path from 'path';
 import { PrismaService } from '../../shared/prisma.service';
 
 @Injectable()
 export class AttachmentsService {
-  private readonly logger = new Logger(AttachmentsService.name)
   constructor(private prisma: PrismaService) {}
 
   async create(
@@ -33,12 +29,6 @@ export class AttachmentsService {
       throw new BadRequestException('Файл перевищує 50MB');
     }
 
-    const storageRoot = path.join(process.cwd(), 'storage', 'attachments', dto.entityType, entity.id);
-    await fs.mkdir(storageRoot, { recursive: true });
-    const fileId = randomUUID();
-    const filePath = path.join(storageRoot, `${fileId}_${safeName}`);
-    await fs.writeFile(filePath, buffer);
-
     const created = await this.prisma.attachment.create({
       data: {
         entityType: dto.entityType,
@@ -47,8 +37,9 @@ export class AttachmentsService {
         uploaderId: user.id,
         fileName: safeName,
         mimeType: dto.mimeType || 'application/octet-stream',
-        filePath,
+        filePath: '',
         fileSize: buffer.length,
+        fileData: buffer,
       },
     });
 
@@ -67,8 +58,6 @@ export class AttachmentsService {
     return items.map((item) => ({
       ...this.map(item),
       uploader: item.uploader ? `${item.uploader.firstName} ${item.uploader.lastName}` : '',
-      _debugPath: item.filePath,
-      _debugCwd: process.cwd(),
     }));
   }
 
@@ -76,12 +65,6 @@ export class AttachmentsService {
     const item = await this.prisma.attachment.findUnique({ where: { id } });
     if (!item) throw new NotFoundException('Вкладення не знайдено');
     await this.ensureAccess(item.entityType, item.reportId || undefined, item.taskId || undefined, user, 'write');
-
-    try {
-      await fs.unlink(item.filePath);
-    } catch {
-      // ignore fs deletion errors
-    }
     await this.prisma.attachment.delete({ where: { id } });
     return { success: true };
   }
@@ -91,26 +74,11 @@ export class AttachmentsService {
     if (!item) throw new NotFoundException('Вкладення не знайдено');
     await this.ensureAccess(item.entityType, item.reportId || undefined, item.taskId || undefined, user, 'read');
 
-    try {
-      const buffer = await fs.readFile(item.filePath);
-      return { meta: this.map(item), buffer };
-    } catch (err) {
-      this.logger.error(`File not found on disk. DB path: "${item.filePath}", cwd: "${process.cwd()}"`)
-      // try relative fallback: strip old cwd prefix and resolve from current cwd
-      const storageIdx = item.filePath.indexOf('storage/attachments')
-      if (storageIdx !== -1) {
-        const relativePath = item.filePath.slice(storageIdx)
-        const fallbackPath = path.join(process.cwd(), relativePath)
-        try {
-          const buffer = await fs.readFile(fallbackPath)
-          this.logger.warn(`Fallback path worked: "${fallbackPath}" — consider updating filePath in DB`)
-          return { meta: this.map(item), buffer }
-        } catch {
-          this.logger.error(`Fallback also failed: "${fallbackPath}"`)
-        }
-      }
-      throw new NotFoundException('Файл не знайдено на диску')
+    if (item.fileData) {
+      return { meta: this.map(item), buffer: item.fileData };
     }
+
+    throw new NotFoundException('Файл не знайдено');
   }
 
   private async ensureAccess(

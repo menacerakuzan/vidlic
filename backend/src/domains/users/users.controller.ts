@@ -21,6 +21,12 @@ export class UsersController {
     return this.usersService.findAll(query, req.user);
   }
 
+  @Get('assignees')
+  @ApiOperation({ summary: 'Всі активні користувачі для вибору виконавця підзадачі' })
+  findAssignees(@Req() req: any) {
+    return this.usersService.findAllAssignees(req.user);
+  }
+
   @Get(':id')
   @Permissions('users:read')
   @ApiOperation({ summary: 'Отримати користувача за ID' })

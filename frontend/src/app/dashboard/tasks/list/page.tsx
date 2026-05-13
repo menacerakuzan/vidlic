@@ -181,12 +181,12 @@ export default function TaskListPage() {
 
   const loadUsers = async () => {
     if (!accessToken) return
-    const resp = await fetch('/api/v1/users?limit=100', {
+    const resp = await fetch('/api/v1/users/assignees', {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
     if (!resp.ok) return
     const data = await resp.json()
-    const list = Array.isArray(data?.data) ? data.data : []
+    const list = Array.isArray(data) ? data : []
     setUsers(list)
   }
 

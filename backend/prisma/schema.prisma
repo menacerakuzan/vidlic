@@ -315,6 +315,7 @@ model Attachment {
   mimeType    String
   filePath    String
   fileSize    Int
+  fileData    Bytes?
   createdAt   DateTime             @default(now())
 
   report      Report?              @relation(fields: [reportId], references: [id], onDelete: Cascade)
