@@ -754,6 +754,17 @@ export class TasksService {
     if (user.role === 'admin') return true;
     const coIds = Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds as string[] : [];
     if (task.assigneeId === user.id || task.reporterId === user.id || coIds.includes(user.id)) return true;
+    // спеціаліст може бачити батьківську задачу якщо він виконавець підзадачі
+    if (task.id) {
+      const hasSubtask = await this.prisma.task.findFirst({
+        where: {
+          parentId: task.id,
+          OR: [{ assigneeId: user.id }, { reporterId: user.id }, { coAssigneeIds: { array_contains: user.id } }],
+        },
+        select: { id: true },
+      });
+      if (hasSubtask) return true;
+    }
     if (this.shouldHideFromLeadership(task, user)) return false;
     if (user.role === 'director' || user.role === 'manager' || user.role === 'deputy_head') {
       const scoped = await this.resolveScopedDepartmentIdsForUser(user);
