@@ -14,7 +14,7 @@ export interface CreateNotificationDto {
 
 @Injectable()
 export class NotificationsService {
-  private streamEmitter = new EventEmitter();
+  private streamEmitter = new EventEmitter().setMaxListeners(0);
 
   constructor(private prisma: PrismaService) {}
 
