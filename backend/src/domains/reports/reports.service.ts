@@ -2132,13 +2132,15 @@ export class ReportsService {
 
   private async ensureCanAccessActivitiesPlan(report: any, user: any) {
     if (user?.role === 'admin' || user?.role === 'deputy_head') return;
-    const scopedDepartmentIds = ['director', 'deputy_director', 'manager']
-      .includes(user?.role)
-      ? await this.resolveScopedDepartmentIdsForUser(user)
-      : await this.resolveDepartmentScopeIds(user?.departmentId);
-    if (!scopedDepartmentIds.includes(report.departmentId)) {
-      throw new ForbiddenException('Немає доступу до цього плану заходів');
+    // Always resolve full root+children scope so managers in sub-departments can access root-level plans
+    const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user?.departmentId);
+    if (scopedDepartmentIds.includes(report.departmentId)) return;
+    // For director/deputy_director also check their broader scope
+    if (['director', 'deputy_director'].includes(user?.role)) {
+      const broader = await this.resolveScopedDepartmentIdsForUser(user);
+      if (broader.includes(report.departmentId)) return;
     }
+    throw new ForbiddenException('Немає доступу до цього плану заходів');
   }
 
   private assertActivitiesEditor(user: any) {
