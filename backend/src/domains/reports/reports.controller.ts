@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Req, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Put, Delete, Body, Param, Query, UseGuards, Req, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
 import {
@@ -162,6 +162,13 @@ export class ReportsController {
   @ApiOperation({ summary: 'Привʼязати Google Sheets документ до плану заходів' })
   setActivitiesGoogleSheet(@Param('id') id: string, @Body() dto: UpdateActivitiesGoogleSheetDto, @Req() req: any) {
     return this.reportsService.setActivitiesGoogleSheet(id, dto, req.user);
+  }
+
+  @Patch('activities/plan/:id/title')
+  @Permissions('reports:write')
+  @ApiOperation({ summary: 'Перейменувати план заходів' })
+  renameActivitiesPlan(@Param('id') id: string, @Body() body: { title: string }, @Req() req: any) {
+    return this.reportsService.renameActivitiesPlan(id, body.title, req.user);
   }
 
   @Get(':id')

@@ -48,6 +48,10 @@ function currentWeek() {
   return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`
 }
 
+function displayTitle(title: string) {
+  return title.replace(/^\[ACTIVITY_PLAN\]\s*/, '')
+}
+
 function toLocalDateTimeInput(value?: string | null) {
   if (!value) return ''
   const date = new Date(value)
@@ -73,10 +77,13 @@ export default function ActivitiesPage() {
   const [plans, setPlans] = useState<ActivityPlanResponse[]>([])
   const [googleSheetUrl, setGoogleSheetUrl] = useState('')
   const [entryDeadlineAt, setEntryDeadlineAt] = useState('')
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [draftTitle, setDraftTitle] = useState('')
+  const [savingTitle, setSavingTitle] = useState(false)
 
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
   const canWork = useMemo(() => !!accessToken && isAuthenticated, [accessToken, isAuthenticated])
-  const canManageSheet = useMemo(() => ['admin', 'director', 'clerk'].includes(user?.role || ''), [user?.role])
+  const canManageSheet = useMemo(() => ['admin', 'director', 'clerk', 'specialist'].includes(user?.role || ''), [user?.role])
 
   const loadPlansList = async () => {
     if (!canWork) return
@@ -105,6 +112,8 @@ export default function ActivitiesPage() {
     setPlan(data)
     setGoogleSheetUrl(data.googleSheetUrl || '')
     setEntryDeadlineAt(toLocalDateTimeInput(data.entryDeadlineAt || null))
+    setDraftTitle(displayTitle(data.title))
+    setEditingTitle(false)
     setLoading(false)
   }
 
@@ -126,6 +135,8 @@ export default function ActivitiesPage() {
     setPlan(data)
     setGoogleSheetUrl(data.googleSheetUrl || '')
     setEntryDeadlineAt(toLocalDateTimeInput(data.entryDeadlineAt || null))
+    setDraftTitle(displayTitle(data.title))
+    setEditingTitle(false)
     if (typeof window !== 'undefined') {
       const url = `/dashboard/activities?planId=${encodeURIComponent(data.reportId)}`
       window.history.replaceState(null, '', url)
@@ -199,6 +210,31 @@ export default function ActivitiesPage() {
     setDeleting(false)
   }
 
+  const savePlanTitle = async () => {
+    if (!plan?.reportId || !accessToken || savingTitle) return
+    const trimmed = draftTitle.trim()
+    if (!trimmed) return
+    setSavingTitle(true)
+    setError('')
+    const resp = await fetch(`/api/v1/reports/activities/plan/${plan.reportId}/title`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: trimmed }),
+    })
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => null)
+      setError(data?.message || 'Не вдалося зберегти назву')
+      setSavingTitle(false)
+      return
+    }
+    const data = (await resp.json()) as ActivityPlanResponse
+    setPlan(data)
+    setDraftTitle(displayTitle(data.title))
+    setEditingTitle(false)
+    setSavingTitle(false)
+    await loadPlansList()
+  }
+
   useEffect(() => {
     loadPlansList()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -224,7 +260,7 @@ export default function ActivitiesPage() {
 
   return (
     <DashboardLayout>
-      <div className="mx-auto max-w-7xl space-y-6">
+      <div className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="font-display text-2xl font-semibold">Заходи</h1>
@@ -281,7 +317,7 @@ export default function ActivitiesPage() {
           </div>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
+        <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
           <aside className="rounded-2xl border border-slate-200 bg-white p-3">
             <div className="mb-2 text-sm font-semibold text-slate-700">Документи</div>
             <div className="space-y-2">
@@ -298,8 +334,8 @@ export default function ActivitiesPage() {
                         : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                     }`}
                   >
-                    <div className="font-medium">{item.periodType === 'weekly' ? 'Тиждень' : 'Місяць'}: {item.period}</div>
-                    <div className="mt-1 text-xs text-slate-500">{item.googleSheetUrl ? 'Google Docs/Sheets підключено' : 'Google Docs/Sheets не підключено'}</div>
+                    <div className="font-medium truncate">{displayTitle(item.title)}</div>
+                    <div className="mt-1 text-xs text-slate-500">{item.period} · {item.googleSheetUrl ? 'Google підключено' : 'Google не підключено'}</div>
                   </button>
                 )
               })}
@@ -328,24 +364,78 @@ export default function ActivitiesPage() {
               <>
                 <div className="rounded-xl border border-slate-200 bg-white p-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="mb-1 text-sm font-semibold text-slate-800">
-                        {plan.periodType === 'weekly' ? 'Тижневий' : 'Місячний'} документ: {plan.period}
-                      </div>
+                    <div className="min-w-0 flex-1">
+                      {editingTitle && canManageSheet ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            value={draftTitle}
+                            onChange={(e) => setDraftTitle(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') savePlanTitle(); if (e.key === 'Escape') { setEditingTitle(false); setDraftTitle(displayTitle(plan.title)) } }}
+                            className="h-8 flex-1 rounded-md border border-primary px-2 text-sm text-slate-900 focus:outline-none"
+                            maxLength={200}
+                            autoFocus
+                          />
+                          <button type="button" onClick={savePlanTitle} disabled={savingTitle} className="h-8 rounded-md bg-primary px-3 text-xs text-white disabled:opacity-60">
+                            {savingTitle ? '...' : 'Зберегти'}
+                          </button>
+                          <button type="button" onClick={() => { setEditingTitle(false); setDraftTitle(displayTitle(plan.title)) }} className="h-8 rounded-md border border-slate-300 px-3 text-xs text-slate-600">
+                            Скасувати
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="mb-1 flex items-center gap-2">
+                          <span className="text-sm font-semibold text-slate-800">{displayTitle(plan.title)}</span>
+                          {canManageSheet && (
+                            <button
+                              type="button"
+                              onClick={() => { setDraftTitle(displayTitle(plan.title)); setEditingTitle(true) }}
+                              className="text-slate-400 hover:text-slate-600"
+                              title="Перейменувати"
+                            >
+                              ✎
+                            </button>
+                          )}
+                        </div>
+                      )}
                       <div className="text-xs text-slate-500">
                         {plan.department?.nameUk || 'Підрозділ'}
                       </div>
                     </div>
-                    {canManageSheet && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {plan.googleSheetUrl && (
+                        <a
+                          href={plan.googleSheetUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-sm text-white"
+                        >
+                          Відкрити таблицю ↗
+                        </a>
+                      )}
                       <button
                         type="button"
-                        onClick={deletePlan}
-                        disabled={deleting}
-                        className="h-9 rounded-lg border border-rose-300 px-3 text-sm text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => {
+                          const url = `${window.location.origin}/dashboard/activities?planId=${plan.reportId}`
+                          navigator.clipboard.writeText(url).then(() => {
+                            setError('')
+                          }).catch(() => {})
+                        }}
+                        className="h-9 rounded-lg border border-slate-300 px-3 text-sm text-slate-700 dark:border-slate-600 dark:text-slate-200"
+                        title="Скопіювати посилання на цей план"
                       >
-                        {deleting ? 'Видалення...' : 'Видалити документ'}
+                        Копіювати посилання
                       </button>
-                    )}
+                      {canManageSheet && (
+                        <button
+                          type="button"
+                          onClick={deletePlan}
+                          disabled={deleting}
+                          className="h-9 rounded-lg border border-rose-300 px-3 text-sm text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {deleting ? 'Видалення...' : 'Видалити документ'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -418,7 +508,7 @@ export default function ActivitiesPage() {
                     <iframe
                       title="Google Sheets document"
                       src={plan.googleSheetEmbedUrl}
-                      className="h-[760px] w-full rounded-lg border border-slate-200"
+                      className="h-[calc(100vh-180px)] min-h-[600px] w-full rounded-lg border border-slate-200"
                     />
                   </div>
                 )}

@@ -93,6 +93,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [isDark, setIsDark] = useState(false)
   const [logoClickCount, setLogoClickCount] = useState(0)
+  const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>('large')
   const prevUnreadCount = useRef<number | null>(null)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
@@ -224,6 +225,24 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     setIsDark(isDarkNow)
   }, [])
 
+  useEffect(() => {
+    const saved = localStorage.getItem('vidlik-font-size') as 'normal' | 'large' | 'xlarge' | null
+    if (saved) setFontSize(saved)
+  }, [])
+
+  useEffect(() => {
+    const root = document.documentElement
+    root.removeAttribute('data-font-size')
+    if (fontSize !== 'normal') root.setAttribute('data-font-size', fontSize)
+    localStorage.setItem('vidlik-font-size', fontSize)
+  }, [fontSize])
+
+  const cycleFontSize = () => {
+    setFontSize(prev => prev === 'normal' ? 'large' : prev === 'large' ? 'xlarge' : 'normal')
+  }
+
+  const fontSizeLabel = fontSize === 'normal' ? 'A' : fontSize === 'large' ? 'A+' : 'A++'
+
   const filteredGroups = navGroups
     .map(group => ({
       ...group,
@@ -282,7 +301,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             <div className="fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-800 shadow-xl">
               <div className="flex items-center justify-between p-4 border-b">
                 <span className="inline-flex items-center gap-3 text-2xl font-semibold tracking-wide cursor-pointer select-none" onClick={handleLogoClick}>
-                  <BrandLogo className="h-8 w-8 text-primary" />
+                  <BrandLogo className="h-10 w-10 text-primary" />
                   ВІДЛІК
                 </span>
                 <button onClick={() => setSidebarOpen(false)}>
@@ -328,7 +347,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col flex-1 min-h-0 bg-white/80 dark:bg-slate-900/70 backdrop-blur-xl border-r border-white/10">
           <div className="flex items-center h-16 px-6 border-b border-white/10">
             <span className="inline-flex items-center gap-3 text-2xl font-semibold font-display tracking-wide cursor-pointer select-none" onClick={handleLogoClick}>
-              <BrandLogo className="h-8 w-8 text-primary" />
+              <BrandLogo className="h-10 w-10 text-primary" />
               ВІДЛІК
             </span>
           </div>
@@ -458,6 +477,13 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={cycleFontSize}
+              title="Розмір шрифту"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
+            >
+              {fontSizeLabel}
+            </button>
             <Button variant="ghost" size="icon" onClick={toggleTheme} title="Перемкнути тему">
               {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </Button>

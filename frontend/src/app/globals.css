@@ -120,3 +120,11 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.3);
 }
+
+/* Font size levels */
+html[data-font-size="large"] {
+  font-size: 17px;
+}
+html[data-font-size="xlarge"] {
+  font-size: 19px;
+}

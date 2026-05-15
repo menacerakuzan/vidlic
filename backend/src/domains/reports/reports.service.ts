@@ -2098,6 +2098,38 @@ export class ReportsService {
     return this.mapActivitiesPlan(updated);
   }
 
+  async renameActivitiesPlan(reportId: string, title: string, user: any) {
+    const report = await this.prisma.report.findUnique({
+      where: { id: reportId },
+      include: { department: { select: { id: true, nameUk: true, name: true } } },
+    });
+    if (!report) throw new NotFoundException('План заходів не знайдено');
+    await this.ensureCanAccessActivitiesPlan(report, user);
+    this.assertCanManageActivitiesLock(user);
+
+    const trimmed = (title || '').trim().slice(0, 200);
+    if (!trimmed) throw new BadRequestException('Назва не може бути порожньою');
+
+    const content = this.ensureObject(report.content);
+    const plan = this.ensureObject(content.activityPlan);
+    const activityLog = this.appendActivitiesLog(
+      plan,
+      this.makeActivitiesLogEntry(user, 'plan_renamed', `Перейменовано план: "${trimmed}"`),
+    );
+
+    const updated = await this.prisma.report.update({
+      where: { id: reportId },
+      data: {
+        title: trimmed,
+        content: { ...content, activityPlan: { ...plan, activityLog } },
+        version: report.version + 1,
+      },
+      include: { department: { select: { id: true, nameUk: true, name: true } } },
+    });
+
+    return this.mapActivitiesPlan(updated);
+  }
+
   private async ensureCanAccessActivitiesPlan(report: any, user: any) {
     if (user?.role === 'admin' || user?.role === 'deputy_head') return;
     const scopedDepartmentIds = ['director', 'deputy_director', 'manager']
@@ -2117,13 +2149,13 @@ export class ReportsService {
 
   private assertCanManageActivitiesLock(user: any) {
     if (!user) throw new ForbiddenException('Немає доступу');
-    if (['admin', 'director', 'clerk'].includes(user.role)) return;
-    throw new ForbiddenException('Лише діловод/директор можуть завершувати або відкривати документ');
+    if (['admin', 'director', 'clerk', 'specialist'].includes(user.role)) return;
+    throw new ForbiddenException('Немає доступу до керування документом плану заходів');
   }
 
   private assertCanEditActivitiesRow(row: any, user: any) {
     if (!row) return;
-    if (['admin', 'director', 'clerk'].includes(user?.role)) return;
+    if (['admin', 'director', 'clerk', 'specialist'].includes(user?.role)) return;
     if (user?.role === 'manager') return;
     if (row.createdById && row.createdById === user?.id) return;
     throw new ForbiddenException('Можна редагувати лише власні рядки');

@@ -654,7 +654,7 @@ export default function TaskListPage() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="space-y-4">
         <AnimatePresence>
           {actionToast && (
             <motion.div
@@ -672,11 +672,6 @@ export default function TaskListPage() {
             </motion.div>
           )}
         </AnimatePresence>
-
-        <div>
-          <h1 className="text-2xl font-semibold font-display">Список задач</h1>
-          <p className="text-slate-500 mt-1">Усі задачі у вигляді списку</p>
-        </div>
 
         {/* Filters */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
