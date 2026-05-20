@@ -310,6 +310,8 @@ export default function ReportDetailsPage() {
       return report.status === 'pending_clerk' && report.currentApprover?.id === user.id
     }
     if (user.role === 'director' || user.role === 'deputy_director') {
+      // deputy_director may also be a department manager — allow approving pending_manager reports they are assigned to
+      if (report.status === 'pending_manager' && report.currentApprover?.id === user.id) return true
       return report.status === 'pending_director' && report.currentApprover?.id === user.id
     }
     return false

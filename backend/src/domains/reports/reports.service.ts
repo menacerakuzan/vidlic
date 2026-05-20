@@ -592,8 +592,14 @@ export class ReportsService {
       throw new BadRequestException('Звіт не очікує узгодження діловода');
     }
 
-    if ((user.role === 'director' || user.role === 'deputy_director') && report.status !== 'pending_director') {
-      throw new BadRequestException('Звіт не очікує фінального погодження');
+    // deputy_director may also serve as a department manager (managerId on dept).
+    // Allow them to approve pending_manager reports they are assigned to, as well as pending_director.
+    if (user.role === 'director' || user.role === 'deputy_director') {
+      const isManagerApproval = report.status === 'pending_manager' && report.currentApproverId === user.id;
+      const isDirectorApproval = report.status === 'pending_director';
+      if (!isManagerApproval && !isDirectorApproval) {
+        throw new BadRequestException('Звіт не очікує фінального погодження');
+      }
     }
 
     const routing = await this.getApprovalRoutingContext(report.departmentId);
@@ -617,7 +623,8 @@ export class ReportsService {
       if (!scopedDepartmentIds.includes(report.departmentId)) {
         throw new ForbiddenException('Немає доступу до цього звіту');
       }
-      if (!report.currentApproverId && routing.directorId !== user.id) {
+      // For pending_director: also verify they are the configured director approver
+      if (report.status === 'pending_director' && !report.currentApproverId && routing.directorId !== user.id) {
         throw new ForbiddenException('Ви не є погоджувачем цього звіту');
       }
     }
@@ -633,9 +640,13 @@ export class ReportsService {
     });
 
     // Specialist reports must stop at manager approval and must not continue further.
+    // deputy_director may act as department manager, so also stop here when they approve pending_manager.
+    const actingAsManager =
+      (user.role === 'manager') ||
+      ((user.role === 'deputy_director') && report.status === 'pending_manager');
     const forceSpecialistFinalApproval =
       report.author?.role === 'specialist' &&
-      (user.role === 'manager' || user.role === 'clerk');
+      (actingAsManager || user.role === 'clerk');
     // Manager aggregate reports must stop at clerk approval; clerk prepares their own aggregate report for director.
     const forceManagerAggregateFinalApproval =
       report.author?.role === 'manager' &&
