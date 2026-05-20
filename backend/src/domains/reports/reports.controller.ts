@@ -236,6 +236,14 @@ export class ReportsController {
     return this.reportsService.reject(id, dto, req.user);
   }
 
+  @Patch(':id/reassign-approver')
+  @Permissions('reports:approve')
+  @ApiOperation({ summary: 'Переназначити поточного погоджувача (тільки адмін)' })
+  @ApiResponse({ status: 200, description: 'Погоджувача змінено' })
+  reassignApprover(@Param('id') id: string, @Body() body: { approverId: string }, @Req() req: any) {
+    return this.reportsService.reassignApprover(id, body.approverId, req.user);
+  }
+
   @Delete(':id')
   @Permissions('reports:write')
   @ApiOperation({ summary: 'Видалити звіт' })

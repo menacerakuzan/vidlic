@@ -751,6 +751,53 @@ export class ReportsService {
     return this.mapReport(updated);
   }
 
+  async reassignApprover(id: string, newApproverId: string, user: any) {
+    if (user.role !== 'admin') {
+      throw new ForbiddenException('Тільки адміністратор може переназначати погоджувача');
+    }
+
+    const report = await this.prisma.report.findUnique({
+      where: { id },
+      include: { author: true, department: true, currentApprover: true },
+    });
+
+    if (!report) throw new NotFoundException('Звіт не знайдено');
+
+    if (!['pending_manager', 'pending_clerk', 'pending_director'].includes(report.status)) {
+      throw new BadRequestException('Звіт не перебуває в стані погодження');
+    }
+
+    const newApprover = await this.prisma.user.findUnique({
+      where: { id: newApproverId },
+      select: { id: true, firstName: true, lastName: true, role: true, isActive: true },
+    });
+
+    if (!newApprover || !newApprover.isActive) {
+      throw new BadRequestException('Вказаного користувача не знайдено або він неактивний');
+    }
+
+    const oldApproverName = report.currentApprover
+      ? `${report.currentApprover.firstName} ${report.currentApprover.lastName}`.trim()
+      : 'невизначено';
+    const newApproverName = `${newApprover.firstName} ${newApprover.lastName}`.trim();
+
+    const updated = await this.prisma.report.update({
+      where: { id },
+      data: { currentApproverId: newApproverId },
+      include: { author: true, department: true, currentApprover: true },
+    });
+
+    await this.createStatusHistory(
+      id,
+      report.status as any,
+      report.status as any,
+      user.id,
+      `Погоджувача змінено: ${oldApproverName} → ${newApproverName}`,
+    );
+
+    return this.mapReport(updated);
+  }
+
   async getHistory(id: string, user: any) {
     const report = await this.prisma.report.findUnique({
       where: { id },

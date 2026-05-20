@@ -48,6 +48,10 @@ export default function ReportDetailsPage() {
   const [allMyTasks, setAllMyTasks] = useState<any[]>([])
   const [reportTasksLoading, setReportTasksLoading] = useState(false)
   const [attachingTaskId, setAttachingTaskId] = useState('')
+  const [reassignOpen, setReassignOpen] = useState(false)
+  const [reassignApproverId, setReassignApproverId] = useState('')
+  const [reassignLoading, setReassignLoading] = useState(false)
+  const [allUsers, setAllUsers] = useState<any[]>([])
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
   const decodeEntities = (value: string) =>
     value
@@ -157,6 +161,37 @@ export default function ReportDetailsPage() {
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params?.id, accessToken])
+
+  useEffect(() => {
+    if (user?.role !== 'admin' || !accessToken) return
+    fetch('/api/v1/users?limit=500', { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then((r) => r.json())
+      .then((data) => setAllUsers(Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : []))
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.role, accessToken])
+
+  const reassignApprover = async () => {
+    if (!reassignApproverId || !params?.id) return
+    setReassignLoading(true)
+    try {
+      const resp = await fetch(`/api/v1/reports/${params.id}/reassign-approver`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approverId: reassignApproverId }),
+      })
+      if (resp.ok) {
+        setReassignOpen(false)
+        setReassignApproverId('')
+        await loadData()
+      } else {
+        const err = await resp.json().catch(() => ({}))
+        alert(err?.message || 'Помилка при переназначенні')
+      }
+    } finally {
+      setReassignLoading(false)
+    }
+  }
 
   const loadComments = async () => {
     if (!accessToken || !params?.id) return
@@ -731,7 +766,46 @@ export default function ReportDetailsPage() {
                 </div>
                 <div>
                   <p className="text-slate-500 dark:text-slate-400">Поточний погоджувач</p>
-                  <p className="font-medium">{report.currentApprover ? `${report.currentApprover.firstName} ${report.currentApprover.lastName}` : '-'}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-medium">{report.currentApprover ? `${report.currentApprover.firstName} ${report.currentApprover.lastName}` : '-'}</p>
+                    {user?.role === 'admin' && ['pending_manager', 'pending_clerk', 'pending_director'].includes(report.status) && (
+                      <button
+                        onClick={() => { setReassignOpen((v) => !v); setReassignApproverId('') }}
+                        className="rounded px-2 py-0.5 text-xs border border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                      >
+                        Змінити
+                      </button>
+                    )}
+                  </div>
+                  {reassignOpen && user?.role === 'admin' && (
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      <select
+                        value={reassignApproverId}
+                        onChange={(e) => setReassignApproverId(e.target.value)}
+                        className="rounded border border-slate-300 px-2 py-1 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      >
+                        <option value="">— Оберіть погоджувача —</option>
+                        {allUsers.filter((u: any) => u.isActive).map((u: any) => (
+                          <option key={u.id} value={u.id}>
+                            {u.firstName} {u.lastName} ({u.role})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        disabled={!reassignApproverId || reassignLoading}
+                        onClick={reassignApprover}
+                        className="rounded bg-primary px-3 py-1 text-xs text-white disabled:opacity-50"
+                      >
+                        {reassignLoading ? 'Збереження...' : 'Зберегти'}
+                      </button>
+                      <button
+                        onClick={() => setReassignOpen(false)}
+                        className="rounded border border-slate-300 px-3 py-1 text-xs text-slate-600 dark:border-slate-600 dark:text-slate-300"
+                      >
+                        Скасувати
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -198,12 +198,11 @@ export default function DepartmentsPage() {
 
   const loadUsers = async () => {
     if (!accessToken || (!isAdmin && !isDirector)) return
-    // Director can assign people from existing accounts, not only root department members.
-    const query = '/api/v1/users?limit=100'
-    const resp = await fetch(query, { headers: { Authorization: `Bearer ${accessToken}` } })
+    const resp = await fetch('/api/v1/users/assignees', { headers: { Authorization: `Bearer ${accessToken}` } })
     if (!resp.ok) return
     const data = await resp.json()
-    setUsersOptions((data?.data || []).map((u: any) => ({
+    const list = Array.isArray(data) ? data : (data?.data || [])
+    setUsersOptions(list.map((u: any) => ({
       id: u.id,
       firstName: u.firstName,
       lastName: u.lastName,
@@ -240,19 +239,14 @@ export default function DepartmentsPage() {
     [departments, selectedDepartmentId],
   )
 
-  const directors = useMemo(
-    () => usersOptions.filter((userOption) => userOption.role === 'director'),
+  // All active users sorted by last name — role filter removed so any person can be assigned any position
+  const allActiveUsers = useMemo(
+    () => [...usersOptions].sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, 'uk')),
     [usersOptions],
   )
-
-  const managers = useMemo(
-    () => usersOptions.filter((userOption) => userOption.role === 'manager' || userOption.role === 'deputy_director'),
-    [usersOptions],
-  )
-  const clerks = useMemo(
-    () => usersOptions.filter((userOption) => userOption.role === 'clerk'),
-    [usersOptions],
-  )
+  const directors = allActiveUsers
+  const managers = allActiveUsers
+  const clerks = allActiveUsers
   const deputyDirectors = useMemo(
     () => usersOptions.filter((userOption) => userOption.role === 'deputy_director'),
     [usersOptions],
@@ -882,7 +876,7 @@ export default function DepartmentsPage() {
                   >
                     <option value="">Директор (опційно)</option>
                     {directors.map((d) => (
-                      <option key={d.id} value={d.id}>{d.firstName} {d.lastName}</option>
+                      <option key={d.id} value={d.id}>{d.lastName} {d.firstName} ({getRoleLabel(d.role)})</option>
                     ))}
                   </select>
                 </div>
@@ -939,9 +933,9 @@ export default function DepartmentsPage() {
                   value={newSectionManagerId}
                   onChange={(e) => setNewSectionManagerId(e.target.value)}
                 >
-                  <option value="">Керівник (опційно)</option>
+                  <option value="">Керівник відділу (опційно)</option>
                   {managers.map((m) => (
-                    <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+                    <option key={m.id} value={m.id}>{m.lastName} {m.firstName} ({getRoleLabel(m.role)})</option>
                   ))}
                 </select>
                 <select
@@ -951,7 +945,7 @@ export default function DepartmentsPage() {
                 >
                   <option value="">Діловод (опційно)</option>
                   {clerks.map((c) => (
-                    <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
+                    <option key={c.id} value={c.id}>{c.lastName} {c.firstName} ({getRoleLabel(c.role)})</option>
                   ))}
                 </select>
               </div>
@@ -1111,70 +1105,85 @@ export default function DepartmentsPage() {
 
               {(isAdmin || isDirector) && selectedDepartmentId && (
                 <div className="p-4 space-y-3 border-b border-slate-100 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedManagerId} onChange={(e) => setSelectedManagerId(e.target.value)}>
-                      <option value="">Керівник не призначений</option>
-                      {managers.map((m) => (
-                        <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
-                      ))}
-                    </select>
-                    <select className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedClerkId} onChange={(e) => setSelectedClerkId(e.target.value)}>
-                      <option value="">Діловод не призначений</option>
-                      {clerks.map((c) => (
-                        <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
-                      ))}
-                    </select>
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Налаштування відділу</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Керівник відділу — хто погоджує звіти спеціалістів</p>
+                      <select className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedManagerId} onChange={(e) => setSelectedManagerId(e.target.value)}>
+                        <option value="">— Не призначений —</option>
+                        {managers.map((m) => (
+                          <option key={m.id} value={m.id}>{m.lastName} {m.firstName} ({getRoleLabel(m.role)})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Діловод відділу — погоджує зведені звіти</p>
+                      <select className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedClerkId} onChange={(e) => setSelectedClerkId(e.target.value)}>
+                        <option value="">— Не призначений —</option>
+                        {clerks.map((c) => (
+                          <option key={c.id} value={c.id}>{c.lastName} {c.firstName} ({getRoleLabel(c.role)})</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Управління — необовʼязкова група відділів (наприклад «Цифровізація»)</p>
                     <input
-                      className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                      placeholder="Управління (напр. Цифровізація)"
+                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      placeholder="Назва управління або залиште порожнім"
                       value={editingDivisionTag}
                       onChange={(e) => setEditingDivisionTag(e.target.value)}
                     />
                   </div>
-                  <button disabled={savingLeads} onClick={saveDepartmentLeads} className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium disabled:opacity-60 dark:border-slate-600">
-                    {savingLeads ? 'Збереження...' : 'Зберегти відділ'}
+                  <button disabled={savingLeads} onClick={saveDepartmentLeads} className="h-10 rounded-lg bg-primary px-4 text-white text-sm font-medium disabled:opacity-60">
+                    {savingLeads ? 'Збереження...' : 'Зберегти'}
                   </button>
                 </div>
               )}
 
               {(isAdmin || isDirector) && (
-                <div className="p-4 border-b border-slate-100 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-800/40 space-y-3">
-                  <p className="text-sm font-semibold">
-                    Керівництво департаменту {selectedRootDepartment ? `(${selectedRootDepartment.nameUk || selectedRootDepartment.name})` : ''}
+                <div className="p-4 border-b border-slate-100 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-800/40 space-y-4">
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    Керівництво департаменту {selectedRootDepartment ? `— ${selectedRootDepartment.nameUk || selectedRootDepartment.name}` : ''}
                   </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <select
-                      className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                      value={selectedDirectorId}
-                      onChange={(e) => setSelectedDirectorId(e.target.value)}
-                    >
-                      <option value="">Директор не призначений</option>
-                      {directors.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.firstName} {d.lastName}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                      value={selectedDeputyHeadId}
-                      onChange={(e) => setSelectedDeputyHeadId(e.target.value)}
-                    >
-                      <option value="">Заступник голови не призначений</option>
-                      {deputyHeads.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.firstName} {d.lastName}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Директор — фінально погоджує зведені звіти</p>
+                      <select
+                        className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                        value={selectedDirectorId}
+                        onChange={(e) => setSelectedDirectorId(e.target.value)}
+                      >
+                        <option value="">— Не призначений —</option>
+                        {directors.map((d) => (
+                          <option key={d.id} value={d.id}>{d.lastName} {d.firstName} ({getRoleLabel(d.role)})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Заступник голови — має доступ до всього без обмежень</p>
+                      <select
+                        className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                        value={selectedDeputyHeadId}
+                        onChange={(e) => setSelectedDeputyHeadId(e.target.value)}
+                      >
+                        <option value="">— Не призначений —</option>
+                        {deputyHeads.map((d) => (
+                          <option key={d.id} value={d.id}>{d.lastName} {d.firstName}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Заступники директора департаменту
+                      Заступники директора — курують окремі відділи, бачать їх звіти
                     </p>
+                    {deputyDirectorCandidates.length === 0 && (
+                      <p className="text-xs text-slate-400 dark:text-slate-500 italic">Немає кандидатів у цьому департаменті</p>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       {deputyDirectorCandidates.map((depDir) => (
-                        <label key={depDir.id} className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
+                        <label key={depDir.id} className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
                           <input
                             type="checkbox"
                             checked={selectedDeputyDirectorIds.includes(depDir.id)}
@@ -1184,7 +1193,7 @@ export default function DepartmentsPage() {
                               )
                             }}
                           />
-                          <span>{depDir.firstName} {depDir.lastName} ({getRoleLabel(depDir.role)})</span>
+                          <span>{depDir.lastName} {depDir.firstName} <span className="text-slate-400 text-xs">({getRoleLabel(depDir.role)})</span></span>
                         </label>
                       ))}
                     </div>
@@ -1192,9 +1201,9 @@ export default function DepartmentsPage() {
                   <button
                     onClick={saveDepartmentSupervision}
                     disabled={savingDeputyScope || !selectedRootDepartmentId}
-                    className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium disabled:opacity-60 dark:border-slate-600"
+                    className="h-10 rounded-lg bg-primary px-4 text-white text-sm font-medium disabled:opacity-60"
                   >
-                    {savingDeputyScope ? 'Збереження...' : 'Зберегти керівництво департаменту'}
+                    {savingDeputyScope ? 'Збереження...' : 'Зберегти'}
                   </button>
                 </div>
               )}
