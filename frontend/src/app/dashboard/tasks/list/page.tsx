@@ -150,6 +150,7 @@ export default function TaskListPage() {
   const [grouping, setGrouping] = useState(false)
   const [newCommentCounts, setNewCommentCounts] = useState<Record<string, number>>({})
   const [mentionPickerOpen, setMentionPickerOpen] = useState(false)
+  const [mentionSearch, setMentionSearch] = useState('')
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const getSeenCommentCount = (taskId: string) => {
@@ -1300,35 +1301,53 @@ export default function TaskListPage() {
                                 className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
                               />
                               {mentionPickerOpen && (
-                                <div className="absolute bottom-full left-0 mb-1 z-50 w-60 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900 overflow-hidden">
-                                  <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Згадати співробітника</p>
-                                  {users.slice(0, 10).map(u => (
-                                    <button
-                                      key={u.id}
-                                      type="button"
-                                      onMouseDown={(e) => {
-                                        e.preventDefault()
-                                        setNewComment(prev => `${prev}@${u.firstName} ${u.lastName} `.trimStart())
-                                        setMentionPickerOpen(false)
-                                      }}
-                                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-slate-50 dark:hover:bg-slate-800"
-                                    >
-                                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white">
-                                        {u.firstName[0]}{u.lastName[0]}
-                                      </span>
-                                      <div className="min-w-0">
-                                        <p className="truncate text-slate-800 dark:text-slate-200">{u.firstName} {u.lastName}</p>
-                                        <p className="truncate text-[10px] text-slate-400">{u.department?.nameUk || ''}</p>
-                                      </div>
-                                    </button>
-                                  ))}
+                                <div className="absolute bottom-full left-0 mb-1 z-50 w-64 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900 overflow-hidden">
+                                  <div className="p-2 border-b border-slate-100 dark:border-slate-700">
+                                    <input
+                                      autoFocus
+                                      type="text"
+                                      value={mentionSearch}
+                                      onChange={e => setMentionSearch(e.target.value)}
+                                      onKeyDown={e => { if (e.key === 'Escape') { setMentionPickerOpen(false); setMentionSearch('') } }}
+                                      placeholder="Пошук..."
+                                      className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-900 outline-none focus:border-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                                    />
+                                  </div>
+                                  <div className="max-h-48 overflow-y-auto">
+                                    {users
+                                      .filter(u => `${u.firstName} ${u.lastName}`.toLowerCase().includes(mentionSearch.toLowerCase()))
+                                      .map(u => (
+                                        <button
+                                          key={u.id}
+                                          type="button"
+                                          onMouseDown={(e) => {
+                                            e.preventDefault()
+                                            setNewComment(prev => `${prev}@${u.firstName} ${u.lastName} `.trimStart())
+                                            setMentionPickerOpen(false)
+                                            setMentionSearch('')
+                                          }}
+                                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-slate-50 dark:hover:bg-slate-800"
+                                        >
+                                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white">
+                                            {u.firstName[0]}{u.lastName[0]}
+                                          </span>
+                                          <div className="min-w-0">
+                                            <p className="truncate text-slate-800 dark:text-slate-200">{u.firstName} {u.lastName}</p>
+                                            <p className="truncate text-[10px] text-slate-400">{u.department?.nameUk || ''}</p>
+                                          </div>
+                                        </button>
+                                      ))}
+                                    {users.filter(u => `${u.firstName} ${u.lastName}`.toLowerCase().includes(mentionSearch.toLowerCase())).length === 0 && (
+                                      <p className="px-3 py-3 text-xs text-slate-400">Не знайдено</p>
+                                    )}
+                                  </div>
                                 </div>
                               )}
                             </div>
                             <div className="flex flex-col gap-1 self-end">
                               <button
                                 type="button"
-                                onClick={() => setMentionPickerOpen(v => !v)}
+                                onClick={() => { setMentionPickerOpen(v => !v); setMentionSearch('') }}
                                 className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                                 title="Згадати співробітника"
                               >

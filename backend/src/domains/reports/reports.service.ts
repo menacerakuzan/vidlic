@@ -1383,25 +1383,44 @@ export class ReportsService {
     } as const;
 
     if (report.author?.role === 'manager') {
-      const sourceReports = await this.prisma.report.findMany({
-        where: {
-          ...periodFilter,
-          departmentId: report.departmentId,
-          author: { role: 'specialist', isActive: true },
-          status: { in: ['approved'] },
-          id: { not: report.id },
-        },
-        include: {
-          author: { select: { id: true, firstName: true, lastName: true } },
-          department: { select: { id: true, name: true, nameUk: true } },
-        },
-        orderBy: [{ periodEnd: 'asc' }, { createdAt: 'asc' }],
-        take: 200,
-      });
+      const [sourceReports, ownApprovedReports] = await Promise.all([
+        this.prisma.report.findMany({
+          where: {
+            ...periodFilter,
+            departmentId: report.departmentId,
+            author: { role: 'specialist', isActive: true },
+            status: { in: ['approved'] },
+            id: { not: report.id },
+          },
+          include: {
+            author: { select: { id: true, firstName: true, lastName: true } },
+            department: { select: { id: true, name: true, nameUk: true } },
+          },
+          orderBy: [{ periodEnd: 'asc' }, { createdAt: 'asc' }],
+          take: 200,
+        }),
+        // Also include manager's own approved separate reports for the same period
+        this.prisma.report.findMany({
+          where: {
+            ...periodFilter,
+            departmentId: report.departmentId,
+            authorId: report.authorId,
+            status: { in: ['approved'] },
+            id: { not: report.id },
+          },
+          include: {
+            author: { select: { id: true, firstName: true, lastName: true } },
+            department: { select: { id: true, name: true, nameUk: true } },
+          },
+          orderBy: [{ createdAt: 'desc' }],
+          take: 20,
+        }),
+      ]);
 
-      // Manager may create a regular report even without subordinate sources.
-      // For aggregate mode, we include manager's own current report as one of sources.
       const filteredSourceReports = this.filterAggregationSources(sourceReports, sourceReportIds);
+      const filteredOwnApproved = this.filterAggregationSources(ownApprovedReports, sourceReportIds);
+
+      // Include the current aggregate draft as a selectable own source (for the manager's contribution to the consolidated text)
       const ownManagerSource = {
         reportId: report.id,
         title: report.title || 'Власний звіт керівника',
@@ -1421,10 +1440,15 @@ export class ReportsService {
       };
 
       const selectedSources = filteredSourceReports.map((item) => this.mapSourceReport(item));
+      const selectedOwnApproved = filteredOwnApproved.map((item) => this.mapSourceReport(item));
       const shouldIncludeOwnReport = !Array.isArray(sourceReportIds) || sourceReportIds.length === 0
         ? true
         : sourceReportIds.includes(report.id);
-      const sources = shouldIncludeOwnReport ? [ownManagerSource, ...selectedSources] : selectedSources;
+      const sources = [
+        ...(shouldIncludeOwnReport ? [ownManagerSource] : []),
+        ...selectedOwnApproved,
+        ...selectedSources,
+      ];
 
       if (sources.length === 0) {
         return null;
