@@ -10,7 +10,7 @@ export class TasksScheduler {
 
   @Cron(CronExpression.EVERY_HOUR)
   async autoArchiveCompletedTasks() {
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const oneDayAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
     const result = await this.prisma.task.updateMany({
       where: {

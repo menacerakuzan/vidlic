@@ -301,7 +301,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             <div className="fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-800 shadow-xl">
               <div className="flex items-center justify-between p-4 border-b">
                 <span className="inline-flex items-center gap-3 text-2xl font-semibold tracking-wide cursor-pointer select-none" onClick={handleLogoClick}>
-                  <BrandLogo className="h-10 w-10 text-primary" />
+                  <BrandLogo className="h-12 w-12 text-primary" />
                   ВІДЛІК
                 </span>
                 <button onClick={() => setSidebarOpen(false)}>
@@ -347,7 +347,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col flex-1 min-h-0 bg-white/80 dark:bg-slate-900/70 backdrop-blur-xl border-r border-white/10">
           <div className="flex items-center h-16 px-6 border-b border-white/10">
             <span className="inline-flex items-center gap-3 text-2xl font-semibold font-display tracking-wide cursor-pointer select-none" onClick={handleLogoClick}>
-              <BrandLogo className="h-10 w-10 text-primary" />
+              <BrandLogo className="h-12 w-12 text-primary" />
               ВІДЛІК
             </span>
           </div>

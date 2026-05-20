@@ -87,7 +87,7 @@ export default function ActivitiesPage() {
 
   const loadPlansList = async () => {
     if (!canWork) return
-    const resp = await fetch(`/api/v1/reports/activities/plans?periodType=${encodeURIComponent(periodType)}`, {
+    const resp = await fetch(`/api/v1/reports/activities/plans?periodType=monthly`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
     if (!resp.ok) return
@@ -238,7 +238,7 @@ export default function ActivitiesPage() {
   useEffect(() => {
     loadPlansList()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodType, canWork])
+  }, [canWork])
 
   useEffect(() => {
     if (typeof window === 'undefined') return

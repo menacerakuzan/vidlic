@@ -167,6 +167,26 @@ export class NotificationsListener {
         });
       }
     }
+
+    // Notify assignee and reporter if content (title/description) changed
+    if (event.contentChanged) {
+      const recipients = new Set<string>();
+      if (task.assigneeId && task.assigneeId !== event.actorId) recipients.add(task.assigneeId);
+      if (task.reporterId && task.reporterId !== event.actorId) recipients.add(task.reporterId);
+      for (const coId of coIds) {
+        if (coId && coId !== event.actorId) recipients.add(coId);
+      }
+      for (const userId of recipients) {
+        await this.notifications.create({
+          userId,
+          type: 'task_updated',
+          title: 'Змінено зміст задачі',
+          message: `Ініціатор змінив зміст задачі: "${task.title}"`,
+          referenceType: 'task',
+          referenceId: task.id,
+        });
+      }
+    }
   }
 
   @OnEvent('task.completed')

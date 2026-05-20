@@ -397,7 +397,7 @@ export default function WorkloadPage() {
                 return (
                   <div
                     key={column.departmentId}
-                    className={`w-[320px] rounded-2xl border p-3 ${colIsFiring ? 'border-rose-300 bg-white dark:border-rose-700 dark:bg-slate-900' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'}`}
+                    className="w-[320px] rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900"
                   >
                     <div className="mb-3 border-b border-slate-200 pb-2 dark:border-slate-700">
                       <div className="flex items-center justify-between gap-2">
@@ -435,7 +435,7 @@ export default function WorkloadPage() {
                         return (
                           <div
                             key={`${task.id}-${isSecondary ? 'sec' : 'pri'}`}
-                            className={`rounded-xl border ${us.card} dark:bg-slate-800/50`}
+                            className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800/50"
                           >
                             {/* Main task header — clickable to expand if has subtasks */}
                             <div
@@ -453,7 +453,7 @@ export default function WorkloadPage() {
                                       {isExpanded ? '▾' : '▸'}
                                     </span>
                                   )}
-                                  <p className="text-sm font-medium leading-snug">{task.title}</p>
+                                  <p className="text-base font-medium leading-snug">{task.title}</p>
                                 </div>
                                 {u !== 'normal' && (
                                   <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${us.badge}`}>

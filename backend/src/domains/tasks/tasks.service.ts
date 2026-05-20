@@ -402,10 +402,12 @@ export class TasksService {
       },
     });
 
+    const contentChanged = (dto.title !== undefined && dto.title !== task.title) ||
+      (dto.description !== undefined && dto.description !== task.description);
     if (dto.assigneeId && dto.assigneeId !== task.assigneeId) {
-      this.eventEmitter.emit('task.updated', new TaskUpdatedEvent(id, user.id, dto.assigneeId));
+      this.eventEmitter.emit('task.updated', new TaskUpdatedEvent(id, user.id, dto.assigneeId, contentChanged));
     } else {
-      this.eventEmitter.emit('task.updated', new TaskUpdatedEvent(id, user.id, null));
+      this.eventEmitter.emit('task.updated', new TaskUpdatedEvent(id, user.id, null, contentChanged));
     }
 
     return this.mapTask(updated);
@@ -617,7 +619,15 @@ export class TasksService {
     const task = await this.prisma.task.findUnique({ where: { id } });
     if (!task) throw new NotFoundException('Задачу не знайдено');
     if (!(await this.canManageTask(task, user))) throw new ForbiddenException('Немає доступу');
-    await this.prisma.task.update({ where: { id }, data: { deletedAt: null, archivedAt: null } });
+    await this.prisma.task.update({
+      where: { id },
+      data: {
+        deletedAt: null,
+        archivedAt: null,
+        // Reset done status so cron doesn't immediately re-archive it
+        ...(task.status === 'done' ? { status: 'in_progress', completedAt: null } : {}),
+      },
+    });
     return { success: true };
   }
 

@@ -95,18 +95,40 @@ export default function ReportDetailsPage() {
       const data = await reportResp.json()
       setReport(data)
       const submission = data?.content?.managerSubmission
-      if (submission) {
-        setManagerDraftText(normalizeSubmissionText(submission))
-        setManagerDraftTitle(submission.documentTitle || 'ЗВІТ')
-        setManagerDraftHeaderLines(Array.isArray(submission.headerLines) ? submission.headerLines : [])
-        setManagerDraftSource(submission.generatedBy || '')
-      } else {
-        setManagerDraftText('')
-        setManagerDraftTitle('ЗВІТ')
-        setManagerDraftHeaderLines([])
-        setManagerDraftSource('')
+
+      // Check if sessionStorage has unsaved work newer than last server save
+      let restoredFromSession = false
+      try {
+        const raw = sessionStorage.getItem(`vidlik-report-draft-${params.id}`)
+        if (raw) {
+          const backup = JSON.parse(raw)
+          const backupTime = new Date(backup.savedAt).getTime()
+          const serverTime = data?.updatedAt ? new Date(data.updatedAt).getTime() : 0
+          if (backupTime > serverTime && backup.text) {
+            setManagerDraftText(backup.text)
+            setManagerDraftTitle(backup.title || 'ЗВІТ')
+            setManagerDraftHeaderLines(Array.isArray(backup.headerLines) ? backup.headerLines : [])
+            setManagerDraftSource('')
+            setIsDirty(true)
+            restoredFromSession = true
+          }
+        }
+      } catch {}
+
+      if (!restoredFromSession) {
+        if (submission) {
+          setManagerDraftText(normalizeSubmissionText(submission))
+          setManagerDraftTitle(submission.documentTitle || 'ЗВІТ')
+          setManagerDraftHeaderLines(Array.isArray(submission.headerLines) ? submission.headerLines : [])
+          setManagerDraftSource(submission.generatedBy || '')
+        } else {
+          setManagerDraftText('')
+          setManagerDraftTitle('ЗВІТ')
+          setManagerDraftHeaderLines([])
+          setManagerDraftSource('')
+        }
+        setIsDirty(false)
       }
-      setIsDirty(false)
       setLastSavedAt(new Date().toISOString())
       setFromVersion(Math.max(1, Number(data?.version || 1) - 1))
       setToVersion(Number(data?.version || 1))
@@ -536,13 +558,21 @@ export default function ReportDetailsPage() {
     }
     setIsDirty(false)
     setLastSavedAt(new Date().toISOString())
-    if (!options?.auto) {
-      await loadData()
-    }
+    // Clear session backup after successful save
+    try { sessionStorage.removeItem(`vidlik-report-draft-${params.id}`) } catch {}
   }
 
   useEffect(() => {
-    if (!canEditSubmission || !isDirty) return
+    if (!canEditSubmission || !isDirty || !params?.id) return
+    // Save to sessionStorage immediately so navigation away doesn't lose work
+    try {
+      sessionStorage.setItem(`vidlik-report-draft-${params.id}`, JSON.stringify({
+        text: managerDraftText,
+        title: managerDraftTitle,
+        headerLines: managerDraftHeaderLines,
+        savedAt: new Date().toISOString(),
+      }))
+    } catch {}
     const timeout = setTimeout(() => {
       saveManagerDraft({ auto: true })
     }, 1800)

@@ -1650,23 +1650,20 @@ export class ReportsService {
     return this.mapActivitiesPlan(report);
   }
 
-  async listActivitiesPlans(periodType: 'weekly' | 'monthly' | 'quarterly', user: any) {
+  async listActivitiesPlans(_periodType: 'weekly' | 'monthly' | 'quarterly', user: any) {
     const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
     if (!scopedDepartmentIds.length) return [];
     const rootDepartmentId = scopedDepartmentIds[0];
-    const reportType = periodType === 'weekly' ? 'weekly' : 'monthly';
-    const typeTag = periodType === 'weekly' ? '(weekly)' : periodType === 'quarterly' ? '(quarterly)' : '(monthly)';
     const reports = await this.prisma.report.findMany({
       where: {
         departmentId: rootDepartmentId,
-        reportType,
-        title: { startsWith: this.activitiesPlanTitlePrefix(), contains: typeTag },
+        title: { startsWith: this.activitiesPlanTitlePrefix() },
       },
       include: {
         department: { select: { id: true, nameUk: true, name: true } },
       },
       orderBy: [{ periodStart: 'desc' }],
-      take: 60,
+      take: 120,
     });
 
     return reports.map((report) => this.mapActivitiesPlan(report));

@@ -12,6 +12,7 @@ export class TaskUpdatedEvent {
     public readonly taskId: string,
     public readonly actorId: string,
     public readonly newAssigneeId?: string | null,
+    public readonly contentChanged?: boolean,
   ) {}
 }
 
