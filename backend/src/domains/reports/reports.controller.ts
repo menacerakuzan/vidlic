@@ -317,6 +317,6 @@ export class ReportsController {
   @Permissions('reports:read')
   @ApiOperation({ summary: 'Задачі прикріплені до звіту' })
   getReportTasks(@Param('id') id: string, @Req() req: any) {
-    return this.reportsService.getReportTasks(id, req.user.id);
+    return this.reportsService.getReportTasks(id, req.user);
   }
 }

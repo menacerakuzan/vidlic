@@ -23,20 +23,20 @@ export class ReportsService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
+    // Exclude activity plans and daily reports from regular report listing.
+    // Dual filter: reportSubtype column (new records) + title prefix (legacy backcompat)
     const andClauses: any[] = [
       {
-        NOT: {
-          title: {
-            startsWith: this.activitiesPlanTitlePrefix(),
-          },
-        },
+        OR: [
+          { reportSubtype: 'regular' },
+          { reportSubtype: null },
+        ],
       },
       {
-        NOT: {
-          title: {
-            startsWith: this.dailyReportTitlePrefix(),
-          },
-        },
+        NOT: { title: { startsWith: this.activitiesPlanTitlePrefix() } },
+      },
+      {
+        NOT: { title: { startsWith: this.dailyReportTitlePrefix() } },
       },
     ];
 
@@ -166,14 +166,45 @@ export class ReportsService {
     if (!(await this.canCreateReportInDepartment(user, departmentId))) {
       throw new ForbiddenException('Немає доступу до створення звіту в цьому підрозділі');
     }
-    
-    const report = await this.prisma.report.create({
+
+    // Prevent duplicate reports for the same author/period/type
+    // (only for regular reports — activity plans and daily reports use title prefix and are exempt)
+    const isSpecialReport = dto.title?.startsWith('[ACTIVITY_PLAN]') || dto.title?.startsWith('[DAILY_REPORT]');
+    if (!isSpecialReport && dto.periodStart && dto.reportType) {
+      const existing = await this.prisma.report.findFirst({
+        where: {
+          authorId: userId,
+          reportType: dto.reportType,
+          periodStart: new Date(dto.periodStart),
+          status: { not: 'rejected' },
+        },
+        select: { id: true, title: true, status: true },
+      });
+      if (existing) {
+        throw new BadRequestException(
+          `Звіт за цей період вже існує (${existing.title || existing.id}). ` +
+          'Редагуйте існуючий або відхиліть його перед створенням нового.',
+        );
+      }
+    }
+
+    const contentObj = this.ensureObject(dto.content);
+    const reportMode = contentObj.reportMode === 'aggregate' ? 'aggregate' : 'regular';
+    const reportSubtype = dto.title?.startsWith('[ACTIVITY_PLAN]')
+      ? 'activity_plan'
+      : dto.title?.startsWith('[DAILY_REPORT]')
+        ? 'daily_report'
+        : 'regular';
+
+    const report = await (this.prisma.report.create as any)({
       data: {
         reportType: dto.reportType,
+        reportMode,
+        reportSubtype,
         periodStart: new Date(dto.periodStart),
         periodEnd: new Date(dto.periodEnd),
         title: dto.title,
-        content: dto.content || {},
+        content: contentObj,
         authorId: userId,
         departmentId,
         status: 'draft',
@@ -295,25 +326,8 @@ export class ReportsService {
     } else if (['lawyer', 'accountant', 'hr'].includes(report.author?.role || '')) {
       flowSteps = [{ order: 1, role: 'director' }];
     } else if (report.author?.role === 'manager') {
-      if (reportMode !== 'aggregate') {
-        const updated = await this.prisma.report.update({
-          where: { id },
-          data: {
-            status: 'approved',
-            currentApproverId: null,
-            submittedAt: new Date(),
-            approvedAt: new Date(),
-          },
-          include: {
-            author: true,
-            department: true,
-          },
-        });
-
-        await this.createStatusHistory(id, report.status, 'approved', userId, dto.comment);
-        this.eventEmitter.emit('report.submitted', new ReportSubmittedEvent(id, userId, null));
-        return this.mapReport(updated);
-      }
+      // Manager reports (both regular and aggregate) must pass through clerk → director
+      // Self-approval without oversight is a governance failure in government systems
       flowSteps = [{ order: 1, role: 'clerk' }];
     } else if (report.author?.role === 'clerk') {
       flowSteps = [{ order: 1, role: 'director' }];
@@ -1379,7 +1393,8 @@ export class ReportsService {
       'summary',
     ]);
 
-    lines.push('1. Сектор цифрових трансформацій та інформатизації');
+    const deptName = report.department?.nameUk || report.department?.name || 'Підрозділ';
+    lines.push(`1. ${deptName}`);
     if (sectionOne.length === 0) {
       lines.push('1. Проведено планові заходи за напрямом діяльності відповідно до затвердженого плану робіт.');
     } else {
@@ -1387,10 +1402,6 @@ export class ReportsService {
         lines.push(`${index + 1}. ${point}`);
       });
     }
-
-    lines.push('');
-    lines.push('2. Відділ кібербезпеки та аналітики');
-    lines.push('1. Опрацьовано поточні завдання за напрямом інформаційної безпеки та координації взаємодії з територіальними громадами.');
 
     return {
       documentTitle: 'ЗВІТ',
@@ -2831,13 +2842,12 @@ export class ReportsService {
   }
 
   private getReportMode(report: any): 'regular' | 'aggregate' {
+    // Prefer the DB column (set at creation time)
+    if (report?.reportMode === 'aggregate') return 'aggregate';
+    if (report?.reportMode === 'regular') return 'regular';
+    // Fallback: check content JSON for older records without DB column
     const content = this.ensureObject(report?.content);
-    const mode = String(content.reportMode || '').toLowerCase();
-    if (mode === 'aggregate') return 'aggregate';
-    if (mode === 'regular') return 'regular';
-
-    const title = String(report?.title || '').toLowerCase();
-    if (title.includes('зведен')) return 'aggregate';
+    if (String(content.reportMode || '').toLowerCase() === 'aggregate') return 'aggregate';
     return 'regular';
   }
 
@@ -2926,6 +2936,7 @@ export class ReportsService {
 
     const task = await this.prisma.task.findUnique({ where: { id: taskId } });
     if (!task) throw new NotFoundException('Задачу не знайдено');
+    if (task.assigneeId !== userId) throw new ForbiddenException('Можна прикріпляти лише власні задачі');
 
     await this.prisma.task.update({ where: { id: taskId }, data: { reportId } });
     return { success: true };
@@ -2943,9 +2954,22 @@ export class ReportsService {
     return { success: true };
   }
 
-  async getReportTasks(reportId: string, userId: string) {
-    const report = await this.prisma.report.findUnique({ where: { id: reportId } });
+  async getReportTasks(reportId: string, actor: any) {
+    const report = await this.prisma.report.findUnique({
+      where: { id: reportId },
+      select: { id: true, authorId: true, currentApproverId: true, departmentId: true },
+    });
     if (!report) throw new NotFoundException('Звіт не знайдено');
+
+    const privilegedRoles = ['admin', 'director', 'deputy_director', 'deputy_head', 'clerk'];
+    const isAuthor = report.authorId === actor.id;
+    const isApprover = report.currentApproverId === actor.id;
+    const isPrivileged = privilegedRoles.includes(actor.role);
+    const isScopedManager = actor.role === 'manager' && actor.departmentId === report.departmentId;
+
+    if (!isAuthor && !isApprover && !isPrivileged && !isScopedManager) {
+      throw new ForbiddenException('Немає доступу до задач цього звіту');
+    }
 
     const tasks = await this.prisma.task.findMany({
       where: { reportId },

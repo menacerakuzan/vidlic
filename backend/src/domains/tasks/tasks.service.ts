@@ -704,7 +704,10 @@ export class TasksService {
 
   private async canCreateTaskInDepartment(user: any, departmentId: string) {
     if (user.role === 'admin') return true;
-    if (user.role === 'deputy_head') return false;
+    if (user.role === 'deputy_head') {
+      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      return scopedDepartmentIds.includes(departmentId);
+    }
     if (user.role === 'director') {
       const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
       return scopedDepartmentIds.includes(departmentId);
@@ -718,7 +721,7 @@ export class TasksService {
       const secondary = Array.isArray(user.secondaryDepartmentIds) ? user.secondaryDepartmentIds as string[] : [];
       return secondary.includes(departmentId);
     }
-    if (user.role === 'specialist' || user.role === 'clerk') {
+    if (['specialist', 'clerk', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
       return user.departmentId === departmentId;
     }
     return false;

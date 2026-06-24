@@ -40,7 +40,7 @@ export class AiProviderService {
   private readonly provider = (this.clean(process.env.AI_PROVIDER) || 'auto').toLowerCase();
   private readonly endpoint = this.clean(process.env.AI_PROVIDER_URL);
   private readonly openAiApiKey = this.clean(process.env.OPENAI_API_KEY);
-  private readonly openAiModel = this.clean(process.env.OPENAI_MODEL) || 'gpt-5-nano';
+  private readonly openAiModel = this.clean(process.env.OPENAI_MODEL) || 'gpt-4o-mini';
   private readonly openAiSummaryTimeoutMs = Number(this.clean(process.env.AI_OPENAI_SUMMARY_TIMEOUT_MS) || '20000');
   private readonly openAiDraftTimeoutMs = Number(this.clean(process.env.AI_OPENAI_DRAFT_TIMEOUT_MS) || '60000');
   private readonly geminiApiKey = this.clean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
@@ -497,7 +497,7 @@ export class AiProviderService {
         return cleanedText;
       }
       sections.push({
-        title: 'Сектор цифрових трансформацій та інформатизації',
+        title: 'Загальна діяльність',
         points,
       });
     }
@@ -608,7 +608,7 @@ export class AiProviderService {
     const lines = source.split('\n').map((line) => line.trim()).filter(Boolean);
     const sections: Array<{ title: string; points: string[]; seen: Set<string> }> = [];
     let current = {
-      title: 'Сектор цифрових трансформацій та інформатизації',
+      title: 'Загальна діяльність',
       points: [] as string[],
       seen: new Set<string>(),
     };
@@ -618,7 +618,7 @@ export class AiProviderService {
       if (!normalizedLine) continue;
 
       if (this.isSectionTitle(normalizedLine)) {
-        if (current.points.length > 0 || current.title !== 'Сектор цифрових трансформацій та інформатизації') {
+        if (current.points.length > 0 || current.title !== 'Загальна діяльність') {
           sections.push(current);
         }
         current = { title: normalizedLine, points: [], seen: new Set<string>() };

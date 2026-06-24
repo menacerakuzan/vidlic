@@ -11,12 +11,22 @@ import { AuditAction } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
+  private readonly jwtSecret: string;
+  private readonly jwtRefreshSecret: string;
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
     private redisService: RedisService,
     private auditService: AuditService,
-  ) {}
+  ) {
+    const secret = process.env.JWT_SECRET;
+    const refreshSecret = process.env.JWT_REFRESH_SECRET;
+    if (!secret) throw new Error('JWT_SECRET environment variable must be set');
+    if (!refreshSecret) throw new Error('JWT_REFRESH_SECRET environment variable must be set');
+    this.jwtSecret = secret;
+    this.jwtRefreshSecret = refreshSecret;
+  }
 
   async login(dto: LoginDto, ipAddress?: string, userAgent?: string): Promise<{ accessToken: string; refreshToken: string; user: UserResponse }> {
     const user = await this.prisma.user.findUnique({
@@ -83,7 +93,7 @@ export class AuthService {
   async refreshToken(dto: RefreshTokenDto): Promise<{ accessToken: string; refreshToken: string }> {
     try {
       const payload = this.jwtService.verify(dto.refreshToken, {
-        secret: process.env.JWT_REFRESH_SECRET || 'vidlik-refresh-secret',
+        secret: this.jwtRefreshSecret,
       });
 
       const isRevoked = await this.redisService.get(`revoked:${payload.jti}`);
@@ -147,7 +157,7 @@ export class AuthService {
   async validateAccessToken(token: string) {
     try {
       const payload = this.jwtService.verify(token, {
-        secret: process.env.JWT_SECRET || 'vidlik-secret-key-change-in-prod',
+        secret: this.jwtSecret,
       }) as any;
 
       const isRevoked = await this.redisService.get(`revoked:${payload.jti}`);
@@ -179,7 +189,7 @@ export class AuthService {
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: '8h' });
     const refreshToken = this.jwtService.sign(payload, {
-      secret: process.env.JWT_REFRESH_SECRET || 'vidlik-refresh-secret',
+      secret: this.jwtRefreshSecret,
       expiresIn: '30d',
     });
 
@@ -188,7 +198,7 @@ export class AuthService {
 
   private async createSession(userId: string, refreshToken: string, ipAddress?: string, userAgent?: string) {
     const payload = this.jwtService.verify(refreshToken, {
-      secret: process.env.JWT_REFRESH_SECRET || 'vidlik-refresh-secret',
+      secret: this.jwtRefreshSecret,
     });
 
     await this.prisma.session.create({

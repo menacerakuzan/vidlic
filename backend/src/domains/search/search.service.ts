@@ -39,11 +39,17 @@ export class SearchService {
         { assigneeId: user.id },
         { reporterId: user.id },
       ];
-      usersWhere.id = user.id;
-    } else if (['manager', 'clerk', 'director', 'deputy_director'].includes(user.role)) {
+      // Specialists can find colleagues in their own department (for task assignment)
+      usersWhere.departmentId = user.departmentId;
+    } else if (['manager', 'clerk', 'director', 'deputy_director', 'deputy_head'].includes(user.role)) {
       const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
       const safeIds = scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean);
+      // Leaders cannot see draft reports from other authors
       reportWhere.departmentId = { in: safeIds };
+      reportWhere.OR = [
+        { status: { not: 'draft' } },
+        { authorId: user.id },
+      ];
       taskWhere.departmentId = { in: safeIds };
       usersWhere.departmentId = { in: safeIds };
     }

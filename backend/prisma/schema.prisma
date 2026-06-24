@@ -24,6 +24,18 @@ enum UserRole {
 enum ReportType {
   weekly
   monthly
+  quarterly
+}
+
+enum ReportMode {
+  regular
+  aggregate
+}
+
+enum ReportSubtype {
+  regular
+  activity_plan
+  daily_report
 }
 
 enum ReportStatus {
@@ -201,26 +213,28 @@ model Position {
 }
 
 model Report {
-  id               String       @id @default(uuid())
-  reportType       ReportType
-  periodStart      DateTime
-  periodEnd        DateTime
-  title            String?
-  content          Json         @default("{}")
-  status           ReportStatus @default(draft)
-  authorId         String
-  departmentId     String
+  id                String        @id @default(uuid())
+  reportType        ReportType
+  reportMode        ReportMode    @default(regular)
+  reportSubtype     ReportSubtype @default(regular)
+  periodStart       DateTime
+  periodEnd         DateTime
+  title             String?
+  content           Json          @default("{}")
+  status            ReportStatus  @default(draft)
+  authorId          String
+  departmentId      String
   currentApproverId String?
-  version          Int          @default(1)
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
-  submittedAt      DateTime?
-  approvedAt       DateTime?
+  version           Int           @default(1)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  submittedAt       DateTime?
+  approvedAt        DateTime?
 
   author           User         @relation(fields: [authorId], references: [id])
   department       Department   @relation(fields: [departmentId], references: [id])
   currentApprover  User?        @relation("ReportApprover", fields: [currentApproverId], references: [id])
-  
+
   versions         ReportVersion[]
   statusHistory    ReportStatusHistory[]
   tasks            Task[]
@@ -231,6 +245,7 @@ model Report {
   @@index([authorId])
   @@index([departmentId])
   @@index([status])
+  @@index([currentApproverId])
   @@index([periodStart, periodEnd])
   @@map("reports")
 }

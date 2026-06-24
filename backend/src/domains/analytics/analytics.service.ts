@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { INDIVIDUAL_CONTRIBUTOR_ROLES } from '../../shared/role-groups';
 
 @Injectable()
 export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
@@ -53,6 +54,10 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     await this.assertDepartmentAccess(user, departmentId);
     const where: any = {
       createdAt: { gte: dateFrom },
+      NOT: [
+        { title: { startsWith: '[ACTIVITY_PLAN]' } },
+        { title: { startsWith: '[DAILY_REPORT]' } },
+      ],
     };
 
     if (departmentId) {
@@ -85,7 +90,7 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     const where: any = {};
 
     // Specialists/individual contributors see only tasks assigned to them, not the whole department.
-    if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
+    if (([...INDIVIDUAL_CONTRIBUTOR_ROLES] as string[]).includes(user.role)) {
       where.assigneeId = user.id;
     } else if (departmentId) {
       where.departmentId = departmentId;
@@ -123,13 +128,11 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
       where.currentApproverId = user.id;
     } else if (user.role === 'clerk') {
       where.currentApproverId = user.id;
-    } else if (user.role === 'director' || user.role === 'deputy_director') {
-      where.status = 'pending_director';
-      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
-      if (scopedDepartmentIds.length) {
-        where.departmentId = { in: scopedDepartmentIds };
-      }
-    } else if (user.role === 'specialist') {
+    } else if (['director', 'deputy_director', 'deputy_head'].includes(user.role)) {
+      // Show only reports where this specific user is the assigned approver
+      where.currentApproverId = user.id;
+      where.status = { in: ['pending_manager', 'pending_clerk', 'pending_director'] };
+    } else if (([...INDIVIDUAL_CONTRIBUTOR_ROLES] as string[]).includes(user.role)) {
       return { total: 0, items: [] };
     }
 
@@ -164,9 +167,11 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     const where: any = {
       status: { not: 'done' },
       dueDate: { lt: new Date() },
+      deletedAt: null,
+      archivedAt: null,
     };
 
-    if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
+    if (([...INDIVIDUAL_CONTRIBUTOR_ROLES] as string[]).includes(user.role)) {
       where.assigneeId = user.id;
     } else if (departmentId) {
       where.departmentId = departmentId;
@@ -191,10 +196,24 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
 
   async getRecentReports(user: any, departmentId: string | null) {
     await this.assertDepartmentAccess(user, departmentId);
-    const where: any = {};
+    const where: any = {
+      // Exclude pseudo-report types stored with title prefix
+      NOT: [
+        { title: { startsWith: '[ACTIVITY_PLAN]' } },
+        { title: { startsWith: '[DAILY_REPORT]' } },
+      ],
+    };
 
-    if (departmentId) {
+    // Individual contributors see only their own reports
+    if (([...INDIVIDUAL_CONTRIBUTOR_ROLES] as string[]).includes(user.role)) {
+      where.authorId = user.id;
+    } else if (departmentId) {
       where.departmentId = departmentId;
+      // Leaders see submitted reports only (no drafts from other authors)
+      where.OR = [
+        { status: { not: 'draft' } },
+        { authorId: user.id },
+      ];
     }
 
     const reports = await this.prisma.report.findMany({

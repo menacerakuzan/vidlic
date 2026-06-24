@@ -17,7 +17,7 @@ import { AuditModule } from '../audit/audit.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
-        secret: configService.get('JWT_SECRET', 'vidlik-secret-key-change-in-prod'),
+        secret: configService.getOrThrow('JWT_SECRET'),
         signOptions: {
           expiresIn: configService.get('JWT_EXPIRES_IN', '15m'),
         },

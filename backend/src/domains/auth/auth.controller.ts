@@ -56,6 +56,6 @@ export class AuthController {
   @ApiOperation({ summary: 'Поточний користувач' })
   @ApiResponse({ status: 200, description: 'Дані користувача' })
   async me(@Req() req: any) {
-    return req.user;
+    return this.authService.validateUser(req.user.id);
   }
 }

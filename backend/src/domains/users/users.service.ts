@@ -64,8 +64,20 @@ export class UsersService {
   }
 
   async findAllAssignees(actor: any) {
+    const where: any = { isActive: true };
+
+    if (['specialist', 'manager', 'lawyer', 'accountant', 'hr'].includes(actor.role)) {
+      // Non-privileged roles can only enumerate their own department
+      where.departmentId = actor.departmentId;
+    } else if (['deputy_director', 'deputy_head'].includes(actor.role)) {
+      const scopeIds = Array.isArray(actor.scopeDepartmentIds) ? actor.scopeDepartmentIds.filter(Boolean) : [];
+      const deptIds = [...new Set([...scopeIds, actor.departmentId].filter(Boolean))];
+      if (deptIds.length > 0) where.departmentId = { in: deptIds };
+    }
+    // admin, director, clerk → no department filter (see all)
+
     const users = await this.prisma.user.findMany({
-      where: { isActive: true },
+      where,
       select: { id: true, firstName: true, lastName: true, role: true, departmentId: true, department: { select: { id: true, name: true, nameUk: true } } },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
@@ -83,7 +95,7 @@ export class UsersService {
     }
 
     await this.assertCanAccessUser(actor, user);
-    return this.mapUser(user);
+    return this.mapUserFull(user);
   }
 
   async create(dto: CreateUserDto, actor: any, ipAddress?: string) {
@@ -135,7 +147,7 @@ export class UsersService {
       ipAddress,
     });
 
-    return this.mapUser(user);
+    return this.mapUserFull(user);
   }
 
   async update(id: string, dto: UpdateUserDto, actor: any, ipAddress?: string) {
@@ -196,7 +208,7 @@ export class UsersService {
       ipAddress,
     });
 
-    return this.mapUser(updated);
+    return this.mapUserFull(updated);
   }
 
   async delete(id: string, actor: any, ipAddress?: string) {
@@ -294,7 +306,7 @@ export class UsersService {
       data: { avatarBase64: dto.avatarBase64 },
       include: { department: true, position: true },
     });
-    return this.mapUser(updated);
+    return this.mapUserFull(updated);
   }
 
   async findByDepartment(departmentId: string) {
@@ -315,7 +327,6 @@ export class UsersService {
       firstName: user.firstName,
       lastName: user.lastName,
       patronymic: user.patronymic,
-      avatarBase64: user.avatarBase64 ?? null,
       role: user.role,
       isActive: user.isActive,
       department: user.department ? {
@@ -329,10 +340,17 @@ export class UsersService {
         title: user.position.title,
         titleUk: user.position.titleUk,
       } : null,
-      scopeDepartmentIds: Array.isArray(user.scopeDepartmentIds) ? user.scopeDepartmentIds : [],
-      secondaryDepartmentIds: Array.isArray(user.secondaryDepartmentIds) ? user.secondaryDepartmentIds : [],
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
+    };
+  }
+
+  private mapUserFull(user: any) {
+    return {
+      ...this.mapUser(user),
+      avatarBase64: user.avatarBase64 ?? null,
+      scopeDepartmentIds: Array.isArray(user.scopeDepartmentIds) ? user.scopeDepartmentIds : [],
+      secondaryDepartmentIds: Array.isArray(user.secondaryDepartmentIds) ? user.secondaryDepartmentIds : [],
     };
   }
 
