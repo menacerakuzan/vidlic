@@ -106,20 +106,20 @@ export default function TaskArchivePage() {
     <DashboardLayout>
       <div className="space-y-4 p-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Архів задач</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <h1 className="text-2xl font-bold text-foreground dark:text-slate-100">Архів задач</h1>
+          <p className="text-sm text-muted-foreground dark:text-slate-400">
             {tasks.length > 0 ? `${tasks.length} задач в архіві` : ''}
           </p>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700">
+        <div className="flex gap-2 border-b border-border dark:border-slate-700">
           <button
             onClick={() => setActiveTab('completed')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'completed'
                 ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400'
-                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                : 'border-transparent text-muted-foreground hover:text-foreground/80 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
             ✅ Виконані ({completedTasks.length})
@@ -129,7 +129,7 @@ export default function TaskArchivePage() {
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'deleted'
                 ? 'border-rose-500 text-rose-700 dark:text-rose-400'
-                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                : 'border-transparent text-muted-foreground hover:text-foreground/80 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
             🗑 Видалені ({deletedTasks.length})
@@ -137,7 +137,7 @@ export default function TaskArchivePage() {
         </div>
 
         {activeTab === 'completed' && (
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-muted-foreground dark:text-slate-400">
             Задачі автоматично переміщуються сюди через 1 день після виконання
           </p>
         )}
@@ -149,12 +149,12 @@ export default function TaskArchivePage() {
         )}
 
         {loading && (
-          <p className="text-sm text-slate-500 dark:text-slate-400">Завантаження...</p>
+          <p className="text-sm text-muted-foreground dark:text-slate-400">Завантаження...</p>
         )}
 
         {!loading && visibleTasks.length === 0 && !error && (
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 text-center">
-            <p className="text-sm text-slate-500 dark:text-slate-400">
+          <div className="rounded-xl border border-border dark:border-slate-700 bg-card dark:bg-slate-800 p-8 text-center">
+            <p className="text-sm text-muted-foreground dark:text-slate-400">
               {activeTab === 'completed' ? 'Немає виконаних задач в архіві' : 'Немає видалених задач'}
             </p>
           </div>
@@ -164,22 +164,22 @@ export default function TaskArchivePage() {
           {visibleTasks.map((task) => (
             <div
               key={task.id}
-              className={`rounded-xl border bg-white dark:bg-slate-800 px-4 py-3 flex items-start gap-4 ${
+              className={`rounded-xl border bg-card dark:bg-slate-800 px-4 py-3 flex items-start gap-4 ${
                 task.archiveType === 'deleted'
                   ? 'border-rose-200 dark:border-rose-800/40'
                   : 'border-emerald-200 dark:border-emerald-800/40'
               }`}
             >
               <div className="flex-1 min-w-0 space-y-0.5">
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200 line-clamp-2">{task.title}</p>
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <p className="text-sm font-medium text-foreground dark:text-slate-200 line-clamp-2">{task.title}</p>
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground dark:text-slate-400">
                   {task.assignee && (
                     <span>{task.assignee.firstName} {task.assignee.lastName}</span>
                   )}
                   {task.department && (
                     <span>{task.department.nameUk || task.department.name}</span>
                   )}
-                  <span className="text-slate-400 dark:text-slate-500">
+                  <span className="text-muted-foreground dark:text-slate-500">
                     {task.archiveType === 'completed' ? 'Виконано та заархівовано:' : 'Видалено:'} {tabDate(task)}
                   </span>
                 </div>

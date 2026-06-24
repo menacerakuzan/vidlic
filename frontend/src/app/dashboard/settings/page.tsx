@@ -97,12 +97,12 @@ export default function SettingsPage() {
       <div className="max-w-3xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-semibold font-display">Налаштування</h1>
-          <p className="text-slate-500 mt-1">Параметри облікового запису та інтерфейсу</p>
+          <p className="text-muted-foreground mt-1">Параметри облікового запису та інтерфейсу</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-700 p-4 space-y-3">
+        <div className="rounded-2xl border border-border bg-card dark:bg-slate-900 dark:border-slate-700 p-4 space-y-3">
           <p className="text-sm font-semibold">Змінити пароль</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Мінімум 8 символів</p>
+          <p className="text-xs text-muted-foreground dark:text-slate-400">Мінімум 8 символів</p>
           {passwordError && (
             <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300">
               {passwordError}
@@ -119,14 +119,14 @@ export default function SettingsPage() {
               placeholder="Новий пароль"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             />
             <input
               type="password"
               placeholder="Підтвердити пароль"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             />
             <button
               onClick={changePassword}
@@ -138,29 +138,29 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-700 p-4">
+        <div className="rounded-2xl border border-border bg-card dark:bg-slate-900 dark:border-slate-700 p-4">
           <p className="text-sm font-semibold">Тема інтерфейсу</p>
-          <p className="mt-1 text-xs text-slate-500">Оберіть світлу або темну тему для всієї системи.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Оберіть світлу або темну тему для всієї системи.</p>
           <div className="mt-3 flex gap-2">
             <button
               onClick={() => setTheme(false)}
-              className={`rounded-lg px-3 py-2 text-sm border ${!isDark ? 'bg-primary text-white border-primary' : 'bg-white dark:bg-slate-800 border-slate-300 text-slate-700 dark:text-slate-200'}`}
+              className={`rounded-lg px-3 py-2 text-sm border ${!isDark ? 'bg-primary text-white border-primary' : 'bg-card dark:bg-slate-800 border-border text-foreground/80 dark:text-slate-200'}`}
             >
               Світла
             </button>
             <button
               onClick={() => setTheme(true)}
-              className={`rounded-lg px-3 py-2 text-sm border ${isDark ? 'bg-primary text-white border-primary' : 'bg-white dark:bg-slate-800 border-slate-300 text-slate-700 dark:text-slate-200'}`}
+              className={`rounded-lg px-3 py-2 text-sm border ${isDark ? 'bg-primary text-white border-primary' : 'bg-card dark:bg-slate-800 border-border text-foreground/80 dark:text-slate-200'}`}
             >
               Темна
             </button>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-700 p-4 space-y-3">
+        <div className="rounded-2xl border border-border bg-card dark:bg-slate-900 dark:border-slate-700 p-4 space-y-3">
           <div>
             <p className="text-sm font-semibold">Звук сповіщень</p>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Відтворюється при отриманні нового сповіщення</p>
+            <p className="mt-1 text-xs text-muted-foreground dark:text-slate-400">Відтворюється при отриманні нового сповіщення</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {soundOptions.map((opt) => (
@@ -170,7 +170,7 @@ export default function SettingsPage() {
                 className={`rounded-lg px-3 py-2 text-sm border transition-colors ${
                   notificationSound === opt.value
                     ? 'bg-primary text-white border-primary'
-                    : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:border-primary/50'
+                    : 'bg-card dark:bg-slate-800 border-border dark:border-slate-600 text-foreground/80 dark:text-slate-200 hover:border-primary/50'
                 }`}
               >
                 {opt.label}
@@ -178,14 +178,14 @@ export default function SettingsPage() {
             ))}
           </div>
           {notificationSound !== 'none' && (
-            <p className="text-[11px] text-slate-400 dark:text-slate-500">Натисніть на варіант щоб прослухати</p>
+            <p className="text-[11px] text-muted-foreground dark:text-slate-500">Натисніть на варіант щоб прослухати</p>
           )}
         </div>
 
         {user && (
-          <div className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-700 p-4">
+          <div className="rounded-2xl border border-border bg-card dark:bg-slate-900 dark:border-slate-700 p-4">
             <p className="text-sm font-semibold">Обліковий запис</p>
-            <div className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-300">
+            <div className="mt-2 space-y-1 text-sm text-muted-foreground dark:text-slate-300">
               <p><span className="font-medium">Ім'я:</span> {user.firstName} {user.lastName}</p>
               <p><span className="font-medium">Email:</span> {user.email}</p>
               <p><span className="font-medium">Роль:</span> {user.role}</p>

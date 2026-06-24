@@ -365,20 +365,20 @@ export default function CreateTaskPage() {
 
         <div>
           <h1 className="text-2xl font-semibold font-display">Створити задачу</h1>
-          <p className="text-slate-500 mt-1">Створення і призначення задач</p>
+          <p className="text-muted-foreground mt-1">Створення і призначення задач</p>
         </div>
 
         {/* Mode toggle */}
-        <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1 w-fit dark:border-slate-700 dark:bg-slate-800">
+        <div className="flex gap-1 rounded-xl border border-border bg-secondary p-1 w-fit dark:border-slate-700 dark:bg-slate-800">
           <button
             onClick={() => setSubtaskMode(false)}
-            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition ${!subtaskMode ? 'bg-white shadow-sm text-slate-900 dark:bg-slate-900 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition ${!subtaskMode ? 'bg-card shadow-sm text-foreground dark:bg-slate-900 dark:text-slate-100' : 'text-muted-foreground dark:text-slate-400 hover:text-foreground/80'}`}
           >
             Нова задача
           </button>
           <button
             onClick={() => setSubtaskMode(true)}
-            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition ${subtaskMode ? 'bg-white shadow-sm text-slate-900 dark:bg-slate-900 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition ${subtaskMode ? 'bg-card shadow-sm text-foreground dark:bg-slate-900 dark:text-slate-100' : 'text-muted-foreground dark:text-slate-400 hover:text-foreground/80'}`}
           >
             Підзадача
           </button>
@@ -392,7 +392,7 @@ export default function CreateTaskPage() {
               <select
                 value={subtaskParentId}
                 onChange={(e) => setSubtaskParentId(e.target.value)}
-                className="h-10 w-full rounded-lg border border-amber-300 px-3 text-sm bg-white text-slate-900 dark:border-amber-700 dark:bg-slate-800 dark:text-slate-100"
+                className="h-10 w-full rounded-lg border border-amber-300 px-3 text-sm bg-card text-foreground dark:border-amber-700 dark:bg-slate-800 dark:text-slate-100"
               >
                 <option value="">Оберіть задачу...</option>
                 {tasks.filter(t => !t.parentId).map((t) => {
@@ -430,19 +430,19 @@ export default function CreateTaskPage() {
                 onChange={(e) => setSubtaskTitle(e.target.value)}
                 rows={2}
                 placeholder="Назва підзадачі"
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
+                className="rounded-lg border border-border px-3 py-2 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
               />
               <textarea
                 value={subtaskDescription}
                 onChange={(e) => setSubtaskDescription(e.target.value)}
                 rows={2}
                 placeholder="Опис (необов'язково)"
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
+                className="rounded-lg border border-border px-3 py-2 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
               />
               <select
                 value={subtaskAssigneeId}
                 onChange={(e) => setSubtaskAssigneeId(e.target.value)}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               >
                 <option value="">Без виконавця</option>
                 {user && (
@@ -458,7 +458,7 @@ export default function CreateTaskPage() {
                 type="datetime-local"
                 value={subtaskDueDate}
                 onChange={(e) => setSubtaskDueDate(e.target.value)}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               />
             </div>
             <button
@@ -473,25 +473,25 @@ export default function CreateTaskPage() {
 
         {/* Main task form */}
         {!subtaskMode && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-4 gap-3 dark:border-slate-700 dark:bg-slate-900">
+        <div className="rounded-2xl border border-border bg-card p-4 grid grid-cols-1 md:grid-cols-4 gap-3 dark:border-slate-700 dark:bg-slate-900">
           <textarea
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             rows={3}
-            className="md:col-span-2 min-h-[92px] rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
+            className="md:col-span-2 min-h-[92px] rounded-lg border border-border px-3 py-2 text-sm font-medium bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
             placeholder="Назва задачі"
           />
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={8}
-            className="md:col-span-2 min-h-[180px] rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
+            className="md:col-span-2 min-h-[180px] rounded-lg border border-border px-3 py-2 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
             placeholder="Опис задачі"
           />
           <select
             value={priority}
             onChange={(e) => setPriority(e.target.value as any)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           >
             <option value="low">🟢 Низький пріоритет</option>
             <option value="medium">🟡 Середній пріоритет</option>
@@ -501,7 +501,7 @@ export default function CreateTaskPage() {
           <select
             value={selectedAssignDepartmentId}
             onChange={(e) => setSelectedAssignDepartmentId(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           >
             <option value="">Підрозділ для задачі</option>
             {assignDepartmentOptions.map((dep) => (
@@ -514,7 +514,7 @@ export default function CreateTaskPage() {
             <select
               value={assigneeId}
               onChange={(e) => { setAssigneeId(e.target.value); setOverrideDepartmentId(''); setCoAssigneeIds((prev) => prev.filter((id) => id !== e.target.value)) }}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
               <option value="">Без виконавця</option>
               {availableForAssignment.map((member) => {
@@ -527,7 +527,7 @@ export default function CreateTaskPage() {
               })}
             </select>
           ) : (
-            <div className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 flex items-center dark:border-slate-700 dark:text-slate-400">Призначення: через керівника/директора</div>
+            <div className="h-10 rounded-lg border border-border px-3 text-sm text-muted-foreground flex items-center dark:border-slate-700 dark:text-slate-400">Призначення: через керівника/директора</div>
           )}
           {(() => {
             if (!assigneeId) return null
@@ -537,8 +537,8 @@ export default function CreateTaskPage() {
             if (secondary.length === 0) return null
             const allDepts = [selected.department?.id, ...secondary].filter(Boolean) as string[]
             return (
-              <div className="md:col-span-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3 dark:border-indigo-800 dark:bg-indigo-950/30">
-                <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300 mb-1.5">
+              <div className="md:col-span-4 rounded-lg border border-primary/30 bg-primary/5 p-3 dark:border-primary/30 dark:bg-primary/15">
+                <p className="text-xs font-medium text-primary dark:text-primary mb-1.5">
                   {selected.firstName} {selected.lastName} — сумісник у кількох відділах. Обери відділ для цієї задачі:
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -550,7 +550,7 @@ export default function CreateTaskPage() {
                         key={depId}
                         type="button"
                         onClick={() => setOverrideDepartmentId(depId)}
-                        className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition ${isActive ? 'border-indigo-500 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200' : 'border-slate-300 bg-white text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'}`}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition ${isActive ? 'border-primary bg-primary/10 text-primary dark:bg-primary/15 dark:text-primary' : 'border-border bg-card text-foreground/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'}`}
                       >
                         {dep?.nameUk || dep?.name || depId}
                         {depId === selected.department?.id ? ' (основний)' : ' (суміщення)'}
@@ -563,7 +563,7 @@ export default function CreateTaskPage() {
           })()}
           {canAssign && availableForAssignment.length > 0 && (
             <div className="md:col-span-4">
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1.5">Співвиконавці (необов'язково)</p>
+              <p className="text-xs text-muted-foreground dark:text-slate-400 mb-1.5">Співвиконавці (необов'язково)</p>
               <div className="flex flex-wrap gap-2">
                 {availableForAssignment
                   .filter((m) => m.id !== assigneeId)
@@ -579,7 +579,7 @@ export default function CreateTaskPage() {
                         className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition ${
                           isSelected
                             ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                            : 'border-slate-300 bg-white text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'
+                            : 'border-border bg-card text-foreground/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'
                         }`}
                       >
                         {member.firstName} {member.lastName}
@@ -594,7 +594,7 @@ export default function CreateTaskPage() {
             type="datetime-local"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           />
           <button disabled={creating} onClick={createTask} className="md:col-span-4 h-10 rounded-lg bg-primary text-white text-sm font-medium disabled:opacity-60">
             {creating ? 'Створення...' : 'Створити задачу'}
@@ -603,13 +603,13 @@ export default function CreateTaskPage() {
         )}
 
         {loading && (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Завантаження...</div>
+          <div className="rounded-xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Завантаження...</div>
         )}
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
+        <div className="rounded-2xl border border-border bg-card p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Вкладення до задач</h2>
-            <label className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
+            <label className="rounded-lg border border-border px-3 py-2 text-sm text-foreground/80 hover:bg-secondary cursor-pointer dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
               {uploadingAttachment ? 'Завантаження...' : 'Додати файл'}
               <input
                 type="file"
@@ -626,7 +626,7 @@ export default function CreateTaskPage() {
           <select
             value={selectedTaskId}
             onChange={(e) => setSelectedTaskId(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm min-w-[320px] bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            className="h-10 rounded-lg border border-border px-3 text-sm min-w-[320px] bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           >
             {tasks.map((task) => (
               <option key={task.id} value={task.id}>
@@ -635,18 +635,18 @@ export default function CreateTaskPage() {
             ))}
           </select>
 
-          {attachmentsLoading && <p className="text-sm text-slate-500 dark:text-slate-400">Завантаження...</p>}
-          {!attachmentsLoading && taskAttachments.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">Файлів поки немає.</p>}
+          {attachmentsLoading && <p className="text-sm text-muted-foreground dark:text-slate-400">Завантаження...</p>}
+          {!attachmentsLoading && taskAttachments.length === 0 && <p className="text-sm text-muted-foreground dark:text-slate-400">Файлів поки немає.</p>}
           {taskAttachments.map((item) => (
-            <div key={item.id} className="rounded-lg border border-slate-200 p-3 flex items-center justify-between dark:border-slate-700 dark:bg-slate-800/70">
+            <div key={item.id} className="rounded-lg border border-border p-3 flex items-center justify-between dark:border-slate-700 dark:bg-slate-800/70">
               <div>
                 <p className="text-sm font-medium">{item.fileName}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{Math.round((item.fileSize || 0) / 1024)} KB</p>
+                <p className="text-xs text-muted-foreground dark:text-slate-400">{Math.round((item.fileSize || 0) / 1024)} KB</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => downloadAttachment(item.id, item.fileName)}
-                  className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:text-slate-200"
+                  className="rounded border border-border px-2 py-1 text-xs text-foreground/80 dark:border-slate-600 dark:text-slate-200"
                 >
                   Завантажити
                 </button>

@@ -57,7 +57,7 @@ function startOfMonth() {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  todo: 'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
+  todo: 'bg-primary/10 text-primary dark:bg-primary/15 dark:text-primary',
   in_progress: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
   done: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
 }
@@ -264,7 +264,7 @@ export default function DailyReportsPage() {
     `h-8 rounded-lg px-3 text-xs font-medium border transition ${
       activePeriodBtn === btn
         ? 'border-primary bg-primary text-white'
-        : 'border-slate-300 bg-white text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'
+        : 'border-border bg-card text-foreground/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'
     }`
 
   // Tasks not yet linked
@@ -286,27 +286,27 @@ export default function DailyReportsPage() {
 
         <div>
           <h1 className="text-2xl font-semibold font-display">Денний звіт</h1>
-          <p className="text-slate-500 mt-1">Щоденний запис виконаної роботи</p>
+          <p className="text-muted-foreground mt-1">Щоденний запис виконаної роботи</p>
         </div>
 
         {/* My report */}
-        <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 p-4 space-y-3">
+        <div className="rounded-2xl border border-border bg-card dark:border-slate-700 dark:bg-slate-900 p-4 space-y-3">
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-sm font-semibold">Мій звіт</p>
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="h-9 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              className="h-9 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             />
             <div className="flex gap-1">
-              <button onClick={() => setSelectedDate(offsetDate(-1))} className="h-9 rounded-lg border border-slate-300 px-2.5 text-xs dark:border-slate-600">← Вчора</button>
-              <button onClick={() => setSelectedDate(todayStr())} className="h-9 rounded-lg border border-slate-300 px-2.5 text-xs dark:border-slate-600">Сьогодні</button>
+              <button onClick={() => setSelectedDate(offsetDate(-1))} className="h-9 rounded-lg border border-border px-2.5 text-xs dark:border-slate-600">← Вчора</button>
+              <button onClick={() => setSelectedDate(todayStr())} className="h-9 rounded-lg border border-border px-2.5 text-xs dark:border-slate-600">Сьогодні</button>
             </div>
           </div>
 
           {loadingMy ? (
-            <p className="text-sm text-slate-500">Завантаження...</p>
+            <p className="text-sm text-muted-foreground">Завантаження...</p>
           ) : (
             <>
               <textarea
@@ -314,14 +314,14 @@ export default function DailyReportsPage() {
                 onChange={(e) => setText(e.target.value)}
                 rows={6}
                 placeholder="Що було зроблено за сьогодні? Опишіть виконану роботу, зустрічі, прийняті рішення..."
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
               />
 
               {/* Linked tasks */}
               {myReport && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    <p className="text-xs font-semibold text-muted-foreground dark:text-slate-300">
                       Прикріплені задачі {myReport.tasks.length > 0 && `(${myReport.tasks.length})`}
                     </p>
                     <button
@@ -333,16 +333,16 @@ export default function DailyReportsPage() {
                   </div>
 
                   {taskPickerOpen && (
-                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-800 max-h-48 overflow-y-auto">
+                    <div className="rounded-lg border border-border dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-800 max-h-48 overflow-y-auto">
                       {availableToAttach.length === 0 && (
-                        <p className="px-3 py-2 text-xs text-slate-500">Немає доступних задач</p>
+                        <p className="px-3 py-2 text-xs text-muted-foreground">Немає доступних задач</p>
                       )}
                       {availableToAttach.map((t) => (
                         <button
                           key={t.id}
                           onClick={() => attachTask(t.id)}
                           disabled={attachingTaskId === t.id}
-                          className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-800/60 transition flex items-center justify-between gap-2"
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-secondary dark:hover:bg-slate-800/60 transition flex items-center justify-between gap-2"
                         >
                           <span className="flex-1 line-clamp-1">{t.title}</span>
                           <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${STATUS_BADGE[t.status] || ''}`}>
@@ -356,14 +356,14 @@ export default function DailyReportsPage() {
                   {myReport.tasks.length > 0 && (
                     <div className="space-y-1">
                       {myReport.tasks.map((t) => (
-                        <div key={t.id} className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
+                        <div key={t.id} className="flex items-center gap-2 rounded-lg border border-border dark:border-slate-700 px-3 py-2">
                           <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${STATUS_BADGE[t.status] || ''}`}>
                             {t.statusLabel}
                           </span>
-                          <span className="flex-1 text-xs text-slate-800 dark:text-slate-200 line-clamp-1">{t.title}</span>
+                          <span className="flex-1 text-xs text-foreground dark:text-slate-200 line-clamp-1">{t.title}</span>
                           <button
                             onClick={() => detachTask(t.id)}
-                            className="shrink-0 text-xs text-slate-400 hover:text-rose-600 transition"
+                            className="shrink-0 text-xs text-muted-foreground hover:text-rose-600 transition"
                             title="Відкріпити"
                           >
                             ✕
@@ -384,7 +384,7 @@ export default function DailyReportsPage() {
                   {saving ? 'Збереження...' : 'Зберегти'}
                 </button>
                 {myReport?.updatedAt && (
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-muted-foreground">
                     Оновлено: {new Date(myReport.updatedAt).toLocaleString('uk-UA')}
                   </p>
                 )}
@@ -395,31 +395,31 @@ export default function DailyReportsPage() {
 
         {/* Leadership team view */}
         {isLeadership && (
-          <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 p-4 space-y-4">
+          <div className="rounded-2xl border border-border bg-card dark:border-slate-700 dark:bg-slate-900 p-4 space-y-4">
             <p className="text-sm font-semibold">Звіти команди</p>
 
             <div className="flex flex-wrap items-center gap-2">
               <button className={periodBtnClass('today')} onClick={() => applyPeriod('today')}>Сьогодні</button>
               <button className={periodBtnClass('week')} onClick={() => applyPeriod('week')}>Цей тиждень</button>
               <button className={periodBtnClass('month')} onClick={() => applyPeriod('month')}>Цей місяць</button>
-              <span className="text-xs text-slate-400 dark:text-slate-500">або:</span>
+              <span className="text-xs text-muted-foreground dark:text-slate-500">або:</span>
               <input
                 type="date"
                 value={filterDateFrom}
                 onChange={(e) => { setFilterDateFrom(e.target.value); setActivePeriodBtn('custom') }}
-                className="h-8 rounded-lg border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                className="h-8 rounded-lg border border-border px-2 text-xs bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               />
-              <span className="text-xs text-slate-400">—</span>
+              <span className="text-xs text-muted-foreground">—</span>
               <input
                 type="date"
                 value={filterDateTo}
                 onChange={(e) => { setFilterDateTo(e.target.value); setActivePeriodBtn('custom') }}
-                className="h-8 rounded-lg border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                className="h-8 rounded-lg border border-border px-2 text-xs bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               />
               {activePeriodBtn === 'custom' && (
                 <button
                   onClick={() => loadTeamReports(filterDepartmentId, filterDateFrom, filterDateTo)}
-                  className="h-8 rounded-lg border border-slate-300 px-3 text-xs dark:border-slate-600"
+                  className="h-8 rounded-lg border border-border px-3 text-xs dark:border-slate-600"
                 >
                   Застосувати
                 </button>
@@ -432,7 +432,7 @@ export default function DailyReportsPage() {
                 className={`h-8 rounded-lg px-3 text-xs font-medium border transition ${
                   !filterDepartmentId
                     ? 'border-primary bg-primary text-white'
-                    : 'border-slate-300 bg-white text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'
+                    : 'border-border bg-card text-foreground/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'
                 }`}
               >
                 Усі відділи
@@ -444,7 +444,7 @@ export default function DailyReportsPage() {
                   className={`h-8 rounded-lg px-3 text-xs font-medium border transition ${
                     filterDepartmentId === d.id
                       ? 'border-primary bg-primary text-white'
-                      : 'border-slate-300 bg-white text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'
+                      : 'border-border bg-card text-foreground/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'
                   }`}
                 >
                   {d.nameUk || d.name}
@@ -452,44 +452,44 @@ export default function DailyReportsPage() {
               ))}
             </div>
 
-            {loadingTeam && <p className="text-sm text-slate-500">Завантаження...</p>}
+            {loadingTeam && <p className="text-sm text-muted-foreground">Завантаження...</p>}
 
             {!loadingTeam && groupedTeamReports.length === 0 && (
-              <p className="text-sm text-slate-500 dark:text-slate-400">Звітів за обраний період немає.</p>
+              <p className="text-sm text-muted-foreground dark:text-slate-400">Звітів за обраний період немає.</p>
             )}
 
             <div className="space-y-5">
               {groupedTeamReports.map(([date, reports]) => (
                 <div key={date}>
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2 pb-1 border-b border-slate-100 dark:border-slate-800">
+                  <p className="text-xs font-semibold text-muted-foreground dark:text-slate-400 uppercase tracking-wide mb-2 pb-1 border-b border-border dark:border-slate-800">
                     {new Date(date + 'T12:00:00Z').toLocaleDateString('uk-UA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                     <span className="ml-2 font-normal normal-case">· {reports.length} {reports.length === 1 ? 'запис' : reports.length < 5 ? 'записи' : 'записів'}</span>
                   </p>
                   <div className="space-y-2">
                     {reports.map((r) => (
-                      <div key={r.id} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+                      <div key={r.id} className="rounded-lg border border-border dark:border-slate-700 p-3 space-y-2">
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-medium">
                             {r.author ? `${r.author.firstName} ${r.author.lastName}` : 'Невідомий'}
                             {r.department && (
-                              <span className="ml-2 text-xs font-normal text-slate-500 dark:text-slate-400">
+                              <span className="ml-2 text-xs font-normal text-muted-foreground dark:text-slate-400">
                                 · {r.department.nameUk}
                               </span>
                             )}
                           </p>
-                          <p className="text-xs text-slate-400 shrink-0">
-                            {new Date(r.updatedAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}
+                          <p className="text-xs text-muted-foreground shrink-0">
+                            {r.updatedAt ? new Date(r.updatedAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }) : '—'}
                           </p>
                         </div>
                         {r.text ? (
-                          <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">{r.text}</p>
+                          <p className="text-sm whitespace-pre-wrap text-foreground/80 dark:text-slate-300">{r.text}</p>
                         ) : (
-                          <p className="text-sm text-slate-400 dark:text-slate-500 italic">Порожній звіт</p>
+                          <p className="text-sm text-muted-foreground dark:text-slate-500 italic">Порожній звіт</p>
                         )}
                         {r.tasks && r.tasks.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+                          <div className="flex flex-wrap gap-1.5 pt-1 border-t border-border dark:border-slate-800">
                             {r.tasks.map((t) => (
-                              <span key={t.id} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_BADGE[t.status] || 'bg-slate-100 text-slate-600'}`}>
+                              <span key={t.id} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_BADGE[t.status] || 'bg-secondary text-muted-foreground'}`}>
                                 {t.title}
                               </span>
                             ))}

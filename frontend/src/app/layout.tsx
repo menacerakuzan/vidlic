@@ -1,16 +1,29 @@
 import type { Metadata } from 'next'
-import { Manrope, Space_Grotesk } from 'next/font/google'
+import localFont from 'next/font/local'
 import './globals.css'
 import { Providers } from '@/components/providers'
 
-const manrope = Manrope({
-  subsets: ['latin', 'cyrillic'],
-  variable: '--font-manrope',
+// Офіційний шрифт державних органів України — e-Ukraine (текст) та e-UkraineHead (заголовки)
+const eUkraine = localFont({
+  src: [
+    { path: '../../public/fonts/e-Ukraine-Light.otf', weight: '300', style: 'normal' },
+    { path: '../../public/fonts/e-Ukraine-Regular.otf', weight: '400', style: 'normal' },
+    { path: '../../public/fonts/e-Ukraine-Medium.otf', weight: '500', style: 'normal' },
+    { path: '../../public/fonts/e-Ukraine-Bold.otf', weight: '700', style: 'normal' },
+  ],
+  variable: '--font-e-ukraine',
+  display: 'swap',
 })
 
-const spaceGrotesk = Space_Grotesk({
-  subsets: ['latin', 'latin-ext'],
-  variable: '--font-space',
+const eUkraineHead = localFont({
+  src: [
+    { path: '../../public/fonts/e-UkraineHead-Light.otf', weight: '300', style: 'normal' },
+    { path: '../../public/fonts/e-UkraineHead-Regular.otf', weight: '400', style: 'normal' },
+    { path: '../../public/fonts/e-UkraineHead-Medium.otf', weight: '500', style: 'normal' },
+    { path: '../../public/fonts/e-UkraineHead-Bold.otf', weight: '700', style: 'normal' },
+  ],
+  variable: '--font-e-ukraine-head',
+  display: 'swap',
 })
 
 export const metadata: Metadata = {
@@ -25,7 +38,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="uk">
-      <body className={`${manrope.variable} ${spaceGrotesk.variable} font-sans`}>
+      <body className={`${eUkraine.variable} ${eUkraineHead.variable} font-sans`}>
         <Providers>
           {children}
         </Providers>

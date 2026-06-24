@@ -37,7 +37,7 @@ type UserMeta = {
 }
 
 const statusFilters: Array<{ id: 'todo' | 'in_progress' | 'done'; label: string; dot: string }> = [
-  { id: 'todo', label: 'Нове', dot: 'bg-sky-500' },
+  { id: 'todo', label: 'Нове', dot: 'bg-primary' },
   { id: 'in_progress', label: 'В роботі', dot: 'bg-amber-500' },
   { id: 'done', label: 'Виконано', dot: 'bg-emerald-500' },
 ]
@@ -241,7 +241,7 @@ export default function WorkloadPage() {
   }, [departments, selectedManagement])
 
   const statusMeta = (status: Task['status']) => {
-    if (status === 'todo') return { label: 'Нове', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300' }
+    if (status === 'todo') return { label: 'Нове', cls: 'bg-primary/10 text-primary dark:bg-primary/15 dark:text-primary' }
     if (status === 'in_progress') return { label: 'В роботі', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' }
     return { label: 'Виконано', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' }
   }
@@ -266,7 +266,7 @@ export default function WorkloadPage() {
       dot: '🟡',
     }
     return {
-      card: 'border-slate-200 dark:border-slate-700',
+      card: 'border-border dark:border-slate-700',
       badge: '',
       label: '',
       dot: '',
@@ -288,7 +288,7 @@ export default function WorkloadPage() {
       <div className="max-w-[1500px] mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-semibold font-display">Навантаження співробітників</h1>
-          <p className="text-slate-500 mt-1">Всі відділи, їх поточні задачі та статуси</p>
+          <p className="text-muted-foreground mt-1">Всі відділи, їх поточні задачі та статуси</p>
         </div>
 
         {/* Urgency summary bar */}
@@ -324,7 +324,7 @@ export default function WorkloadPage() {
           </div>
         )}
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+        <div className="rounded-2xl border border-border bg-card p-4 dark:border-slate-700 dark:bg-slate-900">
           <p className="text-sm font-semibold mb-3">Фільтри</p>
           <div className="flex flex-wrap gap-2 mb-3">
             {statusFilters.map((item) => {
@@ -333,7 +333,7 @@ export default function WorkloadPage() {
                 <button
                   key={item.id}
                   onClick={() => toggleStatus(item.id)}
-                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${active ? 'border-primary bg-primary/10 text-primary' : 'border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-200'}`}
+                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${active ? 'border-primary bg-primary/10 text-primary' : 'border-border text-foreground/80 dark:border-slate-600 dark:text-slate-200'}`}
                 >
                   <span className={`h-2.5 w-2.5 rounded-full ${item.dot}`} />
                   {item.label}
@@ -348,7 +348,7 @@ export default function WorkloadPage() {
                 setSelectedManagement(e.target.value)
                 setSelectedDepartmentId('')
               }}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
               <option value="">Усі управління</option>
               {managementOptions.map((tag) => (
@@ -358,7 +358,7 @@ export default function WorkloadPage() {
             <select
               value={selectedDepartmentId}
               onChange={(e) => setSelectedDepartmentId(e.target.value)}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
               <option value="">Усі відділи</option>
               {departmentOptions.map((dep) => (
@@ -370,7 +370,7 @@ export default function WorkloadPage() {
                 setSelectedManagement('')
                 setSelectedDepartmentId('')
               }}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-slate-600"
+              className="h-10 rounded-lg border border-border px-3 text-sm dark:border-slate-600"
             >
               Скинути фільтри
             </button>
@@ -384,7 +384,7 @@ export default function WorkloadPage() {
         )}
 
         {loading ? (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Завантаження...</div>
+          <div className="rounded-xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Завантаження...</div>
         ) : (
           <div className="overflow-x-auto">
             <div className="min-w-max flex items-start gap-3 pb-2">
@@ -397,9 +397,9 @@ export default function WorkloadPage() {
                 return (
                   <div
                     key={column.departmentId}
-                    className="w-[320px] rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900"
+                    className="w-[320px] rounded-2xl border border-border bg-card p-3 dark:border-slate-700 dark:bg-slate-900"
                   >
-                    <div className="mb-3 border-b border-slate-200 pb-2 dark:border-slate-700">
+                    <div className="mb-3 border-b border-border pb-2 dark:border-slate-700">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-semibold">{column.departmentName}</p>
                         <div className="flex items-center gap-1">
@@ -420,7 +420,7 @@ export default function WorkloadPage() {
                           )}
                         </div>
                       </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Задач: {column.tasks.length}</p>
+                      <p className="text-xs text-muted-foreground dark:text-slate-400">Задач: {column.tasks.length}</p>
                     </div>
 
                     <div className="space-y-2 max-h-[68vh] overflow-y-auto pr-1">
@@ -435,7 +435,7 @@ export default function WorkloadPage() {
                         return (
                           <div
                             key={`${task.id}-${isSecondary ? 'sec' : 'pri'}`}
-                            className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800/50"
+                            className="rounded-xl border border-border bg-card dark:border-slate-700 dark:bg-slate-800/50"
                           >
                             {/* Main task header — clickable to expand if has subtasks */}
                             <div
@@ -449,7 +449,7 @@ export default function WorkloadPage() {
                               <div className="flex items-start justify-between gap-1">
                                 <div className="flex items-center gap-1 flex-1 min-w-0">
                                   {hasChildren && (
-                                    <span className="shrink-0 text-[11px] text-slate-400 dark:text-slate-500 leading-none">
+                                    <span className="shrink-0 text-[11px] text-muted-foreground dark:text-slate-500 leading-none">
                                       {isExpanded ? '▾' : '▸'}
                                     </span>
                                   )}
@@ -462,11 +462,11 @@ export default function WorkloadPage() {
                                 )}
                               </div>
                               <div className="mt-1 flex items-center gap-1.5">
-                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                <p className="text-xs text-muted-foreground dark:text-slate-400">
                                   {task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : 'Без виконавця'}
                                 </p>
                                 {isSecondary && (
-                                  <span className="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300">
+                                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary dark:bg-primary/15 dark:text-primary">
                                     Суміщення
                                   </span>
                                 )}
@@ -475,7 +475,7 @@ export default function WorkloadPage() {
                                 <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.cls}`}>
                                   {meta.label}
                                 </span>
-                                <span className={`text-[11px] font-medium ${u === 'overdue' ? 'text-rose-600' : u === 'critical' ? 'text-orange-600' : u === 'soon' ? 'text-amber-600' : 'text-slate-400 dark:text-slate-500'}`}>
+                                <span className={`text-[11px] font-medium ${u === 'overdue' ? 'text-rose-600' : u === 'critical' ? 'text-orange-600' : u === 'soon' ? 'text-amber-600' : 'text-muted-foreground dark:text-slate-500'}`}>
                                   {task.dueDate ? new Date(task.dueDate).toLocaleDateString('uk-UA') : 'Без терміну'}
                                 </span>
                               </div>
@@ -487,8 +487,8 @@ export default function WorkloadPage() {
                               {hasChildren && (
                                 <div className="mt-2">
                                   <div className="flex items-center justify-between mb-0.5">
-                                    <span className="text-[10px] text-slate-400 dark:text-slate-500">{task.subtasksDone ?? 0}/{task.subtasksCount} підзадач</span>
-                                    <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">{Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%</span>
+                                    <span className="text-[10px] text-muted-foreground dark:text-slate-500">{task.subtasksDone ?? 0}/{task.subtasksCount} підзадач</span>
+                                    <span className="text-[10px] font-medium text-muted-foreground dark:text-slate-400">{Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%</span>
                                   </div>
                                   <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                                     <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%` }} />
@@ -499,26 +499,26 @@ export default function WorkloadPage() {
 
                             {/* Subtasks — shown on expand */}
                             {hasChildren && isExpanded && (
-                              <div className="border-t border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-800">
+                              <div className="border-t border-border dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-800">
                                 {children.map((sub) => {
                                   const sm = statusMeta(sub.status)
                                   const su = urgencyLevel(sub)
                                   return (
-                                    <div key={sub.id} className="px-3 py-2 bg-slate-50 dark:bg-slate-800/30">
+                                    <div key={sub.id} className="px-3 py-2 bg-secondary dark:bg-slate-800/30">
                                       <div className="flex items-start gap-1.5">
                                         <span className="text-[10px] text-slate-300 dark:text-slate-600 mt-0.5 shrink-0">└</span>
                                         <div className="flex-1 min-w-0">
-                                          <p className="text-xs font-medium text-slate-800 dark:text-slate-200 line-clamp-2">{sub.title}</p>
+                                          <p className="text-xs font-medium text-foreground dark:text-slate-200 line-clamp-2">{sub.title}</p>
                                           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                                             <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${sm.cls}`}>{sm.label}</span>
                                             {sub.assignee && (
-                                              <span className="text-[10px] text-slate-400">{sub.assignee.firstName} {sub.assignee.lastName}</span>
+                                              <span className="text-[10px] text-muted-foreground">{sub.assignee.firstName} {sub.assignee.lastName}</span>
                                             )}
                                             {su !== 'normal' && (
                                               <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${urgencyStyle(su).badge}`}>{urgencyStyle(su).label}</span>
                                             )}
                                             {sub.dueDate && (
-                                              <span className={`text-[10px] ${su === 'overdue' ? 'text-rose-600' : su === 'critical' ? 'text-orange-600' : 'text-slate-400'}`}>
+                                              <span className={`text-[10px] ${su === 'overdue' ? 'text-rose-600' : su === 'critical' ? 'text-orange-600' : 'text-muted-foreground'}`}>
                                                 {new Date(sub.dueDate).toLocaleDateString('uk-UA')}
                                               </span>
                                             )}
@@ -534,14 +534,14 @@ export default function WorkloadPage() {
                         )
                       })}
                       {column.tasks.length === 0 && (
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Немає задач для обраних статусів.</p>
+                        <p className="text-sm text-muted-foreground dark:text-slate-400">Немає задач для обраних статусів.</p>
                       )}
                     </div>
                   </div>
                 )
               })}
               {columns.length === 0 && (
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                <div className="rounded-xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
                   Дані відсутні для обраних фільтрів.
                 </div>
               )}

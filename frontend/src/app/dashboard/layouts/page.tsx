@@ -136,7 +136,7 @@ export default function LayoutBuilderPage() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold font-display">Конструктор дашборду</h1>
-            <p className="text-slate-500 mt-1">Перетягуйте віджети та змінюйте розміри</p>
+            <p className="text-muted-foreground mt-1">Перетягуйте віджети та змінюйте розміри</p>
           </div>
           <Button className="rounded-full" onClick={saveLayout}>
             <Save className="w-4 h-4 mr-2" />
@@ -144,7 +144,7 @@ export default function LayoutBuilderPage() {
           </Button>
         </div>
 
-        {loading && <div className="glass-card p-6 text-sm text-slate-500">Завантаження...</div>}
+        {loading && <div className="glass-card p-6 text-sm text-muted-foreground">Завантаження...</div>}
 
         {!loading && (
           <div className="space-y-6">
@@ -163,7 +163,7 @@ export default function LayoutBuilderPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-semibold">Конструктор погодження звітів</h2>
-                    <p className="text-sm text-slate-500">Налаштуйте послідовність: керівник → діловод → директор</p>
+                    <p className="text-sm text-muted-foreground">Налаштуйте послідовність: керівник → діловод → директор</p>
                   </div>
                   <Button onClick={saveFlow} disabled={savingFlow}>
                     {savingFlow ? 'Збереження...' : 'Зберегти flow'}
@@ -171,12 +171,12 @@ export default function LayoutBuilderPage() {
                 </div>
                 <div className="space-y-2">
                   {approvalSteps.map((step, idx) => (
-                    <div key={idx} className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2">
-                      <span className="text-sm text-slate-600 min-w-10">Крок {step.order}</span>
+                    <div key={idx} className="flex items-center gap-3 rounded-lg border border-border px-3 py-2">
+                      <span className="text-sm text-muted-foreground min-w-10">Крок {step.order}</span>
                       <select
                         value={step.role}
                         onChange={(e) => updateStepRole(idx, e.target.value as 'manager' | 'clerk' | 'director')}
-                        className="h-9 rounded-lg border border-slate-300 px-3 text-sm"
+                        className="h-9 rounded-lg border border-border px-3 text-sm"
                       >
                         <option value="manager">Керівник</option>
                         <option value="clerk">Діловод</option>
@@ -206,27 +206,27 @@ function WidgetRow({ widget, onSpanChange }: { widget: UiWidgetConfig; onSpanCha
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
       <GlassCard className="p-4 flex flex-wrap items-center justify-between gap-4 cursor-grab">
         <div>
-          <p className="text-sm font-semibold text-slate-900 dark:text-white">{widget.title}</p>
-          <p className="text-xs text-slate-500">{widget.type}</p>
+          <p className="text-sm font-semibold text-foreground dark:text-white">{widget.title}</p>
+          <p className="text-xs text-muted-foreground">{widget.type}</p>
         </div>
         <div className="flex items-center gap-3">
-          <label className="text-xs text-slate-500">Col</label>
+          <label className="text-xs text-muted-foreground">Col</label>
           <input
             type="number"
             min={1}
             max={12}
             value={widget.span.col}
             onChange={(e) => onSpanChange(widget.id, Number(e.target.value), undefined)}
-            className="w-16 rounded-lg bg-white/70 px-2 py-1 text-xs text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+            className="w-16 rounded-lg bg-card/70 px-2 py-1 text-xs text-foreground dark:bg-slate-800 dark:text-slate-100"
           />
-          <label className="text-xs text-slate-500">Row</label>
+          <label className="text-xs text-muted-foreground">Row</label>
           <input
             type="number"
             min={1}
             max={6}
             value={widget.span.row}
             onChange={(e) => onSpanChange(widget.id, undefined, Number(e.target.value))}
-            className="w-16 rounded-lg bg-white/70 px-2 py-1 text-xs text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+            className="w-16 rounded-lg bg-card/70 px-2 py-1 text-xs text-foreground dark:bg-slate-800 dark:text-slate-100"
           />
         </div>
       </GlassCard>

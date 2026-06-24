@@ -38,6 +38,7 @@ function NewReportContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
   const [myTasks, setMyTasks] = useState<MyTask[]>([])
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([])
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
@@ -88,8 +89,13 @@ function NewReportContent() {
 
   const onSubmit = async (values: FormValues) => {
     if (!accessToken) return
+    setSubmitError('')
     if (!isAggregateMode && (!values.workDone || values.workDone.trim().length < 2)) {
       setError('workDone', { type: 'manual', message: 'Поле "Виконана робота" обовʼязкове' })
+      return
+    }
+    if (values.periodStart && values.periodEnd && new Date(values.periodEnd) < new Date(values.periodStart)) {
+      setError('periodEnd', { type: 'manual', message: 'Дата завершення не може бути раніше дати початку' })
       return
     }
     setSubmitting(true)
@@ -122,6 +128,8 @@ function NewReportContent() {
     setSubmitting(false)
 
     if (!resp.ok) {
+      const err = await resp.json().catch(() => null)
+      setSubmitError(err?.message || 'Не вдалося створити звіт. Спробуйте ще раз або зверніться до адміністратора.')
       return
     }
 
@@ -151,7 +159,7 @@ function NewReportContent() {
           <h1 className="text-2xl font-semibold font-display">
             {isAggregateMode ? 'Створити зведену чернетку' : 'Створити чернетку звіту'}
           </h1>
-          <p className="text-slate-500 mt-1">{user?.department?.nameUk}</p>
+          <p className="text-muted-foreground mt-1">{user?.department?.nameUk}</p>
         </div>
 
         <GlassCard>
@@ -161,7 +169,7 @@ function NewReportContent() {
                 <Label htmlFor="reportType">Тип звіту</Label>
                 <select
                   id="reportType"
-                  className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                  className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground dark:bg-slate-800 dark:text-slate-100"
                   {...register('reportType')}
                 >
                   <option value="weekly">Тижневий</option>
@@ -186,7 +194,7 @@ function NewReportContent() {
             </div>
 
             {isAggregateMode ? (
-              <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
+              <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-primary dark:border-primary/30 dark:bg-primary/15 dark:text-primary">
                 Після створення чернетки ви одразу перейдете у картку звіту, де можна обрати джерела і натиснути
                 {' '}<span className="font-semibold">"Згенерувати AI-чернетку"</span>.
                 {user?.role === 'manager' && (
@@ -200,7 +208,7 @@ function NewReportContent() {
                   <textarea
                     id="workDone"
                     rows={4}
-                    className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                    className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground dark:bg-slate-800 dark:text-slate-100"
                     {...register('workDone')}
                   />
                   {errors.workDone && <p className="text-xs text-red-500">{errors.workDone.message}</p>}
@@ -212,7 +220,7 @@ function NewReportContent() {
                     <textarea
                       id="achievements"
                       rows={3}
-                      className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                      className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground dark:bg-slate-800 dark:text-slate-100"
                       {...register('achievements')}
                     />
                   </div>
@@ -221,7 +229,7 @@ function NewReportContent() {
                     <textarea
                       id="problems"
                       rows={3}
-                      className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                      className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground dark:bg-slate-800 dark:text-slate-100"
                       {...register('problems')}
                     />
                   </div>
@@ -232,7 +240,7 @@ function NewReportContent() {
                   <textarea
                     id="nextWeekPlan"
                     rows={3}
-                    className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                    className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground dark:bg-slate-800 dark:text-slate-100"
                     {...register('nextWeekPlan')}
                   />
                 </div>
@@ -242,12 +250,12 @@ function NewReportContent() {
             {myTasks.length > 0 && (
               <div className="space-y-2">
                 <Label>Прикріпити задачі до звіту</Label>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2 dark:border-slate-700 dark:bg-slate-800/50">
+                <div className="rounded-lg border border-border bg-secondary p-3 space-y-2 dark:border-slate-700 dark:bg-slate-800/50">
                   {myTasks.map((task) => {
                     const checked = selectedTaskIds.includes(task.id)
                     const statusIcon = task.status === 'done' ? '✅' : task.status === 'in_progress' ? '🔄' : '⬜'
                     return (
-                      <label key={task.id} className="flex items-center gap-3 cursor-pointer rounded-md px-2 py-1.5 hover:bg-white dark:hover:bg-slate-700/50">
+                      <label key={task.id} className="flex items-center gap-3 cursor-pointer rounded-md px-2 py-1.5 hover:bg-card dark:hover:bg-slate-700/50">
                         <input
                           type="checkbox"
                           checked={checked}
@@ -256,13 +264,13 @@ function NewReportContent() {
                               checked ? prev.filter((id) => id !== task.id) : [...prev, task.id]
                             )
                           }
-                          className="h-4 w-4 rounded border-slate-300 accent-primary"
+                          className="h-4 w-4 rounded border-border accent-primary"
                         />
                         <span className="text-sm">
                           {statusIcon} {task.title}
                         </span>
                         {task.dueDate && (
-                          <span className="ml-auto text-xs text-slate-400 shrink-0">
+                          <span className="ml-auto text-xs text-muted-foreground shrink-0">
                             {new Date(task.dueDate).toLocaleDateString('uk-UA')}
                           </span>
                         )}
@@ -271,9 +279,15 @@ function NewReportContent() {
                   })}
                 </div>
                 {selectedTaskIds.length > 0 && (
-                  <p className="text-xs text-slate-500">Вибрано задач: {selectedTaskIds.length}</p>
+                  <p className="text-xs text-muted-foreground">Вибрано задач: {selectedTaskIds.length}</p>
                 )}
               </div>
+            )}
+
+            {submitError && (
+              <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {submitError}
+              </p>
             )}
 
             <Button type="submit" disabled={submitting}>
@@ -288,7 +302,7 @@ function NewReportContent() {
 
 export default function NewReport() {
   return (
-    <Suspense fallback={<DashboardLayout><div className="p-6 text-sm text-slate-500">Завантаження...</div></DashboardLayout>}>
+    <Suspense fallback={<DashboardLayout><div className="p-6 text-sm text-muted-foreground">Завантаження...</div></DashboardLayout>}>
       <NewReportContent />
     </Suspense>
   )

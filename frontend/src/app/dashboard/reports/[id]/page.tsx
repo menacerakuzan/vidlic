@@ -745,33 +745,33 @@ export default function ReportDetailsPage() {
   return (
     <DashboardLayout>
       <div className="max-w-5xl mx-auto space-y-6">
-        {loading && <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Завантаження...</div>}
+        {loading && <div className="rounded-xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Завантаження...</div>}
         {!loading && error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300">{error}</div>}
 
         {!loading && report && (
           <>
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4 dark:border-slate-700 dark:bg-slate-900">
+            <div className="rounded-2xl border border-border bg-card p-6 space-y-4 dark:border-slate-700 dark:bg-slate-900">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <h1 className="text-2xl font-semibold font-display">{report.title || 'Звіт без назви'}</h1>
-                  <p className="text-slate-500 dark:text-slate-400 mt-1">{report.author?.firstName} {report.author?.lastName}</p>
+                  <p className="text-muted-foreground dark:text-slate-400 mt-1">{report.author?.firstName} {report.author?.lastName}</p>
                 </div>
                 <ReportStatusBadge status={report.status} />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-slate-500 dark:text-slate-400">Період</p>
+                  <p className="text-muted-foreground dark:text-slate-400">Період</p>
                   <p className="font-medium">{new Date(report.periodStart).toLocaleDateString('uk-UA')} - {new Date(report.periodEnd).toLocaleDateString('uk-UA')}</p>
                 </div>
                 <div>
-                  <p className="text-slate-500 dark:text-slate-400">Поточний погоджувач</p>
+                  <p className="text-muted-foreground dark:text-slate-400">Поточний погоджувач</p>
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-medium">{report.currentApprover ? `${report.currentApprover.firstName} ${report.currentApprover.lastName}` : '-'}</p>
                     {user?.role === 'admin' && ['pending_manager', 'pending_clerk', 'pending_director'].includes(report.status) && (
                       <button
                         onClick={() => { setReassignOpen((v) => !v); setReassignApproverId('') }}
-                        className="rounded px-2 py-0.5 text-xs border border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                        className="rounded px-2 py-0.5 text-xs border border-border text-muted-foreground hover:bg-secondary dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
                       >
                         Змінити
                       </button>
@@ -782,7 +782,7 @@ export default function ReportDetailsPage() {
                       <select
                         value={reassignApproverId}
                         onChange={(e) => setReassignApproverId(e.target.value)}
-                        className="rounded border border-slate-300 px-2 py-1 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                        className="rounded border border-border px-2 py-1 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                       >
                         <option value="">— Оберіть погоджувача —</option>
                         {allUsers.filter((u: any) => u.isActive).map((u: any) => (
@@ -800,7 +800,7 @@ export default function ReportDetailsPage() {
                       </button>
                       <button
                         onClick={() => setReassignOpen(false)}
-                        className="rounded border border-slate-300 px-3 py-1 text-xs text-slate-600 dark:border-slate-600 dark:text-slate-300"
+                        className="rounded border border-border px-3 py-1 text-xs text-muted-foreground dark:border-slate-600 dark:text-slate-300"
                       >
                         Скасувати
                       </button>
@@ -811,7 +811,7 @@ export default function ReportDetailsPage() {
 
               <div className="flex flex-wrap gap-2">
                 {report?.id && (
-                  <Link href={`/dashboard/reports/${report.id}/print`} className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
+                  <Link href={`/dashboard/reports/${report.id}/print`} className="rounded-lg border border-border px-4 py-2 text-sm text-foreground/80 hover:bg-secondary dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
                     Друк-версія
                   </Link>
                 )}
@@ -845,22 +845,22 @@ export default function ReportDetailsPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-3 dark:border-slate-700 dark:bg-slate-900">
+            <div className="rounded-2xl border border-border bg-card p-6 space-y-3 dark:border-slate-700 dark:bg-slate-900">
               {canCreateAggregateDraft && (
-                <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-slate-700 dark:text-slate-200">
+                <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-foreground/80 dark:text-slate-200">
                   {aggregateDraftHint}
                 </div>
               )}
               {canEditSubmission && (
-                <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
+                <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-primary dark:border-primary/30/60 dark:bg-primary/15 dark:text-primary">
                   {draftHint}
                 </div>
               )}
               {canAggregateBySources && (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3 dark:border-slate-700 dark:bg-slate-800/60">
+                <div className="rounded-lg border border-border bg-secondary p-4 space-y-3 dark:border-slate-700 dark:bg-slate-800/60">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Джерела для AI-склейки</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                    <p className="text-sm font-semibold text-foreground dark:text-slate-100">Джерела для AI-склейки</p>
+                    <p className="text-xs text-muted-foreground dark:text-slate-400">
                       Обрано: {selectedSourceIds.length} з {aggregationSources.length}
                     </p>
                   </div>
@@ -872,14 +872,14 @@ export default function ReportDetailsPage() {
                           Array.from(new Set([...prev, ...filteredAggregationSources.map((item) => item.reportId)])),
                         )
                       }
-                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                      className="rounded-lg border border-border px-3 py-1.5 text-xs text-foreground/80 hover:bg-secondary dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
                     >
                       Обрати всі (за фільтром)
                     </button>
                     <button
                       type="button"
                       onClick={() => setSelectedSourceIds([])}
-                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                      className="rounded-lg border border-border px-3 py-1.5 text-xs text-foreground/80 hover:bg-secondary dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
                     >
                       Очистити вибір
                     </button>
@@ -890,7 +890,7 @@ export default function ReportDetailsPage() {
                         setSourceDepartmentFilter('all')
                         setSourceAuthorFilter('all')
                       }}
-                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                      className="rounded-lg border border-border px-3 py-1.5 text-xs text-foreground/80 hover:bg-secondary dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
                     >
                       Скинути фільтри
                     </button>
@@ -900,7 +900,7 @@ export default function ReportDetailsPage() {
                     <select
                       value={sourceStatusFilter}
                       onChange={(e) => setSourceStatusFilter(e.target.value as 'all' | 'approved' | 'pending')}
-                      className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      className="rounded-md border border-border px-2 py-1.5 text-xs bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     >
                       <option value="all">Усі статуси</option>
                       <option value="approved">Лише погоджені</option>
@@ -909,7 +909,7 @@ export default function ReportDetailsPage() {
                     <select
                       value={sourceDepartmentFilter}
                       onChange={(e) => setSourceDepartmentFilter(e.target.value)}
-                      className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      className="rounded-md border border-border px-2 py-1.5 text-xs bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     >
                       <option value="all">Усі відділи</option>
                       {sourceDepartmentOptions.map((item) => (
@@ -919,7 +919,7 @@ export default function ReportDetailsPage() {
                     <select
                       value={sourceAuthorFilter}
                       onChange={(e) => setSourceAuthorFilter(e.target.value)}
-                      className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      className="rounded-md border border-border px-2 py-1.5 text-xs bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     >
                       <option value="all">Усі автори</option>
                       {sourceAuthorOptions.map((item) => (
@@ -929,17 +929,17 @@ export default function ReportDetailsPage() {
                   </div>
 
                   {aggregationSourcesLoading && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Завантаження джерел...</p>
+                    <p className="text-xs text-muted-foreground dark:text-slate-400">Завантаження джерел...</p>
                   )}
                   {!aggregationSourcesLoading && aggregationSources.length === 0 && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Джерел для обраного періоду не знайдено.</p>
+                    <p className="text-xs text-muted-foreground dark:text-slate-400">Джерел для обраного періоду не знайдено.</p>
                   )}
                   {!aggregationSourcesLoading && filteredAggregationSources.length > 0 && (
                     <div className="max-h-56 overflow-auto space-y-2">
                       {filteredAggregationSources.map((source) => (
                         <label
                           key={source.reportId}
-                          className="flex items-start gap-2 rounded-md border border-slate-200 bg-white p-2 text-sm dark:border-slate-700 dark:bg-slate-900/70"
+                          className="flex items-start gap-2 rounded-md border border-border bg-card p-2 text-sm dark:border-slate-700 dark:bg-slate-900/70"
                         >
                           <input
                             type="checkbox"
@@ -953,12 +953,12 @@ export default function ReportDetailsPage() {
                           />
                           <span>
                             <span className="font-medium">{source.departmentName}</span>{' '}
-                            <span className="text-slate-500 dark:text-slate-400">• {source.authorName}</span>
-                            <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                            <span className="text-muted-foreground dark:text-slate-400">• {source.authorName}</span>
+                            <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground dark:bg-slate-700 dark:text-slate-200">
                               {source.status}
                             </span>
                             <br />
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                            <span className="text-xs text-muted-foreground dark:text-slate-400">
                               {new Date(source.periodStart).toLocaleDateString('uk-UA')} - {new Date(source.periodEnd).toLocaleDateString('uk-UA')}
                             </span>
                           </span>
@@ -967,13 +967,13 @@ export default function ReportDetailsPage() {
                     </div>
                   )}
                   {!aggregationSourcesLoading && aggregationSources.length > 0 && filteredAggregationSources.length === 0 && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400">За поточним фільтром джерел немає.</p>
+                    <p className="text-xs text-muted-foreground dark:text-slate-400">За поточним фільтром джерел немає.</p>
                   )}
                 </div>
               )}
               {canEditSubmission && (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">Чек-лист перед відправкою</p>
+                <div className="rounded-lg border border-border bg-secondary p-4 dark:border-slate-700 dark:bg-slate-800/60">
+                  <p className="text-sm font-semibold text-foreground dark:text-slate-100 mb-2">Чек-лист перед відправкою</p>
                   <div className="space-y-1">
                     {checklist.map((item) => (
                       <p key={item.key} className={`text-sm ${item.ok ? 'text-emerald-700' : 'text-amber-700'}`}>
@@ -986,20 +986,20 @@ export default function ReportDetailsPage() {
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold">Текст для погодження</h2>
                 {managerDraftSource && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-muted-foreground dark:text-slate-400">
                     Джерело: {managerDraftSource === 'ai' ? 'AI' : managerDraftSource}
                   </p>
                 )}
               </div>
               {!!report?.content?.managerSubmission?.sourceReportsCount && (
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-muted-foreground dark:text-slate-400">
                   Використано джерел: {report.content.managerSubmission.sourceReportsCount}; підрозділів: {report.content.managerSubmission.sourceDepartmentsCount || 0}
                 </p>
               )}
 
               {managerDraftText ? (
                 <div className="space-y-3">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+                  <div className="rounded-lg border border-border bg-secondary p-4 dark:border-slate-700 dark:bg-slate-800/60">
                     <p className="text-center font-semibold" style={{ fontFamily: 'Times New Roman', fontSize: 14 }}>
                       {managerDraftTitle || 'ЗВІТ'}
                     </p>
@@ -1019,47 +1019,47 @@ export default function ReportDetailsPage() {
                           setIsDirty(true)
                         }}
                         rows={28}
-                        className="mx-auto block w-full max-w-[210mm] min-h-[297mm] rounded-md border border-input bg-white p-[14mm] text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                        className="mx-auto block w-full max-w-[210mm] min-h-[297mm] rounded-md border border-input bg-card p-[14mm] text-sm text-foreground dark:bg-slate-800 dark:text-slate-100"
                         style={{ fontFamily: 'Times New Roman', fontSize: 14, lineHeight: 1.6 }}
                       />
                       <button
                         disabled={savingDraft}
                         onClick={() => saveManagerDraft()}
-                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                        className="rounded-lg border border-border px-3 py-2 text-sm text-foreground/80 hover:bg-secondary disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                       >
                         {savingDraft ? 'Збереження...' : 'Зберегти текст для погодження'}
                       </button>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                      <p className="text-xs text-muted-foreground dark:text-slate-400">
                         {autoSaving ? 'Автозбереження...' : isDirty ? 'Є незбережені зміни' : `Збережено: ${new Date(lastSavedAt || Date.now()).toLocaleTimeString('uk-UA')}`}
                       </p>
                     </div>
                   ) : (
-                    <div className="rounded-lg border border-slate-200 bg-white p-4 whitespace-pre-wrap text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" style={{ fontFamily: 'Times New Roman', fontSize: 14 }}>
+                    <div className="rounded-lg border border-border bg-card p-4 whitespace-pre-wrap text-foreground dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" style={{ fontFamily: 'Times New Roman', fontSize: 14 }}>
                       {managerDraftText}
                     </div>
                   )}
                 </div>
               ) : (
-                <p className="text-sm text-slate-500 dark:text-slate-400">
+                <p className="text-sm text-muted-foreground dark:text-slate-400">
                   Спочатку сформуйте AI-чернетку, перевірте текст і лише потім відправляйте на погодження.
                 </p>
               )}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-3 dark:border-slate-700 dark:bg-slate-900">
+            <div className="rounded-2xl border border-border bg-card p-6 space-y-3 dark:border-slate-700 dark:bg-slate-900">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold">AI summary</h2>
                 <button
                   disabled={summaryLoading}
                   onClick={refreshAiSummary}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                  className="rounded-lg border border-border px-3 py-1.5 text-sm text-foreground/80 hover:bg-secondary disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   {summaryLoading ? 'Генерація...' : 'Оновити AI'}
                 </button>
               </div>
               {aiSummary ? (
                 <>
-                  <p className="text-sm text-slate-700 dark:text-slate-200">{aiSummary.summary}</p>
+                  <p className="text-sm text-foreground/80 dark:text-slate-200">{aiSummary.summary}</p>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                     <Block title="Highlights" items={aiSummary.highlights || []} />
                     <Block title="Risks" items={aiSummary.risks || []} />
@@ -1067,25 +1067,25 @@ export default function ReportDetailsPage() {
                   </div>
                 </>
               ) : (
-                <p className="text-sm text-slate-500 dark:text-slate-400">
+                <p className="text-sm text-muted-foreground dark:text-slate-400">
                   AI summary недоступний, але звіт можна погоджувати без нього.
                 </p>
               )}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4 dark:border-slate-700 dark:bg-slate-900">
+            <div className="rounded-2xl border border-border bg-card p-6 space-y-4 dark:border-slate-700 dark:bg-slate-900">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold">Коментарі по секціях</h2>
-                {commentsLoading && <p className="text-xs text-slate-500 dark:text-slate-400">Оновлення...</p>}
+                {commentsLoading && <p className="text-xs text-muted-foreground dark:text-slate-400">Оновлення...</p>}
               </div>
 
               {canComment && (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2 dark:border-slate-700 dark:bg-slate-800/60">
+                <div className="rounded-lg border border-border bg-secondary p-3 space-y-2 dark:border-slate-700 dark:bg-slate-800/60">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     <select
                       value={commentSection}
                       onChange={(e) => setCommentSection(e.target.value)}
-                      className="rounded-md border border-input bg-white px-2 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                      className="rounded-md border border-input bg-card px-2 py-2 text-sm text-foreground dark:bg-slate-800 dark:text-slate-100"
                     >
                       <option value="workDone">Виконана робота</option>
                       <option value="achievements">Досягнення</option>
@@ -1097,28 +1097,28 @@ export default function ReportDetailsPage() {
                       value={commentText}
                       onChange={(e) => setCommentText(e.target.value)}
                       rows={2}
-                      className="md:col-span-2 rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                      className="md:col-span-2 rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground dark:bg-slate-800 dark:text-slate-100"
                       placeholder="Зауваження до конкретної секції..."
                     />
                   </div>
                   <button
                     onClick={addComment}
                     disabled={commentSubmitting}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                    className="rounded-lg border border-border px-3 py-2 text-sm text-foreground/80 hover:bg-secondary disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                   >
                     {commentSubmitting ? 'Додавання...' : 'Додати коментар'}
                   </button>
                 </div>
               )}
 
-              {comments.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">Коментарів поки немає.</p>}
+              {comments.length === 0 && <p className="text-sm text-muted-foreground dark:text-slate-400">Коментарів поки немає.</p>}
               {comments.map((item) => (
-                <div key={item.id} className={`rounded-lg border p-3 ${item.status === 'resolved' ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-800 dark:bg-emerald-950/20' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800/70'}`}>
+                <div key={item.id} className={`rounded-lg border p-3 ${item.status === 'resolved' ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-800 dark:bg-emerald-950/20' : 'border-border bg-card dark:border-slate-700 dark:bg-slate-800/70'}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{item.sectionLabel || item.sectionKey}</p>
-                      <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">{item.text}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                      <p className="text-sm font-medium text-foreground dark:text-slate-100">{item.sectionLabel || item.sectionKey}</p>
+                      <p className="text-sm text-foreground/80 dark:text-slate-200 mt-1">{item.text}</p>
+                      <p className="text-xs text-muted-foreground dark:text-slate-400 mt-2">
                         {item.createdByName} · {new Date(item.createdAt).toLocaleString('uk-UA')}
                       </p>
                     </div>
@@ -1132,12 +1132,12 @@ export default function ReportDetailsPage() {
               ))}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4 dark:border-slate-700 dark:bg-slate-900">
+            <div className="rounded-2xl border border-border bg-card p-6 space-y-4 dark:border-slate-700 dark:bg-slate-900">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-lg font-semibold">Зміни між версіями</h2>
                 <button
                   onClick={() => loadVersionDiff(fromVersion, toVersion)}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                  className="rounded-lg border border-border px-3 py-1.5 text-sm text-foreground/80 hover:bg-secondary dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   Оновити
                 </button>
@@ -1151,7 +1151,7 @@ export default function ReportDetailsPage() {
                   max={Math.max(1, report.version || 1)}
                   value={fromVersion}
                   onChange={(e) => setFromVersion(Number(e.target.value) || 1)}
-                  className="w-24 rounded-md border border-input px-2 py-1 bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                  className="w-24 rounded-md border border-input px-2 py-1 bg-card text-foreground dark:bg-slate-800 dark:text-slate-100"
                 />
                 <label>До</label>
                 <input
@@ -1160,32 +1160,32 @@ export default function ReportDetailsPage() {
                   max={Math.max(1, report.version || 1)}
                   value={toVersion}
                   onChange={(e) => setToVersion(Number(e.target.value) || 1)}
-                  className="w-24 rounded-md border border-input px-2 py-1 bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                  className="w-24 rounded-md border border-input px-2 py-1 bg-card text-foreground dark:bg-slate-800 dark:text-slate-100"
                 />
-                {versionDiffLoading && <span className="text-xs text-slate-500 dark:text-slate-400">Порівняння...</span>}
+                {versionDiffLoading && <span className="text-xs text-muted-foreground dark:text-slate-400">Порівняння...</span>}
               </div>
 
               {versionDiff?.changedFields?.length ? (
                 <div className="space-y-3">
                   {versionDiff.changedFields.slice(0, 8).map((change: any) => (
-                    <div key={change.key} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700 dark:bg-slate-800/70">
+                    <div key={change.key} className="rounded-lg border border-border p-3 dark:border-slate-700 dark:bg-slate-800/70">
                       <p className="text-sm font-medium">{change.key}</p>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Було:</p>
-                      <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{change.from || '—'}</p>
-                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Стало:</p>
-                      <p className="text-sm text-slate-900 dark:text-slate-100 whitespace-pre-wrap">{change.to || '—'}</p>
+                      <p className="mt-1 text-xs text-muted-foreground dark:text-slate-400">Було:</p>
+                      <p className="text-sm text-foreground/80 dark:text-slate-200 whitespace-pre-wrap">{change.from || '—'}</p>
+                      <p className="mt-2 text-xs text-muted-foreground dark:text-slate-400">Стало:</p>
+                      <p className="text-sm text-foreground dark:text-slate-100 whitespace-pre-wrap">{change.to || '—'}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-500 dark:text-slate-400">Суттєвих змін між вибраними версіями не знайдено.</p>
+                <p className="text-sm text-muted-foreground dark:text-slate-400">Суттєвих змін між вибраними версіями не знайдено.</p>
               )}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-3 dark:border-slate-700 dark:bg-slate-900">
+            <div className="rounded-2xl border border-border bg-card p-6 space-y-3 dark:border-slate-700 dark:bg-slate-900">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold">Вкладення до звіту</h2>
-                <label className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
+                <label className="rounded-lg border border-border px-3 py-2 text-sm text-foreground/80 hover:bg-secondary cursor-pointer dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
                   {uploadingAttachment ? 'Завантаження...' : 'Додати файл'}
                   <input
                     type="file"
@@ -1198,18 +1198,18 @@ export default function ReportDetailsPage() {
                   />
                 </label>
               </div>
-              {attachmentsLoading && <p className="text-sm text-slate-500 dark:text-slate-400">Завантаження...</p>}
-              {!attachmentsLoading && attachments.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">Файлів поки немає.</p>}
+              {attachmentsLoading && <p className="text-sm text-muted-foreground dark:text-slate-400">Завантаження...</p>}
+              {!attachmentsLoading && attachments.length === 0 && <p className="text-sm text-muted-foreground dark:text-slate-400">Файлів поки немає.</p>}
               {attachments.map((item) => (
-                <div key={item.id} className="rounded-lg border border-slate-200 p-3 flex items-center justify-between gap-3 dark:border-slate-700 dark:bg-slate-800/70">
+                <div key={item.id} className="rounded-lg border border-border p-3 flex items-center justify-between gap-3 dark:border-slate-700 dark:bg-slate-800/70">
                   <div>
                     <p className="text-sm font-medium">{item.fileName}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{Math.round((item.fileSize || 0) / 1024)} KB · {new Date(item.createdAt).toLocaleString('uk-UA')}</p>
+                    <p className="text-xs text-muted-foreground dark:text-slate-400">{Math.round((item.fileSize || 0) / 1024)} KB · {new Date(item.createdAt).toLocaleString('uk-UA')}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => downloadAttachment(item.id, item.fileName)}
-                      className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:text-slate-200"
+                      className="rounded border border-border px-2 py-1 text-xs text-foreground/80 dark:border-slate-600 dark:text-slate-200"
                     >
                       Завантажити
                     </button>
@@ -1225,20 +1225,20 @@ export default function ReportDetailsPage() {
 
         {/* Задачі прикріплені до звіту */}
         {report && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
             <h2 className="text-lg font-semibold">Задачі до звіту</h2>
 
-            {reportTasksLoading && <p className="text-sm text-slate-500 dark:text-slate-400">Завантаження...</p>}
+            {reportTasksLoading && <p className="text-sm text-muted-foreground dark:text-slate-400">Завантаження...</p>}
 
             {!reportTasksLoading && reportTasks.length === 0 && (
-              <p className="text-sm text-slate-500 dark:text-slate-400">Задач не прикріплено.</p>
+              <p className="text-sm text-muted-foreground dark:text-slate-400">Задач не прикріплено.</p>
             )}
 
             {reportTasks.map((task: any) => (
-              <div key={task.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+              <div key={task.id} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 dark:border-slate-700">
                 <div>
                   <p className="text-sm font-medium">{task.title}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-muted-foreground dark:text-slate-400">
                     {task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : 'Без виконавця'}
                     {' · '}
                     {task.status === 'done' ? '✅ Виконано' : task.status === 'in_progress' ? '🔄 В роботі' : '⬜ Нове'}
@@ -1257,8 +1257,8 @@ export default function ReportDetailsPage() {
             ))}
 
             {report.authorId === user?.id && (
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                <p className="text-xs text-slate-500 mb-2">Додати задачу:</p>
+              <div className="pt-2 border-t border-border dark:border-slate-800">
+                <p className="text-xs text-muted-foreground mb-2">Додати задачу:</p>
                 <div className="flex flex-wrap gap-2">
                   {allMyTasks
                     .filter((t: any) => !reportTasks.some((rt: any) => rt.id === t.id))
@@ -1267,14 +1267,14 @@ export default function ReportDetailsPage() {
                         key={t.id}
                         onClick={() => attachTask(t.id)}
                         disabled={attachingTaskId === t.id}
-                        className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                        className="rounded-lg border border-border px-3 py-1 text-xs text-foreground/80 hover:bg-secondary disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                       >
                         {t.title}
                         {t.status === 'done' && ' ✅'}
                       </button>
                     ))}
                   {allMyTasks.filter((t: any) => !reportTasks.some((rt: any) => rt.id === t.id)).length === 0 && (
-                    <p className="text-xs text-slate-400">Всі ваші задачі вже прикріплені або задач немає.</p>
+                    <p className="text-xs text-muted-foreground">Всі ваші задачі вже прикріплені або задач немає.</p>
                   )}
                 </div>
               </div>
@@ -1309,10 +1309,10 @@ function sectionSectionLabel(sectionKey: string): string {
 
 function Block({ title, items }: { title: string; items: string[] }) {
   return (
-    <div className="rounded-lg border border-slate-200 p-3">
-      <p className="font-medium text-slate-900 mb-2">{title}</p>
-      {items.length === 0 && <p className="text-slate-400">-</p>}
-      {items.map((item, i) => <p key={`${title}-${i}`} className="text-slate-700">• {item}</p>)}
+    <div className="rounded-lg border border-border p-3">
+      <p className="font-medium text-foreground mb-2">{title}</p>
+      {items.length === 0 && <p className="text-muted-foreground">-</p>}
+      {items.map((item, i) => <p key={`${title}-${i}`} className="text-foreground/80">• {item}</p>)}
     </div>
   )
 }

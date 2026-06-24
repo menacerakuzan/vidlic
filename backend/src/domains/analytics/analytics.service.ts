@@ -84,7 +84,10 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     await this.assertDepartmentAccess(user, departmentId);
     const where: any = {};
 
-    if (departmentId) {
+    // Specialists/individual contributors see only tasks assigned to them, not the whole department.
+    if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
+      where.assigneeId = user.id;
+    } else if (departmentId) {
       where.departmentId = departmentId;
     }
 
@@ -130,18 +133,21 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
       return { total: 0, items: [] };
     }
 
-    const reports = await this.prisma.report.findMany({
-      where,
-      take: 10,
-      include: {
-        author: { select: { firstName: true, lastName: true } },
-        department: { select: { nameUk: true } },
-      },
-      orderBy: { submittedAt: 'asc' },
-    });
+    const [total, reports] = await Promise.all([
+      this.prisma.report.count({ where }),
+      this.prisma.report.findMany({
+        where,
+        take: 10,
+        include: {
+          author: { select: { firstName: true, lastName: true } },
+          department: { select: { nameUk: true } },
+        },
+        orderBy: { submittedAt: 'asc' },
+      }),
+    ]);
 
     return {
-      total: reports.length,
+      total,
       items: reports.map(r => ({
         id: r.id,
         type: r.reportType,
@@ -160,7 +166,9 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
       dueDate: { lt: new Date() },
     };
 
-    if (departmentId) {
+    if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
+      where.assigneeId = user.id;
+    } else if (departmentId) {
       where.departmentId = departmentId;
     }
 

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useAuthStore } from '@/store/auth-store'
 import { ReportStatusBadge } from '@/components/reports/report-status-badge'
+import { Button } from '@/components/ui/button'
 
 type Report = {
   id: string
@@ -125,29 +126,26 @@ export default function ReportsPage() {
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold font-display">Звіти</h1>
-            <p className="text-slate-500 mt-1">Поточні звіти та погодження</p>
+            <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">Звіти</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Поточні звіти та погодження</p>
           </div>
           <div className="flex items-center gap-2">
             {canCreate && (
-              <Link href="/dashboard/reports/new" className="rounded-xl bg-primary text-white px-4 py-2 text-sm font-medium hover:opacity-90">
-                {createDraftLabel}
+              <Link href="/dashboard/reports/new">
+                <Button>{createDraftLabel}</Button>
               </Link>
             )}
             {canCreateAggregate && (
-              <Link
-                href={`/dashboard/reports/new?mode=aggregate&title=${encodeURIComponent(aggregateTitle)}`}
-                className="rounded-xl border border-primary px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10"
-              >
-                {aggregateButtonLabel}
+              <Link href={`/dashboard/reports/new?mode=aggregate&title=${encodeURIComponent(aggregateTitle)}`}>
+                <Button variant="outline">{aggregateButtonLabel}</Button>
               </Link>
             )}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-6">
             <select
               value={authorRoleFilter}
@@ -155,7 +153,7 @@ export default function ReportsPage() {
                 setAuthorRoleFilter(e.target.value)
                 setAuthorIdFilter('all')
               }}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+              className="h-10 rounded-lg border-[1.5px] border-border bg-card px-3 text-sm text-foreground outline-none transition-colors focus:border-accent focus:ring-[3px] focus:ring-accent/25"
             >
               <option value="all">Усі ролі авторів</option>
               <option value="manager">Від керівників</option>
@@ -171,7 +169,7 @@ export default function ReportsPage() {
             <select
               value={authorIdFilter}
               onChange={(e) => setAuthorIdFilter(e.target.value)}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+              className="h-10 rounded-lg border-[1.5px] border-border bg-card px-3 text-sm text-foreground outline-none transition-colors focus:border-accent focus:ring-[3px] focus:ring-accent/25"
             >
               <option value="all">Усі автори</option>
               {authorOptions
@@ -186,7 +184,7 @@ export default function ReportsPage() {
             <select
               value={departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+              className="h-10 rounded-lg border-[1.5px] border-border bg-card px-3 text-sm text-foreground outline-none transition-colors focus:border-accent focus:ring-[3px] focus:ring-accent/25"
             >
               <option value="all">Усі підрозділи</option>
               {departments.map((dep) => (
@@ -199,7 +197,7 @@ export default function ReportsPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+              className="h-10 rounded-lg border-[1.5px] border-border bg-card px-3 text-sm text-foreground outline-none transition-colors focus:border-accent focus:ring-[3px] focus:ring-accent/25"
             >
               <option value="all">Усі статуси</option>
               <option value="draft">Чернетки</option>
@@ -214,19 +212,19 @@ export default function ReportsPage() {
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+              className="h-10 rounded-lg border-[1.5px] border-border bg-card px-3 text-sm text-foreground outline-none transition-colors focus:border-accent focus:ring-[3px] focus:ring-accent/25"
             />
             <input
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+              className="h-10 rounded-lg border-[1.5px] border-border bg-card px-3 text-sm text-foreground outline-none transition-colors focus:border-accent focus:ring-[3px] focus:ring-accent/25"
             />
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-          <div className="grid grid-cols-12 gap-2 px-4 py-3 text-xs font-semibold text-slate-500 border-b border-slate-100">
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div className="grid grid-cols-12 gap-2 border-b border-border px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             <div className="col-span-4">Назва</div>
             <div className="col-span-2">Тип</div>
             <div className="col-span-2">Статус</div>
@@ -234,25 +232,25 @@ export default function ReportsPage() {
             <div className="col-span-2 text-right">Дії</div>
           </div>
 
-          {loading && <div className="px-4 py-6 text-sm text-slate-500">Завантаження...</div>}
-          {!loading && error && <div className="px-4 py-4 text-sm text-rose-600">{error}</div>}
+          {loading && <div className="px-4 py-8 text-center text-sm text-muted-foreground">Завантаження...</div>}
+          {!loading && error && <div className="px-4 py-4 text-sm text-destructive">{error}</div>}
 
           {!loading && !error && reports.length === 0 && (
-            <div className="px-4 py-6 text-sm text-slate-500">Звітів поки немає</div>
+            <div className="px-4 py-12 text-center text-sm text-muted-foreground">Звітів поки немає</div>
           )}
 
           {!loading && reports.map((report) => (
-            <div key={report.id} className="grid grid-cols-12 gap-2 px-4 py-3 border-b border-slate-100 items-center text-sm">
-              <div className="col-span-4 font-medium text-slate-900 truncate">{report.title || 'Без назви'}</div>
-              <div className="col-span-2 text-slate-600">{report.reportType === 'weekly' ? 'Тижневий' : 'Місячний'}</div>
+            <Link
+              key={report.id}
+              href={`/dashboard/reports/${report.id}`}
+              className="grid grid-cols-12 items-center gap-2 border-b border-border px-4 py-3 text-sm transition-colors last:border-0 hover:bg-secondary"
+            >
+              <div className="col-span-4 truncate font-medium text-foreground">{report.title || 'Без назви'}</div>
+              <div className="col-span-2 text-muted-foreground">{report.reportType === 'weekly' ? 'Тижневий' : 'Місячний'}</div>
               <div className="col-span-2"><ReportStatusBadge status={report.status} /></div>
-              <div className="col-span-2 text-slate-600 truncate">{report.author ? `${report.author.firstName} ${report.author.lastName}` : '-'}</div>
-              <div className="col-span-2 text-right">
-                <Link className="text-primary font-medium hover:underline" href={`/dashboard/reports/${report.id}`}>
-                  Відкрити
-                </Link>
-              </div>
-            </div>
+              <div className="col-span-2 truncate text-muted-foreground">{report.author ? `${report.author.firstName} ${report.author.lastName}` : '-'}</div>
+              <div className="col-span-2 text-right font-medium text-primary">Відкрити →</div>
+            </Link>
           ))}
         </div>
       </div>

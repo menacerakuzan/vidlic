@@ -149,11 +149,11 @@ export default function ProfilePage() {
   return (
     <DashboardLayout>
       <div className="max-w-2xl mx-auto space-y-6 p-4">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Мій профіль</h1>
+        <h1 className="text-2xl font-bold text-foreground dark:text-slate-100">Мій профіль</h1>
 
         {loading && (
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6">
-            <p className="text-sm text-slate-500">Завантаження...</p>
+          <div className="rounded-xl border border-border dark:border-slate-700 bg-card dark:bg-slate-800 p-6">
+            <p className="text-sm text-muted-foreground">Завантаження...</p>
           </div>
         )}
 
@@ -166,8 +166,8 @@ export default function ProfilePage() {
         {profile && (
           <>
             {/* Info card */}
-            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-              <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-700">
+            <div className="rounded-xl border border-border dark:border-slate-700 bg-card dark:bg-slate-800 overflow-hidden">
+              <div className="px-6 py-5 border-b border-border dark:border-slate-700">
                 <div className="flex items-center gap-4">
                   {/* Avatar */}
                   <div className="relative shrink-0">
@@ -176,10 +176,10 @@ export default function ProfilePage() {
                       <img
                         src={profile.avatarBase64}
                         alt="Аватар"
-                        className="h-16 w-16 rounded-full object-cover border-2 border-slate-200 dark:border-slate-600"
+                        className="h-16 w-16 rounded-full object-cover border-2 border-border dark:border-slate-600"
                       />
                     ) : (
-                      <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center border-2 border-slate-200 dark:border-slate-600">
+                      <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center border-2 border-border dark:border-slate-600">
                         <span className="text-2xl font-bold text-primary">
                           {profile.firstName.charAt(0)}{profile.lastName.charAt(0)}
                         </span>
@@ -207,16 +207,16 @@ export default function ProfilePage() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                    <p className="text-lg font-semibold text-foreground dark:text-slate-100">
                       {profile.lastName} {profile.firstName} {profile.patronymic || ''}
                     </p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                    <p className="text-sm text-muted-foreground dark:text-slate-400">
                       {roleLabel[profile.role] || profile.role}
                     </p>
                     {profile.avatarBase64 && (
                       <button
                         onClick={removeAvatar}
-                        className="mt-1 text-xs text-slate-400 hover:text-rose-500 transition"
+                        className="mt-1 text-xs text-muted-foreground hover:text-rose-500 transition"
                       >
                         Видалити фото
                       </button>
@@ -254,29 +254,29 @@ export default function ProfilePage() {
             </div>
 
             {/* Change password */}
-            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700">
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Змінити пароль</p>
+            <div className="rounded-xl border border-border dark:border-slate-700 bg-card dark:bg-slate-800 overflow-hidden">
+              <div className="px-6 py-4 border-b border-border dark:border-slate-700">
+                <p className="text-sm font-semibold text-foreground/80 dark:text-slate-300">Змінити пароль</p>
               </div>
               <div className="px-6 py-5 space-y-3">
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Новий пароль</label>
+                  <label className="block text-xs text-muted-foreground mb-1">Новий пароль</label>
                   <input
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="Мінімум 8 символів"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+                    className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Підтвердіть пароль</label>
+                  <label className="block text-xs text-muted-foreground mb-1">Підтвердіть пароль</label>
                   <input
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Повторіть пароль"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+                    className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
                     onKeyDown={(e) => { if (e.key === 'Enter') changePassword() }}
                   />
                 </div>
@@ -307,8 +307,8 @@ export default function ProfilePage() {
 function Row({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
   return (
     <div className="flex items-start gap-3">
-      <span className="w-40 shrink-0 text-xs text-slate-500 dark:text-slate-400 pt-0.5">{label}</span>
-      <span className={`text-sm text-slate-800 dark:text-slate-200 ${valueClass || ''}`}>{value}</span>
+      <span className="w-40 shrink-0 text-xs text-muted-foreground dark:text-slate-400 pt-0.5">{label}</span>
+      <span className={`text-sm text-foreground dark:text-slate-200 ${valueClass || ''}`}>{value}</span>
     </div>
   )
 }

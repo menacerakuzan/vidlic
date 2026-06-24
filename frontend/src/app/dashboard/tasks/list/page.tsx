@@ -640,14 +640,14 @@ export default function TaskListPage() {
   )
 
   const priorityLabel = (p?: Task['priority']) => {
-    if (p === 'low') return { text: 'Низький', cls: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' }
+    if (p === 'low') return { text: 'Низький', cls: 'bg-secondary text-muted-foreground dark:bg-slate-800 dark:text-slate-400' }
     if (p === 'high') return { text: 'Високий', cls: 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300' }
     if (p === 'critical') return { text: 'Критичний', cls: 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' }
-    return { text: 'Середній', cls: 'bg-sky-100 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400' }
+    return { text: 'Середній', cls: 'bg-primary/10 text-primary' }
   }
 
   const statusBadge = (status: Task['status']) => {
-    if (status === 'todo') return 'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300'
+    if (status === 'todo') return 'bg-primary/10 text-primary'
     if (status === 'in_progress') return 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
     return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
   }
@@ -666,7 +666,7 @@ export default function TaskListPage() {
     if (u === 'overdue') return isSelected ? 'bg-rose-50 dark:bg-rose-950/30 border-l-4 border-l-rose-500' : 'border-l-4 border-l-rose-400 hover:bg-rose-50/50 dark:hover:bg-rose-950/20'
     if (u === 'critical') return isSelected ? 'bg-orange-50 dark:bg-orange-950/20 border-l-4 border-l-orange-500' : 'border-l-4 border-l-orange-400 hover:bg-orange-50/50 dark:hover:bg-orange-950/20'
     if (u === 'soon') return isSelected ? 'bg-amber-50 dark:bg-amber-950/20 border-l-4 border-l-amber-400' : 'border-l-4 border-l-amber-300 hover:bg-amber-50/40 dark:hover:bg-amber-950/10'
-    return isSelected ? 'bg-slate-100 dark:bg-slate-800/70' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+    return isSelected ? 'bg-secondary dark:bg-slate-800/70' : 'hover:bg-secondary dark:hover:bg-slate-800/40'
   }
 
   const hasActiveFilters = filterDepartmentId || filterStatus || filterUrgency
@@ -693,12 +693,12 @@ export default function TaskListPage() {
         </AnimatePresence>
 
         {/* Filters */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+        <div className="rounded-2xl border border-border bg-card p-4 dark:border-slate-700 dark:bg-slate-900">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <select
               value={filterDepartmentId}
               onChange={(e) => setFilterDepartmentId(e.target.value)}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
               <option value="">Усі відділи</option>
               {departments.map((dep) => (
@@ -708,7 +708,7 @@ export default function TaskListPage() {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
               <option value="">Усі статуси</option>
               <option value="todo">Нове</option>
@@ -718,7 +718,7 @@ export default function TaskListPage() {
             <select
               value={filterUrgency}
               onChange={(e) => setFilterUrgency(e.target.value)}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
               <option value="">Усі терміновості</option>
               <option value="overdue">🔴 Прострочено</option>
@@ -729,14 +729,14 @@ export default function TaskListPage() {
             {hasActiveFilters && (
               <button
                 onClick={() => { setFilterDepartmentId(''); setFilterStatus(''); setFilterUrgency('') }}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-slate-600"
+                className="h-10 rounded-lg border border-border px-3 text-sm dark:border-slate-600"
               >
                 Скинути фільтри
               </button>
             )}
             <button
               onClick={() => { setGroupMode(v => !v); setGroupSelected(new Set()); setGroupTitle('') }}
-              className={`h-10 rounded-lg border px-3 text-sm transition-colors ${groupMode ? 'bg-violet-600 text-white border-violet-600' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
+              className={`h-10 rounded-lg border px-3 text-sm transition-colors ${groupMode ? 'bg-violet-600 text-white border-violet-600' : 'border-border dark:border-slate-600 text-foreground/80 dark:text-slate-200'}`}
             >
               {groupMode ? 'Скасувати' : 'Групувати'}
             </button>
@@ -752,7 +752,7 @@ export default function TaskListPage() {
                 placeholder="Назва глобальної задачі..."
                 value={groupTitle}
                 onChange={e => setGroupTitle(e.target.value)}
-                className="flex-1 min-w-[200px] h-8 rounded-lg border border-violet-300 px-3 text-sm bg-white dark:bg-slate-800 dark:border-violet-700 dark:text-slate-100"
+                className="flex-1 min-w-[200px] h-8 rounded-lg border border-violet-300 px-3 text-sm bg-card dark:bg-slate-800 dark:border-violet-700 dark:text-slate-100"
               />
               <button
                 onClick={groupTasks}
@@ -771,17 +771,17 @@ export default function TaskListPage() {
           </div>
         )}
 
-        <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 overflow-hidden">
+        <div className="rounded-2xl border border-border bg-card dark:border-slate-700 dark:bg-slate-900 overflow-hidden">
           {loading ? (
-            <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">Завантаження...</div>
+            <div className="px-4 py-6 text-sm text-muted-foreground dark:text-slate-400">Завантаження...</div>
           ) : orderedTasks.length === 0 ? (
-            <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
+            <div className="px-4 py-6 text-sm text-muted-foreground dark:text-slate-400">
               {hasActiveFilters ? 'Немає задач з обраними фільтрами.' : 'Задач поки немає.'}
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] min-h-[520px]">
               {/* Sidebar list — tree view */}
-              <div className="border-r border-slate-200 dark:border-slate-700 max-h-[70vh] overflow-y-auto">
+              <div className="border-r border-border dark:border-slate-700 max-h-[70vh] overflow-y-auto">
                 {orderedTasks.map((task, idx) => {
                   const isSelected = selectedTask?.id === task.id
                   const u = urgencyLevel(task)
@@ -790,7 +790,7 @@ export default function TaskListPage() {
 
                   return (
                     <div key={task.id}>
-                      <div className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors ${sidebarBorderClass(task, isSelected)} ${groupMode && groupSelected.has(task.id) ? 'ring-2 ring-inset ring-violet-400' : ''}`}>
+                      <div className={`w-full text-left px-4 py-3 border-b border-border dark:border-slate-800 transition-colors ${sidebarBorderClass(task, isSelected)} ${groupMode && groupSelected.has(task.id) ? 'ring-2 ring-inset ring-violet-400' : ''}`}>
                         <div className="flex items-start gap-2">
                           {groupMode && (
                             <input
@@ -810,26 +810,26 @@ export default function TaskListPage() {
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-start gap-1.5 flex-1 min-w-0">
-                                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mt-0.5 shrink-0 w-4 text-right">{idx + 1}</span>
+                                <span className="text-[10px] font-semibold text-muted-foreground dark:text-slate-500 mt-0.5 shrink-0 w-4 text-right">{idx + 1}</span>
                                 <div className="flex-1 min-w-0">
                                   {isSubtask && (
                                     <span className="inline-block text-[9px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded mb-0.5">підзадача</span>
                                   )}
-                                  <p className={`text-sm font-medium line-clamp-2 ${task.status === 'done' ? 'text-emerald-700 dark:text-emerald-400 line-through opacity-70' : 'text-slate-900 dark:text-slate-100'}`}>{task.title}</p>
+                                  <p className={`text-sm font-medium line-clamp-2 ${task.status === 'done' ? 'text-emerald-700 dark:text-emerald-400 line-through opacity-70' : 'text-foreground dark:text-slate-100'}`}>{task.title}</p>
                                 </div>
                               </div>
                               {u !== 'normal' && <UrgencyBadge level={u} />}
                             </div>
                             <div className="flex items-center gap-1.5 mt-1 pl-5 flex-wrap">
                               <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusBadge(task.status)}`}>{statusLabel(task.status)}</span>
-                              {task.assignee && <span className="text-[10px] text-slate-400">{task.assignee.firstName} {task.assignee.lastName}</span>}
+                              {task.assignee && <span className="text-[10px] text-muted-foreground">{task.assignee.firstName} {task.assignee.lastName}</span>}
                               {task.dueDate && u !== 'normal' && (
                                 <span className={`text-[10px] ${u === 'overdue' ? 'text-rose-600' : u === 'critical' ? 'text-orange-600' : 'text-amber-600'}`}>
                                   {u === 'overdue' ? '⚠ ' : ''}{new Date(task.dueDate).toLocaleDateString('uk-UA')}
                                 </span>
                               )}
                               {(newCommentCounts[task.id] ?? 0) > 0 && (
-                                <span className="inline-flex items-center rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">
+                                <span className="inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
                                   +{newCommentCounts[task.id]} 💬
                                 </span>
                               )}
@@ -837,8 +837,8 @@ export default function TaskListPage() {
                             {hasChildren && (
                               <div className="mt-1.5 pl-5">
                                 <div className="flex items-center justify-between mb-0.5">
-                                  <span className="text-[9px] text-slate-400">{task.subtasksDone ?? 0}/{task.subtasksCount} підзадач</span>
-                                  <span className="text-[9px] text-slate-400">{Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%</span>
+                                  <span className="text-[9px] text-muted-foreground">{task.subtasksDone ?? 0}/{task.subtasksCount} підзадач</span>
+                                  <span className="text-[9px] text-muted-foreground">{Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%</span>
                                 </div>
                                 <div className="h-1 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                                   <div className="h-full rounded-full bg-emerald-400" style={{ width: `${Math.round(((task.subtasksDone ?? 0) / (task.subtasksCount ?? 1)) * 100)}%` }} />
@@ -856,38 +856,38 @@ export default function TaskListPage() {
               {/* Detail panel */}
               <div className="p-4">
                 {!selectedTask ? (
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Оберіть задачу зі списку.</p>
+                  <p className="text-sm text-muted-foreground dark:text-slate-400">Оберіть задачу зі списку.</p>
                 ) : (
                   <div className="space-y-3">
                     {editMode ? (
                       <div className="space-y-3">
-                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Редагування задачі</p>
+                        <p className="text-sm font-semibold text-foreground/80 dark:text-slate-300">Редагування задачі</p>
                         <textarea
                           value={editTitle}
                           onChange={(e) => setEditTitle(e.target.value)}
                           rows={2}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
+                          className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
                           placeholder="Назва задачі"
                         />
                         <textarea
                           value={editDescription}
                           onChange={(e) => setEditDescription(e.target.value)}
                           rows={4}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
+                          className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
                           placeholder="Опис (необов'язково)"
                         />
                         <div>
-                          <label className="block text-xs text-slate-500 mb-1">Дедлайн</label>
+                          <label className="block text-xs text-muted-foreground mb-1">Дедлайн</label>
                           <input
                             type="datetime-local"
                             value={editDueDate}
                             onChange={(e) => setEditDueDate(e.target.value)}
-                            className="h-9 rounded-lg border border-slate-300 px-3 text-sm bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                            className="h-9 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                           />
                           {editDueDate && (
                             <button
                               onClick={() => setEditDueDate('')}
-                              className="ml-2 text-xs text-slate-500 underline"
+                              className="ml-2 text-xs text-muted-foreground underline"
                             >
                               Прибрати дедлайн
                             </button>
@@ -903,7 +903,7 @@ export default function TaskListPage() {
                           </button>
                           <button
                             onClick={() => setEditMode(false)}
-                            className="rounded-lg border border-slate-300 px-4 py-1.5 text-xs dark:border-slate-600"
+                            className="rounded-lg border border-border px-4 py-1.5 text-xs dark:border-slate-600"
                           >
                             Скасувати
                           </button>
@@ -912,7 +912,7 @@ export default function TaskListPage() {
                     ) : (
                       <>
                         <div className="flex items-start justify-between gap-3">
-                          <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{selectedTask.title}</p>
+                          <p className="text-lg font-semibold text-foreground dark:text-slate-100">{selectedTask.title}</p>
                           <div className="flex items-center gap-2 shrink-0">
                             <UrgencyBadge level={urgencyLevel(selectedTask)} />
                             <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadge(selectedTask.status)}`}>
@@ -924,7 +924,7 @@ export default function TaskListPage() {
                         {/* Progress bar for tasks with subtasks */}
                         {(selectedTask.subtasksCount ?? 0) > 0 && (
                           <div className="space-y-1">
-                            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                            <div className="flex items-center justify-between text-xs text-muted-foreground dark:text-slate-400">
                               <span>Прогрес підзадач</span>
                               <span className="font-medium">{selectedTask.subtasksDone ?? 0} / {selectedTask.subtasksCount} виконано</span>
                             </div>
@@ -938,16 +938,16 @@ export default function TaskListPage() {
                         )}
 
                         {selectedTask.description && (
-                          <p className="text-sm whitespace-pre-wrap text-slate-600 dark:text-slate-300">{selectedTask.description}</p>
+                          <p className="text-sm whitespace-pre-wrap text-muted-foreground dark:text-slate-300">{selectedTask.description}</p>
                         )}
 
-                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs space-y-1 dark:border-slate-700 dark:bg-slate-800/50">
-                          <p className="text-slate-600 dark:text-slate-300">
+                        <div className="rounded-lg border border-border bg-secondary p-3 text-xs space-y-1 dark:border-slate-700 dark:bg-slate-800/50">
+                          <p className="text-muted-foreground dark:text-slate-300">
                             <span className="font-medium">Виконавець:</span>{' '}
                             {selectedTask.assignee ? `${selectedTask.assignee.firstName} ${selectedTask.assignee.lastName}` : 'Без виконавця'}
                           </p>
                           {Array.isArray(selectedTask.coAssigneeIds) && selectedTask.coAssigneeIds.length > 0 && (
-                            <p className="text-slate-600 dark:text-slate-300">
+                            <p className="text-muted-foreground dark:text-slate-300">
                               <span className="font-medium">Співвиконавці:</span>{' '}
                               {selectedTask.coAssigneeIds.map((coId) => {
                                 const u = users.find((u) => u.id === coId)
@@ -955,18 +955,18 @@ export default function TaskListPage() {
                               }).join(', ')}
                             </p>
                           )}
-                          <p className="text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                          <p className="text-muted-foreground dark:text-slate-300 flex items-center gap-2">
                             <span className="font-medium">Пріоритет:</span>
                             <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${priorityLabel(selectedTask.priority).cls}`}>
                               {priorityLabel(selectedTask.priority).text}
                             </span>
                           </p>
-                          <p className="text-slate-600 dark:text-slate-300">
+                          <p className="text-muted-foreground dark:text-slate-300">
                             <span className="font-medium">Підрозділ:</span>{' '}
                             {selectedTask.department?.nameUk || selectedTask.department?.name || 'Без підрозділу'}
                           </p>
                           {selectedTask.dueDate && (
-                            <p className={urgencyLevel(selectedTask) === 'overdue' ? 'text-rose-600 font-medium' : urgencyLevel(selectedTask) === 'critical' ? 'text-orange-600 font-medium' : 'text-slate-600 dark:text-slate-300'}>
+                            <p className={urgencyLevel(selectedTask) === 'overdue' ? 'text-rose-600 font-medium' : urgencyLevel(selectedTask) === 'critical' ? 'text-orange-600 font-medium' : 'text-muted-foreground dark:text-slate-300'}>
                               <span className="font-medium">Дедлайн:</span>{' '}
                               {new Date(selectedTask.dueDate).toLocaleString('uk-UA')}
                             </p>
@@ -984,7 +984,7 @@ export default function TaskListPage() {
                             user?.id === selectedTask.reporter?.id) && (
                             <button
                               onClick={() => openEdit(selectedTask)}
-                              className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:text-slate-200"
+                              className="rounded border border-border px-2 py-1 text-xs text-foreground/80 dark:border-slate-600 dark:text-slate-200"
                             >
                               Редагувати
                             </button>
@@ -992,7 +992,7 @@ export default function TaskListPage() {
                           <select
                             value={selectedStatuses[selectedTask.id] || selectedTask.status}
                             onChange={(e) => setSelectedStatuses((prev) => ({ ...prev, [selectedTask.id]: e.target.value as Task['status'] }))}
-                            className="h-8 rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                            className="h-8 rounded border border-border px-2 text-xs bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                           >
                             <option value="todo">Нове</option>
                             <option value="in_progress">В роботі</option>
@@ -1009,7 +1009,7 @@ export default function TaskListPage() {
                           <select
                             value={selectedAssignees[selectedTask.id] || ''}
                             onChange={(e) => setSelectedAssignees((prev) => ({ ...prev, [selectedTask.id]: e.target.value }))}
-                            className="h-8 min-w-[260px] rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                            className="h-8 min-w-[260px] rounded border border-border px-2 text-xs bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                           >
                             <option value="">Перенаправити...</option>
                             {users.map((u) => (
@@ -1021,7 +1021,7 @@ export default function TaskListPage() {
                           <button
                             onClick={() => reassignTask(selectedTask.id)}
                             disabled={!selectedAssignees[selectedTask.id] || reassigningTaskId === selectedTask.id}
-                            className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200"
+                            className="rounded border border-border px-2 py-1 text-xs text-foreground/80 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200"
                           >
                             {reassigningTaskId === selectedTask.id ? 'Передача...' : 'Перенаправити'}
                           </button>
@@ -1036,14 +1036,14 @@ export default function TaskListPage() {
 
                         {/* Co-assignees management */}
                         <div className="pt-1 space-y-1.5">
-                          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">Співвиконавці</p>
+                          <p className="text-xs font-semibold text-muted-foreground dark:text-slate-300">Співвиконавці</p>
                           <div className="flex flex-wrap gap-1.5">
                             {(selectedTask.coAssigneeIds || []).map(coId => {
                               const u = users.find(u => u.id === coId)
                               return u ? (
-                                <span key={coId} className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] text-slate-700 dark:text-slate-300">
+                                <span key={coId} className="inline-flex items-center gap-1 rounded-full bg-secondary dark:bg-slate-800 px-2 py-0.5 text-[11px] text-foreground/80 dark:text-slate-300">
                                   {u.firstName} {u.lastName}
-                                  <button onClick={() => removeCoAssignee(selectedTask.id, coId)} className="text-slate-400 hover:text-rose-500 leading-none">×</button>
+                                  <button onClick={() => removeCoAssignee(selectedTask.id, coId)} className="text-muted-foreground hover:text-rose-500 leading-none">×</button>
                                 </span>
                               ) : null
                             })}
@@ -1052,7 +1052,7 @@ export default function TaskListPage() {
                             <select
                               value={coAssigneeSelectId}
                               onChange={e => setCoAssigneeSelectId(e.target.value)}
-                              className="flex-1 h-7 rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                              className="flex-1 h-7 rounded border border-border px-2 text-xs bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                             >
                               <option value="">+ Додати співвиконавця</option>
                               {users.filter(u => u.id !== selectedTask.assignee?.id && !selectedTask.coAssigneeIds?.includes(u.id)).map(u => (
@@ -1062,7 +1062,7 @@ export default function TaskListPage() {
                             <button
                               onClick={() => addCoAssignee(selectedTask.id, coAssigneeSelectId)}
                               disabled={!coAssigneeSelectId || updatingCoAssignees}
-                              className="h-7 rounded border border-slate-300 px-3 text-xs text-slate-700 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200"
+                              className="h-7 rounded border border-border px-3 text-xs text-foreground/80 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200"
                             >
                               Додати
                             </button>
@@ -1073,7 +1073,7 @@ export default function TaskListPage() {
                         {!selectedTask.parentId && (
                           <div className="pt-2 space-y-2">
                             <div className="flex items-center justify-between">
-                              <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                              <p className="text-xs font-semibold text-muted-foreground dark:text-slate-300">
                                 Підзадачі {subtasks.length > 0 && `(${subtasks.length})`}
                               </p>
                               <button
@@ -1085,26 +1085,26 @@ export default function TaskListPage() {
                             </div>
 
                             {subtaskFormOpen && (
-                              <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+                              <div className="rounded-lg border border-border dark:border-slate-700 p-3 space-y-2">
                                 <input
                                   type="text"
                                   placeholder="Назва підзадачі"
                                   value={newSubtaskTitle}
                                   onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                                  className="w-full rounded border border-border px-2 py-1.5 text-xs bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                                 />
                                 <textarea
                                   placeholder="Опис підзадачі (необов'язково)"
                                   value={newSubtaskDescription}
                                   onChange={(e) => setNewSubtaskDescription(e.target.value)}
                                   rows={2}
-                                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
+                                  className="w-full rounded border border-border px-2 py-1.5 text-xs bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
                                 />
                                 <div className="flex flex-wrap gap-2">
                                   <select
                                     value={newSubtaskAssigneeId}
                                     onChange={(e) => setNewSubtaskAssigneeId(e.target.value)}
-                                    className="flex-1 min-w-[160px] h-8 rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                                    className="flex-1 min-w-[160px] h-8 rounded border border-border px-2 text-xs bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                                   >
                                     <option value="">Без виконавця</option>
                                     {user && (
@@ -1118,7 +1118,7 @@ export default function TaskListPage() {
                                     type="datetime-local"
                                     value={newSubtaskDueDate}
                                     onChange={(e) => setNewSubtaskDueDate(e.target.value)}
-                                    className="h-8 rounded border border-slate-300 px-2 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                                    className="h-8 rounded border border-border px-2 text-xs bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                                   />
                                 </div>
                                 <button
@@ -1131,51 +1131,51 @@ export default function TaskListPage() {
                               </div>
                             )}
 
-                            {loadingSubtasks && <p className="text-xs text-slate-400">Завантаження...</p>}
+                            {loadingSubtasks && <p className="text-xs text-muted-foreground">Завантаження...</p>}
 
                             {!loadingSubtasks && subtasks.length === 0 && !subtaskFormOpen && (
-                              <p className="text-xs text-slate-400 dark:text-slate-500">Підзадач немає.</p>
+                              <p className="text-xs text-muted-foreground dark:text-slate-500">Підзадач немає.</p>
                             )}
 
                             {subtasks.map((s) => (
-                              <div key={s.id} className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                              <div key={s.id} className="rounded-lg border border-border dark:border-slate-700 overflow-hidden">
                                 <button
                                   onClick={() => setSelectedTaskId(s.id)}
-                                  className="w-full text-left flex items-start gap-2 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                                  className="w-full text-left flex items-start gap-2 px-3 py-2 hover:bg-secondary dark:hover:bg-slate-800/50 transition-colors"
                                 >
                                   <span className={`shrink-0 mt-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
                                     s.status === 'done' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' :
                                     s.status === 'in_progress' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' :
-                                    'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300'
+                                    'bg-primary/10 text-primary'
                                   }`}>
                                     {s.status === 'done' ? 'Виконано' : s.status === 'in_progress' ? 'В роботі' : 'Нове'}
                                   </span>
                                   <div className="flex-1 min-w-0">
-                                    <span className="text-xs text-slate-800 dark:text-slate-200 break-words leading-relaxed">{s.title}</span>
+                                    <span className="text-xs text-foreground dark:text-slate-200 break-words leading-relaxed">{s.title}</span>
                                     {s.description && (
-                                      <p className="text-[11px] text-slate-500 dark:text-slate-400 whitespace-pre-wrap break-words mt-0.5">{s.description}</p>
+                                      <p className="text-[11px] text-muted-foreground dark:text-slate-400 whitespace-pre-wrap break-words mt-0.5">{s.description}</p>
                                     )}
                                     <div className="flex items-center gap-2 mt-0.5">
                                       {s.assignee && (
-                                        <span className="text-[10px] text-slate-400">{s.assignee.firstName} {s.assignee.lastName}</span>
+                                        <span className="text-[10px] text-muted-foreground">{s.assignee.firstName} {s.assignee.lastName}</span>
                                       )}
                                       {s.dueDate && (
-                                        <span className="text-[10px] text-slate-400">{new Date(s.dueDate).toLocaleDateString('uk-UA')}</span>
+                                        <span className="text-[10px] text-muted-foreground">{new Date(s.dueDate).toLocaleDateString('uk-UA')}</span>
                                       )}
                                     </div>
                                   </div>
                                 </button>
-                                <div className="px-3 pb-2 flex items-center gap-2 border-t border-slate-100 dark:border-slate-700/50 pt-1.5">
+                                <div className="px-3 pb-2 flex items-center gap-2 border-t border-border dark:border-slate-700/50 pt-1.5">
                                   <select
                                     value={s.status}
                                     onChange={(e) => updateSubtaskStatus(s.id, e.target.value as Task['status'], selectedTask.id)}
-                                    className="h-6 rounded border border-slate-200 px-1 text-[10px] bg-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                                    className="h-6 rounded border border-border px-1 text-[10px] bg-card dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
                                   >
                                     <option value="todo">Нове</option>
                                     <option value="in_progress">В роботі</option>
                                     <option value="done">Виконано</option>
                                   </select>
-                                  <span className="text-[10px] text-slate-400">Натисніть щоб переглянути деталі →</span>
+                                  <span className="text-[10px] text-muted-foreground">Натисніть щоб переглянути деталі →</span>
                                 </div>
                               </div>
                             ))}
@@ -1215,10 +1215,10 @@ export default function TaskListPage() {
                         {/* Attachments */}
                         <div className="pt-2 space-y-2">
                           <div className="flex items-center justify-between">
-                            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                            <p className="text-xs font-semibold text-muted-foreground dark:text-slate-300">
                               Файли {attachments.length > 0 && `(${attachments.length})`}
                             </p>
-                            <label className={`cursor-pointer rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition ${uploadingFile ? 'opacity-50 pointer-events-none' : ''}`}>
+                            <label className={`cursor-pointer rounded border border-border px-2 py-1 text-xs text-foreground/80 dark:border-slate-600 dark:text-slate-200 hover:bg-secondary dark:hover:bg-slate-800 transition ${uploadingFile ? 'opacity-50 pointer-events-none' : ''}`}>
                               {uploadingFile ? 'Завантаження...' : '+ Додати файл'}
                               <input
                                 type="file"
@@ -1233,16 +1233,16 @@ export default function TaskListPage() {
                             </label>
                           </div>
                           {loadingAttachments && (
-                            <p className="text-xs text-slate-400">Завантаження файлів...</p>
+                            <p className="text-xs text-muted-foreground">Завантаження файлів...</p>
                           )}
                           {!loadingAttachments && attachments.length === 0 && (
-                            <p className="text-xs text-slate-400 dark:text-slate-500">Файлів немає. Макс. розмір: 50 МБ.</p>
+                            <p className="text-xs text-muted-foreground dark:text-slate-500">Файлів немає. Макс. розмір: 50 МБ.</p>
                           )}
                           {attachments.map((att) => (
-                            <div key={att.id} className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
+                            <div key={att.id} className="flex items-center gap-2 rounded-lg border border-border dark:border-slate-700 px-3 py-2">
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-slate-800 dark:text-slate-200 break-all">{att.fileName}</p>
-                                <p className="text-[10px] text-slate-400">{formatBytes(att.fileSize)} · {att.uploader || ''} · {new Date(att.createdAt).toLocaleDateString('uk-UA')}</p>
+                                <p className="text-xs font-medium text-foreground dark:text-slate-200 break-all">{att.fileName}</p>
+                                <p className="text-[10px] text-muted-foreground">{formatBytes(att.fileSize)} · {att.uploader || ''} · {new Date(att.createdAt).toLocaleDateString('uk-UA')}</p>
                               </div>
                               <button
                                 onClick={() => downloadAttachment(att.id, att.fileName)}
@@ -1253,7 +1253,7 @@ export default function TaskListPage() {
                               <button
                                 onClick={() => deleteAttachment(att.id, selectedTask.id)}
                                 disabled={deletingAttachmentId === att.id}
-                                className="shrink-0 text-xs text-slate-400 hover:text-rose-600 transition disabled:opacity-50"
+                                className="shrink-0 text-xs text-muted-foreground hover:text-rose-600 transition disabled:opacity-50"
                                 title="Видалити файл"
                               >
                                 ✕
@@ -1263,28 +1263,28 @@ export default function TaskListPage() {
                         </div>
 
                         {/* Comments */}
-                        <div className="pt-2 space-y-2 border-t border-slate-200 dark:border-slate-700 mt-3">
-                          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 pt-2">
+                        <div className="pt-2 space-y-2 border-t border-border dark:border-slate-700 mt-3">
+                          <p className="text-xs font-semibold text-muted-foreground dark:text-slate-300 pt-2">
                             Коментарі {comments.length > 0 && `(${comments.length})`}
                           </p>
                           {loadingComments && (
-                            <p className="text-xs text-slate-400">Завантаження...</p>
+                            <p className="text-xs text-muted-foreground">Завантаження...</p>
                           )}
                           {!loadingComments && comments.length === 0 && (
-                            <p className="text-xs text-slate-400 dark:text-slate-500">Коментарів немає.</p>
+                            <p className="text-xs text-muted-foreground dark:text-slate-500">Коментарів немає.</p>
                           )}
                           <div className="space-y-2">
                             {comments.map((c) => (
-                              <div key={c.id} className="rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 px-3 py-2 space-y-0.5">
+                              <div key={c.id} className="rounded-lg bg-secondary dark:bg-slate-800/60 border border-border dark:border-slate-700 px-3 py-2 space-y-0.5">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                                  <span className="text-[11px] font-medium text-foreground/80 dark:text-slate-300">
                                     {c.user.firstName} {c.user.lastName}
                                   </span>
-                                  <span className="text-[10px] text-slate-400">
+                                  <span className="text-[10px] text-muted-foreground">
                                     {new Date(c.createdAt).toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                   </span>
                                 </div>
-                                <p className="text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{c.content}</p>
+                                <p className="text-xs text-foreground/80 dark:text-slate-200 whitespace-pre-wrap">{c.content}</p>
                               </div>
                             ))}
                           </div>
@@ -1298,11 +1298,11 @@ export default function TaskListPage() {
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) postComment(selectedTask.id)
                                 }}
-                                className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
+                                className="w-full rounded-lg border border-border px-2 py-1.5 text-xs bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 resize-none"
                               />
                               {mentionPickerOpen && (
-                                <div className="absolute bottom-full left-0 mb-1 z-50 w-64 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900 overflow-hidden">
-                                  <div className="p-2 border-b border-slate-100 dark:border-slate-700">
+                                <div className="absolute bottom-full left-0 mb-1 z-50 w-64 rounded-lg border border-border bg-card shadow-lg dark:border-slate-700 dark:bg-slate-900 overflow-hidden">
+                                  <div className="p-2 border-b border-border dark:border-slate-700">
                                     <input
                                       autoFocus
                                       type="text"
@@ -1310,7 +1310,7 @@ export default function TaskListPage() {
                                       onChange={e => setMentionSearch(e.target.value)}
                                       onKeyDown={e => { if (e.key === 'Escape') { setMentionPickerOpen(false); setMentionSearch('') } }}
                                       placeholder="Пошук..."
-                                      className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-900 outline-none focus:border-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                                      className="w-full rounded-md border border-border px-2 py-1 text-xs text-foreground outline-none focus:border-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                                     />
                                   </div>
                                   <div className="max-h-48 overflow-y-auto">
@@ -1326,19 +1326,19 @@ export default function TaskListPage() {
                                             setMentionPickerOpen(false)
                                             setMentionSearch('')
                                           }}
-                                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-slate-50 dark:hover:bg-slate-800"
+                                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-secondary dark:hover:bg-slate-800"
                                         >
                                           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white">
                                             {u.firstName[0]}{u.lastName[0]}
                                           </span>
                                           <div className="min-w-0">
-                                            <p className="truncate text-slate-800 dark:text-slate-200">{u.firstName} {u.lastName}</p>
-                                            <p className="truncate text-[10px] text-slate-400">{u.department?.nameUk || ''}</p>
+                                            <p className="truncate text-foreground dark:text-slate-200">{u.firstName} {u.lastName}</p>
+                                            <p className="truncate text-[10px] text-muted-foreground">{u.department?.nameUk || ''}</p>
                                           </div>
                                         </button>
                                       ))}
                                     {users.filter(u => `${u.firstName} ${u.lastName}`.toLowerCase().includes(mentionSearch.toLowerCase())).length === 0 && (
-                                      <p className="px-3 py-3 text-xs text-slate-400">Не знайдено</p>
+                                      <p className="px-3 py-3 text-xs text-muted-foreground">Не знайдено</p>
                                     )}
                                   </div>
                                 </div>
@@ -1348,7 +1348,7 @@ export default function TaskListPage() {
                               <button
                                 type="button"
                                 onClick={() => { setMentionPickerOpen(v => !v); setMentionSearch('') }}
-                                className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                                className="rounded-lg border border-border px-2 py-1.5 text-xs text-muted-foreground hover:bg-secondary dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                                 title="Згадати співробітника"
                               >
                                 @ Згадати
@@ -1362,7 +1362,7 @@ export default function TaskListPage() {
                               </button>
                             </div>
                           </div>
-                          <p className="text-[10px] text-slate-400">Ctrl+Enter для надсилання</p>
+                          <p className="text-[10px] text-muted-foreground">Ctrl+Enter для надсилання</p>
                         </div>
                       </>
                     )}

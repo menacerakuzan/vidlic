@@ -92,7 +92,6 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   })
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [isDark, setIsDark] = useState(false)
-  const [logoClickCount, setLogoClickCount] = useState(0)
   const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>('large')
   const prevUnreadCount = useRef<number | null>(null)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
@@ -104,19 +103,6 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     const audio = new Audio(sound)
     audio.volume = 0.7
     audio.play().catch(() => {})
-  }
-
-  const handleLogoClick = () => {
-    setLogoClickCount(prev => {
-      const next = prev + 1
-      if (next >= 10) {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('vidlik-easter-egg', '1')
-        }
-        return 0
-      }
-      return next
-    })
   }
 
   useEffect(() => {
@@ -297,22 +283,22 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       <div className="lg:hidden">
         {sidebarOpen && (
           <div className="fixed inset-0 z-50">
-            <div className="fixed inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
-            <div className="fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-800 shadow-xl">
-              <div className="flex items-center justify-between p-4 border-b">
-                <span className="inline-flex items-center gap-3 text-2xl font-semibold tracking-wide cursor-pointer select-none" onClick={handleLogoClick}>
-                  <BrandLogo className="h-12 w-12 text-primary" />
+            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
+            <div className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-card shadow-xl">
+              <div className="flex items-center justify-between border-b border-border p-4">
+                <span className="inline-flex items-center gap-2.5 font-display text-xl font-medium tracking-tight">
+                  <BrandLogo className="h-9 w-9 text-primary" />
                   ВІДЛІК
                 </span>
-                <button onClick={() => setSidebarOpen(false)}>
+                <button onClick={() => setSidebarOpen(false)} className="rounded-md p-1 text-muted-foreground hover:bg-secondary">
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <nav className="p-3 space-y-4 overflow-y-auto flex-1">
+              <nav className="flex-1 space-y-4 overflow-y-auto p-3">
                 {filteredGroups.map(group => (
                   <div key={group.label || '_top'}>
                     {group.label && (
-                      <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                      <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                         {group.label}
                       </p>
                     )}
@@ -323,13 +309,13 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                           href={item.href}
                           onClick={() => setSidebarOpen(false)}
                           className={cn(
-                            'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                            'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                             pathname === item.href
-                              ? 'bg-primary text-white'
-                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-foreground/70 hover:bg-secondary hover:text-foreground'
                           )}
                         >
-                          <item.icon className="w-4 h-4 shrink-0" />
+                          <item.icon className="w-[18px] h-[18px] shrink-0" />
                           {item.name}
                         </Link>
                       ))}
@@ -344,10 +330,10 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
       {/* Desktop sidebar */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-64 lg:flex-col">
-        <div className="flex flex-col flex-1 min-h-0 bg-white/80 dark:bg-slate-900/70 backdrop-blur-xl border-r border-white/10">
-          <div className="flex items-center h-16 px-6 border-b border-white/10">
-            <span className="inline-flex items-center gap-3 text-2xl font-semibold font-display tracking-wide cursor-pointer select-none" onClick={handleLogoClick}>
-              <BrandLogo className="h-12 w-12 text-primary" />
+        <div className="flex flex-col flex-1 min-h-0 bg-card border-r border-border">
+          <div className="flex items-center h-16 px-6 border-b border-border">
+            <span className="inline-flex items-center gap-2.5 font-display text-xl font-medium tracking-tight">
+              <BrandLogo className="h-9 w-9 text-primary" />
               ВІДЛІК
             </span>
           </div>
@@ -355,48 +341,52 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             {filteredGroups.map(group => (
               <div key={group.label || '_top'}>
                 {group.label && (
-                  <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                  <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                     {group.label}
                   </p>
                 )}
                 <div className="space-y-0.5">
-                  {group.items.map(item => (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      className={cn(
-                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150',
-                        pathname === item.href
-                          ? 'bg-primary text-white shadow-sm'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60'
-                      )}
-                    >
-                      <item.icon className="w-4 h-4 shrink-0" />
-                      {item.name}
-                    </Link>
-                  ))}
+                  {group.items.map(item => {
+                    const active = pathname === item.href
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        className={cn(
+                          'relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150',
+                          active
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-foreground/70 hover:bg-secondary hover:text-foreground'
+                        )}
+                      >
+                        {active && <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-primary" />}
+                        <item.icon className="w-[18px] h-[18px] shrink-0" />
+                        {item.name}
+                      </Link>
+                    )
+                  })}
                 </div>
               </div>
             ))}
           </nav>
-          <div className="p-3 border-t border-slate-100 dark:border-slate-800 space-y-0.5">
+          <div className="p-3 border-t border-border space-y-0.5">
             <Link
               href="/dashboard/profile"
               className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150',
                 pathname === '/dashboard/profile'
-                  ? 'bg-primary text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-foreground/70 hover:bg-secondary hover:text-foreground'
               )}
             >
-              <UserCircle className="w-4 h-4 shrink-0" />
+              <UserCircle className="w-[18px] h-[18px] shrink-0" />
               Мій профіль
             </Link>
             <button
               onClick={handleLogout}
-              className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all duration-150"
+              className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors duration-150"
             >
-              <LogOut className="w-4 h-4 shrink-0" />
+              <LogOut className="w-[18px] h-[18px] shrink-0" />
               Вийти
             </button>
           </div>
@@ -406,9 +396,9 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Header */}
-        <header className="sticky top-0 z-40 flex items-center h-16 px-4 bg-white/70 dark:bg-slate-900/70 border-b border-white/10 backdrop-blur-xl shadow-sm lg:px-6">
+        <header className="sticky top-0 z-40 flex items-center h-16 px-4 bg-card/85 border-b border-border backdrop-blur-xl lg:px-6">
           <button
-            className="lg:hidden mr-4"
+            className="lg:hidden mr-4 text-foreground"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="w-6 h-6" />
@@ -420,21 +410,21 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setSearchOpen(true)}
                 placeholder="Пошук: звіти, задачі, співробітники..."
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                className="w-full rounded-lg border-[1.5px] border-border bg-card px-4 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-accent focus:ring-[3px] focus:ring-accent/25"
               />
               {searchOpen && (searchQuery.trim().length >= 2 || searching) && (
-                <div className="absolute mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                  {searching && <p className="text-xs text-slate-500 dark:text-slate-400">Пошук...</p>}
+                <div className="absolute mt-2 w-full rounded-xl border border-border bg-card p-3 shadow-lg">
+                  {searching && <p className="text-xs text-muted-foreground">Пошук...</p>}
                   {!searching && (
                     <div className="space-y-2 text-sm">
                       {searchData.reports.length > 0 && (
                         <div>
-                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Звіти</p>
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Звіти</p>
                           {searchData.reports.slice(0, 4).map((item) => (
                             <Link
                               key={`report-${item.id}`}
                               href={`/dashboard/reports/${item.id}`}
-                              className="block rounded px-2 py-1 hover:bg-slate-50 dark:hover:bg-slate-800"
+                              className="block rounded-md px-2 py-1.5 text-foreground hover:bg-secondary"
                               onClick={() => setSearchOpen(false)}
                             >
                               {item.title}
@@ -444,12 +434,12 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                       )}
                       {searchData.tasks.length > 0 && (
                         <div>
-                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Задачі</p>
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Задачі</p>
                           {searchData.tasks.slice(0, 4).map((item) => (
                             <Link
                               key={`task-${item.id}`}
                               href={`/dashboard/tasks?taskId=${item.id}`}
-                              className="block rounded px-2 py-1 hover:bg-slate-50 dark:hover:bg-slate-800"
+                              className="block rounded-md px-2 py-1.5 text-foreground hover:bg-secondary"
                               onClick={() => setSearchOpen(false)}
                             >
                               {item.title}
@@ -459,16 +449,16 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                       )}
                       {searchData.users.length > 0 && (
                         <div>
-                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Співробітники</p>
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Співробітники</p>
                           {searchData.users.slice(0, 4).map((item) => (
-                            <p key={`user-${item.id}`} className="rounded px-2 py-1 text-slate-700 dark:text-slate-200">
+                            <p key={`user-${item.id}`} className="rounded-md px-2 py-1.5 text-foreground">
                               {item.fullName} · {item.departmentName}
                             </p>
                           ))}
                         </div>
                       )}
                       {!searchData.reports.length && !searchData.tasks.length && !searchData.users.length && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Нічого не знайдено</p>
+                        <p className="text-xs text-muted-foreground">Нічого не знайдено</p>
                       )}
                     </div>
                   )}
@@ -480,7 +470,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             <button
               onClick={cycleFontSize}
               title="Розмір шрифту"
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-sm font-semibold text-foreground/70 hover:bg-secondary hover:text-foreground transition-colors"
             >
               {fontSizeLabel}
             </button>
@@ -491,18 +481,18 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
               <Button variant="ghost" size="icon" className="relative">
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-red-100 text-red-700 text-[10px] leading-5">
+                  <span className="absolute -top-1 -right-1 flex min-w-5 h-5 items-center justify-center px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-medium leading-none">
                     {unreadCount > 99 ? '99+' : unreadCount}
                   </span>
                 )}
               </Button>
             </Link>
             <div className="flex items-center gap-3">
-              <div className="text-right">
-                <p className="text-sm font-medium">{user?.firstName} {user?.lastName}</p>
-                <p className="text-xs text-slate-500">{roleTitle} · {user?.department?.nameUk}</p>
+              <div className="hidden text-right sm:block">
+                <p className="text-sm font-medium text-foreground">{user?.firstName} {user?.lastName}</p>
+                <p className="text-xs text-muted-foreground">{roleTitle} · {user?.department?.nameUk}</p>
               </div>
-              <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white font-medium">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary font-medium text-primary-foreground">
                 {user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}
               </div>
             </div>
@@ -513,10 +503,10 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         <AnimatePresence mode="wait">
           <motion.main
             key={pathname}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
             className="p-4 lg:p-6"
           >
             {children}
@@ -525,49 +515,50 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {showOnboarding && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900">
-            <h2 className="text-xl font-semibold">Короткий старт</h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Роль: {roleTitle}</p>
-            <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-slate-700 dark:text-slate-200">
-              {user?.role === 'specialist' && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-2xl bg-card p-6 shadow-2xl">
+            <h2 className="font-display text-xl font-bold tracking-tight text-foreground">Короткий старт</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Ваша роль: <span className="font-medium text-foreground">{roleTitle}</span></p>
+            <ul className="mt-4 space-y-2.5 text-sm text-foreground/80">
+              {(user?.role === 'specialist' || user?.role === 'lawyer' || user?.role === 'accountant' || user?.role === 'hr') && (
                 <>
-                  <li>Створюйте чернетку звіту, генеруйте AI-текст, перевіряйте чек-лист та відправляйте на погодження.</li>
-                  <li>Оновлюйте статуси задач у Kanban та дотримуйтесь дедлайнів.</li>
+                  <li className="flex gap-2"><span className="text-accent">•</span> Створюйте чернетку звіту, генеруйте AI-текст, перевіряйте чек-лист та відправляйте на погодження.</li>
+                  <li className="flex gap-2"><span className="text-accent">•</span> Оновлюйте статуси своїх задач та дотримуйтесь дедлайнів.</li>
                 </>
               )}
               {user?.role === 'manager' && (
                 <>
-                  <li>Перевіряйте звіти підрозділу, залишайте зауваження по секціях і погоджуйте або повертайте на доопрацювання.</li>
-                  <li>Керуйте задачами співробітників та контролюйте виконання в колонках Todo/In Progress/Done.</li>
+                  <li className="flex gap-2"><span className="text-accent">•</span> Перевіряйте звіти підрозділу, залишайте зауваження по секціях і погоджуйте або повертайте на доопрацювання.</li>
+                  <li className="flex gap-2"><span className="text-accent">•</span> Керуйте задачами співробітників та контролюйте виконання.</li>
                 </>
               )}
               {user?.role === 'clerk' && (
                 <>
-                  <li>Опрацьовуйте звіти від керівників відділів, узгоджуйте та формуйте консолідовану картину для директора.</li>
-                  <li>Використовуйте AI-резюме, щоб швидко прибрати дублікати та підготувати зведений матеріал.</li>
+                  <li className="flex gap-2"><span className="text-accent">•</span> Опрацьовуйте звіти від керівників відділів, узгоджуйте та формуйте консолідовану картину для директора.</li>
+                  <li className="flex gap-2"><span className="text-accent">•</span> Використовуйте AI-резюме, щоб швидко прибрати дублікати та підготувати зведений матеріал.</li>
                 </>
               )}
-              {user?.role === 'director' && (
+              {(user?.role === 'director' || user?.role === 'deputy_director') && (
                 <>
-                  <li>Проводьте фінальне погодження та переглядайте міжпідрозділову аналітику.</li>
-                  <li>Використовуйте друк-версію і експорт для офіційних документів.</li>
+                  <li className="flex gap-2"><span className="text-accent">•</span> Проводьте фінальне погодження та переглядайте міжпідрозділову аналітику.</li>
+                  <li className="flex gap-2"><span className="text-accent">•</span> Використовуйте друк-версію і експорт для офіційних документів.</li>
+                </>
+              )}
+              {user?.role === 'deputy_head' && (
+                <>
+                  <li className="flex gap-2"><span className="text-accent">•</span> Маєте оглядовий доступ до звітів і задач усіх підрозділів.</li>
+                  <li className="flex gap-2"><span className="text-accent">•</span> Контролюйте загальну картину виконання та аналітику.</li>
                 </>
               )}
               {user?.role === 'admin' && (
                 <>
-                  <li>Підтримуйте структуру підрозділів, ролі, доступи та політики безпеки.</li>
-                  <li>Контролюйте аудит і системні налаштування.</li>
+                  <li className="flex gap-2"><span className="text-accent">•</span> Підтримуйте структуру підрозділів, ролі, доступи та політики безпеки.</li>
+                  <li className="flex gap-2"><span className="text-accent">•</span> Контролюйте аудит і системні налаштування.</li>
                 </>
               )}
             </ul>
             <div className="mt-6 flex justify-end">
-              <button
-                onClick={closeOnboarding}
-                className="rounded-lg bg-primary px-4 py-2 text-sm text-white"
-              >
-                Зрозуміло
-              </button>
+              <Button onClick={closeOnboarding}>Зрозуміло</Button>
             </div>
           </div>
         </div>

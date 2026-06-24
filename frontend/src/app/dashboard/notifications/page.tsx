@@ -113,9 +113,9 @@ export default function NotificationsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold font-display">Сповіщення</h1>
-            <p className="text-slate-500 mt-1">Оповіщення щодо звітів і задач{unreadCount > 0 ? ` · ${unreadCount} непрочитаних` : ''}</p>
+            <p className="text-muted-foreground mt-1">Оповіщення щодо звітів і задач{unreadCount > 0 ? ` · ${unreadCount} непрочитаних` : ''}</p>
           </div>
-          <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600" onClick={markAllRead}>
+          <button className="rounded-lg border border-border px-3 py-2 text-sm dark:border-slate-600" onClick={markAllRead}>
             Позначити все як прочитане
           </button>
         </div>
@@ -128,7 +128,7 @@ export default function NotificationsPage() {
               className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                 typeFilter === g.value
                   ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-300'
+                  : 'border-border text-muted-foreground dark:border-slate-600 dark:text-slate-300'
               }`}
             >
               {g.label}
@@ -136,30 +136,30 @@ export default function NotificationsPage() {
           ))}
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden dark:border-slate-700 dark:bg-slate-900">
-          {loading && <div className="px-4 py-5 text-sm text-slate-500 dark:text-slate-400">Завантаження...</div>}
-          {!loading && filtered.length === 0 && <div className="px-4 py-5 text-sm text-slate-500 dark:text-slate-400">Сповіщень поки немає</div>}
+        <div className="rounded-2xl border border-border bg-card overflow-hidden dark:border-slate-700 dark:bg-slate-900">
+          {loading && <div className="px-4 py-5 text-sm text-muted-foreground dark:text-slate-400">Завантаження...</div>}
+          {!loading && filtered.length === 0 && <div className="px-4 py-5 text-sm text-muted-foreground dark:text-slate-400">Сповіщень поки немає</div>}
           {!loading && filtered.map((item) => (
             <div
               key={item.id}
-              className={`px-4 py-4 border-b border-slate-100 dark:border-slate-700 ${
+              className={`px-4 py-4 border-b border-border dark:border-slate-700 ${
                 item.isRead
-                  ? 'bg-white dark:bg-slate-900'
+                  ? 'bg-card dark:bg-slate-900'
                   : 'bg-blue-50 dark:bg-blue-950/40 border-l-4 border-l-blue-400'
               }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className={`font-medium ${item.isRead ? 'text-slate-900 dark:text-slate-100' : 'text-slate-900 dark:text-white'}`}>
+                    <p className={`font-medium ${item.isRead ? 'text-foreground dark:text-slate-100' : 'text-foreground dark:text-white'}`}>
                       {item.title}
                     </p>
                     {!item.isRead && (
                       <span className="shrink-0 inline-block w-2 h-2 rounded-full bg-blue-500" />
                     )}
                   </div>
-                  <p className="text-sm text-slate-700 dark:text-slate-300 mt-1">{item.message}</p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">
+                  <p className="text-sm text-foreground/80 dark:text-slate-300 mt-1">{item.message}</p>
+                  <p className="text-xs text-muted-foreground dark:text-slate-500 mt-1.5">
                     {TYPE_LABELS[item.type] || item.type} · {new Date(item.createdAt).toLocaleString('uk-UA')}
                   </p>
                 </div>

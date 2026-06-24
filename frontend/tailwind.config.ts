@@ -43,10 +43,17 @@ const config: Config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
-        success: '#34C759',
-        warning: '#FF9500',
-        error: '#FF3B30',
-        info: '#007AFF',
+        success: '#2f8f4e',
+        warning: '#df9b3b',
+        error: '#9f1f47',
+        info: '#002f5e',
+        // Офіційна палітра ОДА
+        oda: {
+          cream: '#fff2e8',
+          gold: '#df9b3b',
+          navy: '#002f5e',
+          burgundy: '#9f1f47',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
@@ -54,8 +61,8 @@ const config: Config = {
         sm: 'calc(var(--radius) - 4px)',
       },
       fontFamily: {
-        sans: ['var(--font-manrope)', 'system-ui', 'sans-serif'],
-        display: ['var(--font-space)', 'var(--font-manrope)', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-e-ukraine)', 'system-ui', 'sans-serif'],
+        display: ['var(--font-e-ukraine-head)', 'var(--font-e-ukraine)', 'system-ui', 'sans-serif'],
       },
       keyframes: {
         'accordion-down': {

@@ -64,9 +64,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     })
   },
   updateUser: (updates) =>
-    set((state) => ({
-      user: state.user ? { ...state.user, ...updates } : null,
-    })),
+    set((state) => {
+      const nextUser = state.user ? { ...state.user, ...updates } : null
+      if (typeof window !== 'undefined' && nextUser) {
+        localStorage.setItem('vidlik-user', JSON.stringify(nextUser))
+      }
+      return { user: nextUser }
+    }),
 }))
 
 if (typeof window !== 'undefined') {
