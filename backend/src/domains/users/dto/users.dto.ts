@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, IsOptional, IsEnum, IsBoolean, IsArray } from 'class-validator';
+import { IsEmail, IsString, MinLength, IsOptional, IsEnum, IsBoolean, IsArray, Matches } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -136,7 +136,10 @@ export class UserQueryDto {
 export class UpdateUserPasswordDto {
   @ApiProperty({ example: 'MyPassword1!' })
   @IsString()
-  @MinLength(8)
+  @MinLength(10)
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/, {
+    message: 'Пароль повинен містити велику літеру, малу літеру, цифру та спеціальний символ',
+  })
   password: string;
 }
 

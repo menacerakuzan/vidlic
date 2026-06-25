@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { DepartmentScopeService } from '../../shared/department-scope.service';
 import { INDIVIDUAL_CONTRIBUTOR_ROLES } from '../../shared/role-groups';
 
 @Injectable()
@@ -11,6 +12,7 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
+    private deptScope: DepartmentScopeService,
   ) {}
 
   onModuleInit() {
@@ -270,7 +272,7 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
       whereUser.departmentId = deptId;
     }
     if (user.role === 'director' || user.role === 'deputy_director') {
-      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      const scopedDepartmentIds = await this.deptScope.resolveScopedIds(user);
       whereUser.departmentId = { in: scopedDepartmentIds.length ? scopedDepartmentIds : [deptId].filter(Boolean) };
     }
     if (user.role === 'specialist') {
@@ -439,38 +441,10 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
   private async assertDepartmentAccess(user: any, departmentId: string | null | undefined) {
     if (!departmentId) return;
     if (user?.role === 'admin' || user?.role === 'deputy_head') return;
-    const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+    const scopedDepartmentIds = await this.deptScope.resolveScopedIds(user);
     if (!scopedDepartmentIds.includes(departmentId)) {
       throw new ForbiddenException('Немає доступу до аналітики цього підрозділу');
     }
   }
 
-  private async resolveDepartmentScopeIds(departmentId?: string | null): Promise<string[]> {
-    if (!departmentId) return [];
-    const current = await this.prisma.department.findUnique({
-      where: { id: departmentId },
-      select: { id: true, parentId: true },
-    });
-    if (!current) return [];
-    const rootId = current.parentId || current.id;
-    const root = await this.prisma.department.findUnique({
-      where: { id: rootId },
-      select: { id: true, children: { select: { id: true } } },
-    });
-    if (!root) return [departmentId];
-    return [root.id, ...(root.children || []).map((item) => item.id)];
-  }
-
-  private async resolveScopedDepartmentIdsForUser(user: any): Promise<string[]> {
-    if (!user?.departmentId) return [];
-    if (user.role === 'manager') return [user.departmentId];
-    if (user.role === 'deputy_director') {
-      const configured = Array.isArray(user.scopeDepartmentIds) ? user.scopeDepartmentIds.filter(Boolean) : [];
-      if (configured.length > 0) return configured;
-    }
-    if (['director', 'clerk', 'deputy_director', 'lawyer', 'accountant', 'hr', 'specialist'].includes(user.role)) {
-      return this.resolveDepartmentScopeIds(user.departmentId);
-    }
-    return [user.departmentId];
-  }
 }

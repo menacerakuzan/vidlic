@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma.service';
+import { DepartmentScopeService } from '../../shared/department-scope.service';
 import { UiPresetsService } from '../ui-presets/ui-presets.service';
 import { AiProviderService } from './ai.provider';
 import { RedisService } from '../../shared/redis.service';
@@ -12,6 +13,7 @@ export class AiService {
     private uiPresets: UiPresetsService,
     private aiProvider: AiProviderService,
     private redis: RedisService,
+    private deptScope: DepartmentScopeService,
   ) {}
 
   async summarizeReport(reportId: string, user: any) {
@@ -209,28 +211,9 @@ export class AiService {
     const scopedDepartmentIds = user.role === 'deputy_director'
       ? (Array.isArray(user.scopeDepartmentIds) && user.scopeDepartmentIds.length > 0
         ? user.scopeDepartmentIds.filter(Boolean)
-        : await this.resolveDepartmentScopeIds(user.departmentId))
-      : await this.resolveDepartmentScopeIds(user.departmentId);
+        : await this.deptScope.resolveFamilyIds(user.departmentId))
+      : await this.deptScope.resolveFamilyIds(user.departmentId);
     return scopedDepartmentIds.includes(report.department?.id);
   }
 
-  private async resolveDepartmentScopeIds(departmentId?: string | null): Promise<string[]> {
-    if (!departmentId) return [];
-    const current = await this.prisma.department.findUnique({
-      where: { id: departmentId },
-      select: { id: true, parentId: true },
-    });
-    if (!current) return [];
-
-    const rootId = current.parentId || current.id;
-    const root = await this.prisma.department.findUnique({
-      where: { id: rootId },
-      select: {
-        id: true,
-        children: { select: { id: true } },
-      },
-    });
-    if (!root) return [departmentId];
-    return [root.id, ...(root.children || []).map((child) => child.id)];
-  }
 }

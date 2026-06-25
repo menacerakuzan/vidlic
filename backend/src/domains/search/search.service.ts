@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
+import { DepartmentScopeService } from '../../shared/department-scope.service';
 import { PrismaService } from '../../shared/prisma.service';
 
 @Injectable()
 export class SearchService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private deptScope: DepartmentScopeService,
+  ) {}
 
   async global(query: string, user: any) {
     const q = (query || '').trim();
@@ -42,7 +46,7 @@ export class SearchService {
       // Specialists can find colleagues in their own department (for task assignment)
       usersWhere.departmentId = user.departmentId;
     } else if (['manager', 'clerk', 'director', 'deputy_director', 'deputy_head'].includes(user.role)) {
-      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      const scopedDepartmentIds = await this.deptScope.resolveScopedIds(user);
       const safeIds = scopedDepartmentIds.length ? scopedDepartmentIds : [user.departmentId].filter(Boolean);
       // Leaders cannot see draft reports from other authors
       reportWhere.departmentId = { in: safeIds };
@@ -109,30 +113,4 @@ export class SearchService {
     };
   }
 
-  private async resolveDepartmentScopeIds(departmentId?: string | null): Promise<string[]> {
-    if (!departmentId) return [];
-    const current = await this.prisma.department.findUnique({
-      where: { id: departmentId },
-      select: { id: true, parentId: true },
-    });
-    if (!current) return [];
-
-    const rootId = current.parentId || current.id;
-    const root = await this.prisma.department.findUnique({
-      where: { id: rootId },
-      select: { id: true, children: { select: { id: true } } },
-    });
-    if (!root) return [departmentId];
-    return [root.id, ...(root.children || []).map((child) => child.id)];
-  }
-
-  private async resolveScopedDepartmentIdsForUser(user: any): Promise<string[]> {
-    if (!user?.departmentId) return [];
-    if (user.role === 'manager') return [user.departmentId];
-    if (user.role === 'deputy_director') {
-      const configured = Array.isArray(user.scopeDepartmentIds) ? user.scopeDepartmentIds.filter(Boolean) : [];
-      if (configured.length > 0) return configured;
-    }
-    return this.resolveDepartmentScopeIds(user.departmentId);
-  }
 }

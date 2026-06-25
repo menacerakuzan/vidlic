@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../shared/prisma.service';
+import { DepartmentScopeService } from '../../shared/department-scope.service';
 import { CreateReportDto, UpdateReportDto, ReportQueryDto, SubmitReportDto, ApproveReportDto, RejectReportDto, UpsertActivityRowDto, UpdateActivitiesGoogleSheetDto } from './dto/reports.dto';
 import { ReportStatus, ApprovalEntityType } from '@prisma/client';
 import { ApprovalsService } from '../approvals/approvals.service';
@@ -16,6 +17,7 @@ export class ReportsService {
     private approvalsService: ApprovalsService,
     private eventEmitter: EventEmitter2,
     private aiProvider: AiProviderService,
+    private deptScope: DepartmentScopeService,
   ) {}
 
   async findAll(query: ReportQueryDto, user: any) {
@@ -43,7 +45,7 @@ export class ReportsService {
     if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
       where.authorId = user.id;
     } else if (user.role === 'clerk') {
-      const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+      const scopedDepartmentIds = await this.deptScope.resolveFamilyIds(user.departmentId);
       where.OR = [
         { authorId: user.id },
         { currentApproverId: user.id },
@@ -55,7 +57,7 @@ export class ReportsService {
         },
       ];
     } else if (user.role === 'manager' || user.role === 'director' || user.role === 'deputy_director') {
-      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      const scopedDepartmentIds = await this.deptScope.resolveScopedIds(user);
       // draft reports are only visible to their author; non-draft reports are visible if in scoped dept or assigned for approval
       where.OR = [
         { authorId: user.id },
@@ -74,8 +76,8 @@ export class ReportsService {
     if (departmentId && !['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role)) {
       if (user.role === 'manager' || user.role === 'clerk' || user.role === 'director' || user.role === 'deputy_director') {
         const scopedDepartmentIds = user.role === 'clerk'
-          ? await this.resolveDepartmentScopeIds(user.departmentId)
-          : await this.resolveScopedDepartmentIdsForUser(user);
+          ? await this.deptScope.resolveFamilyIds(user.departmentId)
+          : await this.deptScope.resolveScopedIds(user);
         where.departmentId = scopedDepartmentIds.includes(departmentId)
           ? departmentId
           : '00000000-0000-0000-0000-000000000000';
@@ -104,9 +106,9 @@ export class ReportsService {
       where.AND = [...(Array.isArray(where.AND) ? where.AND : []), ...andClauses];
     }
 
-    const [reports, total] = await Promise.all([
+    const runQuery = (w: any) => Promise.all([
       this.prisma.report.findMany({
-        where,
+        where: w,
         skip,
         take: limit,
         include: {
@@ -116,8 +118,27 @@ export class ReportsService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.report.count({ where }),
+      this.prisma.report.count({ where: w }),
     ]);
+
+    let reports: any[], total: number;
+    try {
+      [reports, total] = await runQuery(where);
+    } catch (err: any) {
+      // P2009 = unknown field (migration not run yet) — retry without reportSubtype filter
+      if (err?.code === 'P2009' || err?.message?.includes('reportSubtype') || err?.message?.includes('reportMode')) {
+        const safeClauses = andClauses.filter(
+          (c) => !JSON.stringify(c).includes('reportSubtype') && !JSON.stringify(c).includes('reportMode'),
+        );
+        const safeWhere = { ...where };
+        if (safeClauses.length) safeWhere.AND = [...(Array.isArray(safeWhere.AND) ? safeWhere.AND : [])].filter(
+          (c) => !JSON.stringify(c).includes('reportSubtype') && !JSON.stringify(c).includes('reportMode'),
+        );
+        [reports, total] = await runQuery(safeWhere);
+      } else {
+        throw err;
+      }
+    }
 
     const visibleReports = reports.filter((item) => !this.isActivityPlanReport(item));
     const normalizedTotal = total;
@@ -292,6 +313,7 @@ export class ReportsService {
     const managerId = routing.managerId;
     const clerkId = routing.clerkId;
     const directorId = routing.directorId;
+    const deputyDirectorId = routing.deputyDirectorId;
 
     const content = this.ensureObject(report.content);
     const reportMode = this.getReportMode(report);
@@ -317,22 +339,44 @@ export class ReportsService {
       }
     }
 
+    // Try to use admin-configured flow from DB first.
+    // If no DB flow is configured, fall back to role-based defaults below.
+    const dbFlow = await this.approvalsService.getActiveFlow(ApprovalEntityType.report);
+    const dbSteps = dbFlow?.steps ?? [];
+
     let flowSteps: Array<{ order: number; role: 'manager' | 'clerk' | 'director' }> = [];
-    if (report.author?.role === 'specialist') {
-      // If the section has no manager, specialist report goes directly to clerk.
-      flowSteps = managerId
-        ? [{ order: 1, role: 'manager' }]
-        : [{ order: 1, role: 'clerk' }];
-    } else if (['lawyer', 'accountant', 'hr'].includes(report.author?.role || '')) {
-      flowSteps = [{ order: 1, role: 'director' }];
-    } else if (report.author?.role === 'manager') {
-      // Manager reports (both regular and aggregate) must pass through clerk → director
-      // Self-approval without oversight is a governance failure in government systems
-      flowSteps = [{ order: 1, role: 'clerk' }];
-    } else if (report.author?.role === 'clerk') {
-      flowSteps = [{ order: 1, role: 'director' }];
-    } else {
-      // Directors/admins do not require additional approval chain.
+
+    if (dbSteps.length > 0) {
+      // DB-configured flow: respect admin's configuration.
+      // Auto-approve directors/admins even when a flow is configured (they are the top authority).
+      const isTopAuthority = ['director', 'admin', 'deputy_director'].includes(report.author?.role || '');
+      if (!isTopAuthority) {
+        // Filter out manager step if this dept has no manager
+        flowSteps = dbSteps
+          .filter((s) => s.role !== 'manager' || managerId)
+          .map((s) => ({ order: s.stepOrder, role: s.role as 'manager' | 'clerk' | 'director' }));
+      }
+    }
+
+    if (flowSteps.length === 0) {
+      // Fallback: hardcoded default per author role
+      if (report.author?.role === 'specialist') {
+        // If the section has no manager, specialist report goes directly to clerk.
+        flowSteps = managerId
+          ? [{ order: 1, role: 'manager' }]
+          : [{ order: 1, role: 'clerk' }];
+      } else if (['lawyer', 'accountant', 'hr'].includes(report.author?.role || '')) {
+        flowSteps = [{ order: 1, role: 'director' }];
+      } else if (report.author?.role === 'manager') {
+        // Manager reports must pass through clerk → director for oversight
+        flowSteps = [{ order: 1, role: 'clerk' }];
+      } else if (report.author?.role === 'clerk') {
+        flowSteps = [{ order: 1, role: 'director' }];
+      }
+    }
+
+    if (flowSteps.length === 0) {
+      // Directors/admins — auto-approve without additional chain.
       const updated = await this.prisma.report.update({
         where: { id },
         data: {
@@ -371,16 +415,16 @@ export class ReportsService {
       steps: flowSteps.map((step) => ({
         order: step.order,
         role: step.role,
-        approverId: this.resolveApproverByRole(step.role, managerId, clerkId, directorId),
+        approverId: this.resolveApproverByRole(step.role, managerId, clerkId, directorId, deputyDirectorId),
       })),
       comment: dto.comment,
       resolveApprover: (role) => {
-        return this.resolveApproverByRole(role, managerId, clerkId, directorId);
+        return this.resolveApproverByRole(role, managerId, clerkId, directorId, deputyDirectorId);
       },
     });
 
     const firstStep = flowSteps[0];
-    const firstApproverId = firstStep ? this.resolveApproverByRole(firstStep.role, managerId, clerkId, directorId) : null;
+    const firstApproverId = firstStep ? this.resolveApproverByRole(firstStep.role, managerId, clerkId, directorId, deputyDirectorId) : null;
     const firstStatus = this.statusByStepRole(firstStep?.role);
     if (firstStep && !firstApproverId) {
       throw new BadRequestException('Не вдалося визначити першого погоджувача для маршруту звіту.');
@@ -633,7 +677,7 @@ export class ReportsService {
       if (report.currentApproverId && report.currentApproverId !== user.id) {
         throw new ForbiddenException('Ви не є погоджувачем цього звіту');
       }
-      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      const scopedDepartmentIds = await this.deptScope.resolveScopedIds(user);
       if (!scopedDepartmentIds.includes(report.departmentId)) {
         throw new ForbiddenException('Немає доступу до цього звіту');
       }
@@ -649,7 +693,7 @@ export class ReportsService {
       actorId: user.id,
       comment: dto.comment,
       resolveApprover: (role) => {
-        return this.resolveApproverByRole(role, routing.managerId, routing.clerkId, routing.directorId);
+        return this.resolveApproverByRole(role, routing.managerId, routing.clerkId, routing.directorId, routing.deputyDirectorId);
       },
     });
 
@@ -681,6 +725,7 @@ export class ReportsService {
           routing.managerId,
           routing.clerkId,
           routing.directorId,
+          routing.deputyDirectorId,
         )
       : null;
 
@@ -1004,7 +1049,7 @@ export class ReportsService {
         throw new ForbiddenException('Немає доступу до видалення документа плану заходів');
       }
       if (!isAdmin) {
-        const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user?.departmentId);
+        const scopedDepartmentIds = await this.deptScope.resolveFamilyIds(user?.departmentId);
         if (!scopedDepartmentIds.includes(report.departmentId)) {
           throw new ForbiddenException('Немає доступу до видалення документа плану заходів');
         }
@@ -1069,7 +1114,7 @@ export class ReportsService {
     if (report.currentApproverId && report.currentApproverId === user.id) return true;
     if (user.role === 'clerk') {
       if (report.authorId === user.id) return true;
-      const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+      const scopedDepartmentIds = await this.deptScope.resolveFamilyIds(user.departmentId);
       if (!scopedDepartmentIds.includes(report.departmentId)) return false;
       if (report.status === 'pending_clerk') return true;
       if (report.status === 'approved' && report.author?.role === 'manager') return true;
@@ -1078,7 +1123,7 @@ export class ReportsService {
     }
     if (user.role === 'manager' || user.role === 'director' || user.role === 'deputy_director') {
       if (report.authorId === user.id) return true;
-      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      const scopedDepartmentIds = await this.deptScope.resolveScopedIds(user);
       if (scopedDepartmentIds.includes(report.departmentId) && report.status !== 'draft') return true;
     }
     if (['specialist', 'lawyer', 'accountant', 'hr'].includes(user.role) && report.authorId === user.id) return true;
@@ -1252,53 +1297,6 @@ export class ReportsService {
     return `${day}.${month}.${year}`;
   }
 
-  private async resolveDepartmentScopeIds(departmentId?: string | null): Promise<string[]> {
-    if (!departmentId) return [];
-    const current = await this.prisma.department.findUnique({
-      where: { id: departmentId },
-      select: { id: true, parentId: true },
-    });
-    if (!current) return [];
-
-    const rootId = current.parentId || current.id;
-    const root = await this.prisma.department.findUnique({
-      where: { id: rootId },
-      select: {
-        id: true,
-        children: { select: { id: true } },
-      },
-    });
-
-    if (!root) return [departmentId];
-    return [root.id, ...(root.children || []).map((child) => child.id)];
-  }
-
-  private async resolveScopedDepartmentIdsForUser(user: any): Promise<string[]> {
-    if (!user?.departmentId) return [];
-    if (user.role === 'manager') return [user.departmentId];
-    if (user.role === 'director') {
-      return this.resolveDepartmentScopeIds(user.departmentId);
-    }
-    if (user.role === 'deputy_director') {
-      const configured = Array.isArray(user.scopeDepartmentIds)
-        ? user.scopeDepartmentIds.filter(Boolean)
-        : [];
-      if (!configured.length) {
-        return this.resolveDepartmentScopeIds(user.departmentId);
-      }
-      const expanded = new Set<string>();
-      for (const depId of configured) {
-        expanded.add(depId);
-        const dep = await this.prisma.department.findUnique({
-          where: { id: depId },
-          select: { children: { select: { id: true } } },
-        });
-        for (const child of dep?.children || []) expanded.add(child.id);
-      }
-      return Array.from(expanded);
-    }
-    return this.resolveDepartmentScopeIds(user.departmentId);
-  }
 
   private async canCreateReportInDepartment(user: any, departmentId: string): Promise<boolean> {
     if (!user || !departmentId) return false;
@@ -1307,7 +1305,7 @@ export class ReportsService {
       return user.departmentId === departmentId;
     }
     if (user.role === 'director' || user.role === 'deputy_director') {
-      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      const scopedDepartmentIds = await this.deptScope.resolveScopedIds(user);
       return scopedDepartmentIds.includes(departmentId);
     }
     return false;
@@ -1354,15 +1352,17 @@ export class ReportsService {
     managerId?: string | null,
     clerkId?: string | null,
     directorId?: string | null,
+    deputyDirectorId?: string | null,
   ) {
     if (role === 'manager') return managerId ?? null;
     if (role === 'clerk') return clerkId ?? null;
     if (role === 'director') return directorId ?? null;
+    if (role === 'deputy_director') return deputyDirectorId ?? null;
     return null;
   }
 
   private statusByStepRole(role?: string): ReportStatus {
-    if (role === 'director') return 'pending_director';
+    if (role === 'director' || role === 'deputy_director') return 'pending_director';
     if (role === 'clerk') return 'pending_clerk';
     return 'pending_manager';
   }
@@ -1374,10 +1374,20 @@ export class ReportsService {
     });
     const effectiveDepartment = department?.parentId ? department.parent : department;
 
+    const deputyDirector = await this.prisma.user.findFirst({
+      where: {
+        role: 'deputy_director',
+        departmentId: effectiveDepartment?.id ?? departmentId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+
     return {
       managerId: department?.managerId ?? null,
       clerkId: effectiveDepartment?.clerkId ?? null,
       directorId: effectiveDepartment?.directorId ?? null,
+      deputyDirectorId: deputyDirector?.id ?? null,
     };
   }
 
@@ -1665,7 +1675,7 @@ export class ReportsService {
     }
 
     const { start, end } = this.periodBounds(normalizedPeriod, periodType);
-    const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+    const scopedDepartmentIds = await this.deptScope.resolveFamilyIds(user.departmentId);
     if (!scopedDepartmentIds.length) {
       throw new ForbiddenException('Немає доступу до підрозділу для плану заходів');
     }
@@ -1744,7 +1754,7 @@ export class ReportsService {
   }
 
   async listActivitiesPlans(_periodType: 'weekly' | 'monthly' | 'quarterly', user: any) {
-    const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+    const scopedDepartmentIds = await this.deptScope.resolveFamilyIds(user.departmentId);
     if (!scopedDepartmentIds.length) return [];
     const rootDepartmentId = scopedDepartmentIds[0];
     const reports = await this.prisma.report.findMany({
@@ -2096,7 +2106,7 @@ export class ReportsService {
     const content = this.ensureObject(report.content);
     const plan = this.ensureObject(content.activityPlan);
     const rows = Array.isArray(plan.rows) ? plan.rows : [];
-    const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user.departmentId);
+    const scopedDepartmentIds = await this.deptScope.resolveFamilyIds(user.departmentId);
     const users = await this.prisma.user.findMany({
       where: {
         isActive: true,
@@ -2223,11 +2233,11 @@ export class ReportsService {
   private async ensureCanAccessActivitiesPlan(report: any, user: any) {
     if (user?.role === 'admin' || user?.role === 'deputy_head') return;
     // Always resolve full root+children scope so managers in sub-departments can access root-level plans
-    const scopedDepartmentIds = await this.resolveDepartmentScopeIds(user?.departmentId);
+    const scopedDepartmentIds = await this.deptScope.resolveFamilyIds(user?.departmentId);
     if (scopedDepartmentIds.includes(report.departmentId)) return;
     // For director/deputy_director also check their broader scope
     if (['director', 'deputy_director'].includes(user?.role)) {
-      const broader = await this.resolveScopedDepartmentIdsForUser(user);
+      const broader = await this.deptScope.resolveScopedIds(user);
       if (broader.includes(report.departmentId)) return;
     }
     throw new ForbiddenException('Немає доступу до цього плану заходів');
@@ -2598,7 +2608,7 @@ export class ReportsService {
   async listDailyReports(departmentId: string | undefined, dateFrom: string | undefined, dateTo: string | undefined, user: any) {
     // Managers, directors, deputy_directors see their dept; specialists see only own
     const isLeadership = ['manager', 'director', 'deputy_director', 'admin'].includes(user.role);
-    const scopedDeptIds = isLeadership ? await this.resolveScopedDepartmentIdsForUser(user) : null;
+    const scopedDeptIds = isLeadership ? await this.deptScope.resolveScopedIds(user) : null;
 
     const where: any = {
       title: { startsWith: this.dailyReportTitlePrefix() },

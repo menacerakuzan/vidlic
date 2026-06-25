@@ -20,12 +20,11 @@ export class AuthService {
     private redisService: RedisService,
     private auditService: AuditService,
   ) {
-    const secret = process.env.JWT_SECRET;
-    const refreshSecret = process.env.JWT_REFRESH_SECRET;
-    if (!secret) throw new Error('JWT_SECRET environment variable must be set');
-    if (!refreshSecret) throw new Error('JWT_REFRESH_SECRET environment variable must be set');
-    this.jwtSecret = secret;
-    this.jwtRefreshSecret = refreshSecret;
+    this.jwtSecret = process.env.JWT_SECRET || 'vidlik-jwt-dev-secret-change-in-prod';
+    this.jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || 'vidlik-jwt-refresh-dev-secret';
+    if (!process.env.JWT_SECRET || !process.env.JWT_REFRESH_SECRET) {
+      console.warn('⚠️  JWT_SECRET / JWT_REFRESH_SECRET not set — using insecure dev defaults. Set them in production!');
+    }
   }
 
   async login(dto: LoginDto, ipAddress?: string, userAgent?: string): Promise<{ accessToken: string; refreshToken: string; user: UserResponse }> {
@@ -127,7 +126,7 @@ export class AuthService {
   async logout(dto: LogoutDto): Promise<void> {
     try {
       const payload = this.jwtService.verify(dto.accessToken, {
-        secret: process.env.JWT_SECRET,
+        secret: this.jwtSecret,
         ignoreExpiration: true,
       });
       

@@ -4,7 +4,7 @@ import { TasksService } from './tasks.service';
 import { CreateTaskDto, CreateSubtaskDto, UpdateTaskDto, TaskQueryDto, UpdateTaskStatusDto, CreateTaskCommentDto, GroupTasksDto } from './dto/tasks.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { Permissions } from '../auth/decorators/roles.decorator';
+import { Permissions, Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('tasks')
 @Controller('tasks')
@@ -62,6 +62,7 @@ export class TasksController {
   }
 
   @Post('group')
+  @Roles('admin', 'director', 'deputy_director', 'deputy_head', 'manager')
   @Permissions('tasks:write')
   @ApiOperation({ summary: 'Згрупувати задачі в одну глобальну' })
   groupTasks(@Body() dto: GroupTasksDto, @Req() req: any) {
@@ -131,7 +132,7 @@ export class TasksController {
   }
 
   @Delete(':id/permanent')
-  @Permissions('tasks:write')
+  @Roles('admin')
   @ApiOperation({ summary: 'Остаточно видалити задачу (лише admin)' })
   hardDelete(@Param('id') id: string, @Req() req: any) {
     return this.tasksService.hardDelete(id, req.user);

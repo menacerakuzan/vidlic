@@ -1,10 +1,14 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { AttachmentEntityType } from '@prisma/client';
 import { PrismaService } from '../../shared/prisma.service';
+import { DepartmentScopeService } from '../../shared/department-scope.service';
 
 @Injectable()
 export class AttachmentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private deptScope: DepartmentScopeService,
+  ) {}
 
   async create(
     dto: {
@@ -96,7 +100,7 @@ export class AttachmentsService {
       if (!report) throw new NotFoundException('Звіт не знайдено');
       if (user.role === 'admin' || user.role === 'deputy_head') return report;
       if (report.authorId === user.id) return report;
-      const scopedDepartmentIds = await this.resolveScopedDepartmentIdsForUser(user);
+      const scopedDepartmentIds = await this.deptScope.resolveScopedIds(user);
       if (['director', 'deputy_director', 'clerk'].includes(user.role) && scopedDepartmentIds.includes(report.departmentId)) return report;
       if (user.role === 'manager' && user.departmentId === report.departmentId) return report;
       throw new ForbiddenException('Немає доступу до цього звіту');
@@ -111,42 +115,13 @@ export class AttachmentsService {
     throw new ForbiddenException('Немає доступу до цієї задачі');
   }
 
-  private async resolveDepartmentScopeIds(departmentId?: string | null): Promise<string[]> {
-    if (!departmentId) return [];
-    const current = await this.prisma.department.findUnique({
-      where: { id: departmentId },
-      select: { id: true, parentId: true },
-    });
-    if (!current) return [];
-    const rootId = current.parentId || current.id;
-    const root = await this.prisma.department.findUnique({
-      where: { id: rootId },
-      select: { id: true, children: { select: { id: true } } },
-    });
-    if (!root) return [departmentId];
-    return [root.id, ...(root.children || []).map((item) => item.id)];
-  }
-
-  private async resolveScopedDepartmentIdsForUser(user: any): Promise<string[]> {
-    if (!user?.departmentId) return [];
-    if (user.role === 'manager') {
-      const secondary = Array.isArray(user.secondaryDepartmentIds) ? (user.secondaryDepartmentIds as string[]).filter(Boolean) : [];
-      return [user.departmentId, ...secondary];
-    }
-    if (user.role === 'deputy_director') {
-      const configured = Array.isArray(user.scopeDepartmentIds) ? user.scopeDepartmentIds.filter(Boolean) : [];
-      if (configured.length > 0) return configured;
-    }
-    return this.resolveDepartmentScopeIds(user.departmentId);
-  }
-
   private async canViewTask(task: any, user: any): Promise<boolean> {
     if (user.role === 'admin') return true;
     const coIds = Array.isArray(task.coAssigneeIds) ? task.coAssigneeIds as string[] : [];
     if (task.assigneeId === user.id || task.reporterId === user.id || coIds.includes(user.id)) return true;
     if (task.isPrivate) return false;
     if (['director', 'deputy_director', 'manager', 'deputy_head'].includes(user.role)) {
-      const scoped = await this.resolveScopedDepartmentIdsForUser(user);
+      const scoped = await this.deptScope.resolveScopedIds(user);
       const deptId = task.departmentId || task.parent?.departmentId;
       if (deptId && scoped.includes(deptId)) return true;
     }

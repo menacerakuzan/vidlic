@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, IsOptional, IsEnum } from 'class-validator';
+import { IsEmail, IsString, MinLength, IsOptional, IsEnum, Matches } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 
@@ -38,6 +38,9 @@ export class RegisterDto {
   @ApiProperty({ example: 'P@ssw0rd123!' })
   @IsString()
   @MinLength(12)
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/, {
+    message: 'Пароль повинен містити велику літеру, малу літеру, цифру та спеціальний символ',
+  })
   password: string;
 
   @ApiPropertyOptional({ enum: UserRole, default: 'specialist' })

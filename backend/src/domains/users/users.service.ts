@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ConflictException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma.service';
+import { DepartmentScopeService } from '../../shared/department-scope.service';
 import { CreateUserDto, UpdateUserDto, UserQueryDto, UpdateUserPasswordDto, UpdateOwnProfileDto } from './dto/users.dto';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction, UserRole } from '@prisma/client';
@@ -10,6 +11,7 @@ export class UsersService {
   constructor(
     private prisma: PrismaService,
     private auditService: AuditService,
+    private deptScope: DepartmentScopeService,
   ) {}
 
   async findAll(query: UserQueryDto, actor: any) {
@@ -393,41 +395,8 @@ export class UsersService {
     }
   }
 
-  private async resolveDepartmentScopeIds(departmentId?: string | null): Promise<string[]> {
-    if (!departmentId) return [];
-    const current = await this.prisma.department.findUnique({
-      where: { id: departmentId },
-      select: { id: true, parentId: true },
-    });
-    if (!current) return [];
-
-    const rootId = current.parentId || current.id;
-    const root = await this.prisma.department.findUnique({
-      where: { id: rootId },
-      select: {
-        id: true,
-        children: { select: { id: true } },
-      },
-    });
-    if (!root) return [departmentId];
-    return [root.id, ...(root.children || []).map((child) => child.id)];
-  }
-
   private async resolveScopedDepartmentIdsForActor(actor: any): Promise<string[] | null> {
-    if (!actor || actor.role === 'admin') return null;
-    if (!actor.departmentId) return [];
-    if (actor.role === 'director') return this.resolveDepartmentScopeIds(actor.departmentId);
-    if (actor.role === 'deputy_director') {
-      const configured = Array.isArray(actor.scopeDepartmentIds) ? actor.scopeDepartmentIds.filter(Boolean) : [];
-      if (configured.length > 0) return configured;
-      return this.resolveDepartmentScopeIds(actor.departmentId);
-    }
-    if (actor.role === 'deputy_head') {
-      const configured = Array.isArray(actor.scopeDepartmentIds) ? actor.scopeDepartmentIds.filter(Boolean) : [];
-      if (configured.length > 0) return configured;
-      return this.resolveDepartmentScopeIds(actor.departmentId);
-    }
-    return [actor.departmentId];
+    return this.deptScope.resolveScopedIdsOrNull(actor);
   }
 
   private async assertCanAccessUser(actor: any, targetUser: any) {
@@ -445,7 +414,7 @@ export class UsersService {
       throw new ForbiddenException('Недостатньо прав для встановлення scopeDepartmentIds');
     }
 
-    const actorScope = await this.resolveDepartmentScopeIds(actor.departmentId);
+    const actorScope = await this.deptScope.resolveFamilyIds(actor.departmentId);
     const fallback = defaultDepartmentId ? [defaultDepartmentId] : [];
     const candidate = normalized.length > 0 ? normalized : fallback;
     const invalid = candidate.filter((id) => !actorScope.includes(id));
