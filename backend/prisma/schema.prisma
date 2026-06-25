@@ -165,6 +165,7 @@ model User {
   reportTemplates     DepartmentReportTemplate[] @relation("TemplateEditor")
   digestSubscriptions DigestSubscription[]
   slaEscalations      SlaEscalationEvent[] @relation("SlaActor")
+  deputyFiles         DeputyFile[]         @relation("DeputyFileUploader")
 
   @@map("users")
 }
@@ -548,4 +549,30 @@ model SlaEscalationEvent {
   @@index([reportId, stage, createdAt])
   @@index([escalatedToId, createdAt])
   @@map("sla_escalation_events")
+}
+
+enum DeputyFileEntityType {
+  department
+  user
+}
+
+model DeputyFile {
+  id          String               @id @default(uuid())
+  uploaderId  String
+  entityType  DeputyFileEntityType
+  entityId    String
+  fileName    String
+  mimeType    String               @default("application/octet-stream")
+  fileSize    Int                  @default(0)
+  fileData    Bytes?
+  notes       String?
+  reminderAt  DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  uploader    User                 @relation("DeputyFileUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  @@index([uploaderId, entityType, entityId])
+  @@index([uploaderId, reminderAt])
+  @@map("deputy_files")
 }

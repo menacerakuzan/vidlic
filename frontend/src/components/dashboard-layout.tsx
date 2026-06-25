@@ -24,6 +24,7 @@ import {
   X,
   Moon,
   Sun,
+  FolderOpen,
 } from 'lucide-react'
 import React, { useState, useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -70,6 +71,7 @@ const navGroups: NavGroup[] = [
     items: [
       { name: 'Сповіщення', href: '/dashboard/notifications', icon: Bell },
       { name: 'Підрозділи', href: '/dashboard/departments', icon: Building2, roles: ['specialist', 'manager', 'director', 'deputy_director', 'deputy_head', 'admin', 'clerk', 'lawyer', 'accountant', 'hr'] },
+      { name: 'Мої файли', href: '/dashboard/deputy-files', icon: FolderOpen, roles: ['deputy_head'] },
       { name: 'Конструктор', href: '/dashboard/layouts', icon: Layers, roles: ['admin'] },
       { name: 'Налаштування', href: '/dashboard/settings', icon: Settings },
     ],

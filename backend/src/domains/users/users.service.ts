@@ -166,10 +166,16 @@ export class UsersService {
       }
     }
 
-    if (!['deputy_director', 'deputy_head'].includes(dto.role ?? user.role) && dto.scopeDepartmentIds !== undefined) {
-      throw new ForbiddenException('scopeDepartmentIds можна змінювати лише для заступника директора або заступника голови');
+    const isDeputyRole = ['deputy_director', 'deputy_head'].includes(dto.role ?? user.role);
+    if (!isDeputyRole && dto.scopeDepartmentIds !== undefined) {
+      // allow clearing scope (empty array) when demoting from deputy role
+      if (Array.isArray(dto.scopeDepartmentIds) && dto.scopeDepartmentIds.length === 0) {
+        dto.scopeDepartmentIds = [];
+      } else if (dto.scopeDepartmentIds.length > 0) {
+        throw new ForbiddenException('scopeDepartmentIds можна змінювати лише для заступника директора або заступника голови');
+      }
     }
-    if (['deputy_director', 'deputy_head'].includes(dto.role ?? user.role) && dto.scopeDepartmentIds !== undefined) {
+    if (isDeputyRole && dto.scopeDepartmentIds !== undefined) {
       dto.scopeDepartmentIds = await this.validateScopeDepartmentIds(
         actor,
         dto.scopeDepartmentIds || [],

@@ -18,6 +18,7 @@ import { AttachmentsModule } from './domains/attachments/attachments.module';
 import { SearchModule } from './domains/search/search.module';
 import { HealthModule } from './health/health.module';
 import { SharedModule } from './shared/shared.module';
+import { DeputyFilesModule } from './domains/deputy-files/deputy-files.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { SharedModule } from './shared/shared.module';
     AiModule,
     AttachmentsModule,
     SearchModule,
+    DeputyFilesModule,
   ],
 })
 export class AppModule {}

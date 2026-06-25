@@ -645,18 +645,26 @@ export default function DepartmentsPage() {
       .filter(Boolean)
       .map((candidate) => {
         const selected = deputyDirectorSet.has(candidate!.id)
-        const currentScope = Array.isArray(candidate!.scopeDepartmentIds) ? candidate!.scopeDepartmentIds : []
+        const newRole = selected ? 'deputy_director' : candidate!.role
+        const isDeputyRole = newRole === 'deputy_director' || newRole === 'deputy_head'
+        const body: Record<string, unknown> = {
+          role: newRole,
+          departmentId: candidate!.departmentId || selectedRootDepartmentId,
+        }
+        // only send scopeDepartmentIds for roles that accept it
+        if (isDeputyRole) {
+          body.scopeDepartmentIds = selected ? scopeIds : (Array.isArray(candidate!.scopeDepartmentIds) ? candidate!.scopeDepartmentIds : [])
+        } else {
+          // clear scope when demoting from deputy role
+          body.scopeDepartmentIds = []
+        }
         return fetch(`/api/v1/users/${candidate!.id}`, {
           method: 'PUT',
           headers: {
             Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            role: selected ? 'deputy_director' : candidate!.role,
-            departmentId: candidate!.departmentId || selectedRootDepartmentId,
-            scopeDepartmentIds: selected ? scopeIds : currentScope,
-          }),
+          body: JSON.stringify(body),
         })
       })
     const deputyResults = await Promise.all(deputyUpdates)
