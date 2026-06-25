@@ -557,22 +557,33 @@ enum DeputyFileEntityType {
 }
 
 model DeputyFile {
-  id          String               @id @default(uuid())
-  uploaderId  String
-  entityType  DeputyFileEntityType
-  entityId    String
-  fileName    String
-  mimeType    String               @default("application/octet-stream")
-  fileSize    Int                  @default(0)
-  fileData    Bytes?
-  notes       String?
-  reminderAt  DateTime?
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  id            String               @id @default(uuid())
+  uploaderId    String
+  entityType    DeputyFileEntityType
+  entityId      String
+  fileName      String
+  mimeType      String               @default("application/octet-stream")
+  fileSize      Int                  @default(0)
+  fileData      Bytes?
+  thumbnailData Bytes?
+  notes         String?
+  reminderAt    DateTime?
+  tags          String[]             @default([])
+  isPinned      Boolean              @default(false)
+  archivedAt    DateTime?
+  version       Int                  @default(1)
+  parentFileId  String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
 
-  uploader    User                 @relation("DeputyFileUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
+  uploader   User        @relation("DeputyFileUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
+  parentFile DeputyFile? @relation("DeputyFileVersions", fields: [parentFileId], references: [id], onDelete: SetNull)
+  childFiles DeputyFile[] @relation("DeputyFileVersions")
 
   @@index([uploaderId, entityType, entityId])
   @@index([uploaderId, reminderAt])
+  @@index([uploaderId, isPinned])
+  @@index([uploaderId, archivedAt])
+  @@index([parentFileId])
   @@map("deputy_files")
 }

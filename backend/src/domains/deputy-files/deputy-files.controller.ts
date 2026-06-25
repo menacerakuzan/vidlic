@@ -18,17 +18,18 @@ export class DeputyFilesController {
   constructor(private service: DeputyFilesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Список файлів (за entity)' })
+  @ApiOperation({ summary: 'Список файлів (за entity або всі)' })
   list(
     @Req() req: any,
     @Query('entityType') entityType?: string,
     @Query('entityId') entityId?: string,
+    @Query('archived') archived?: string,
   ) {
-    return this.service.list(req.user, entityType, entityId);
+    return this.service.list(req.user, entityType, entityId, archived === 'true');
   }
 
   @Get('reminders')
-  @ApiOperation({ summary: 'Нагадування на наступні 7 днів' })
+  @ApiOperation({ summary: 'Всі майбутні нагадування' })
   reminders(@Req() req: any) {
     return this.service.getReminders(req.user);
   }
@@ -40,7 +41,7 @@ export class DeputyFilesController {
   }
 
   @Get(':id/content')
-  @ApiOperation({ summary: 'Отримати вміст файлу (бінарний)' })
+  @ApiOperation({ summary: 'Отримати вміст файлу' })
   async content(@Req() req: any, @Param('id') id: string, @Res() res: Response) {
     const { meta, buffer } = await this.service.read(req.user, id);
     res.setHeader('Content-Type', meta.mimeType);
@@ -49,14 +50,45 @@ export class DeputyFilesController {
     res.end(buffer);
   }
 
+  @Get(':id/thumbnail')
+  @ApiOperation({ summary: 'Мініатюра зображення' })
+  async thumbnail(@Req() req: any, @Param('id') id: string, @Res() res: Response) {
+    const { buffer, mimeType } = await this.service.thumbnail(req.user, id);
+    if (!buffer?.length) {
+      res.status(204).end();
+      return;
+    }
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.end(buffer);
+  }
+
+  @Get(':id/versions')
+  @ApiOperation({ summary: 'Версії файлу' })
+  versions(@Req() req: any, @Param('id') id: string) {
+    return this.service.getVersions(req.user, id);
+  }
+
   @Put(':id/notes')
-  @ApiOperation({ summary: 'Оновити нотатку та нагадування' })
+  @ApiOperation({ summary: 'Оновити нотатку, нагадування, теги' })
   updateNotes(
     @Req() req: any,
     @Param('id') id: string,
-    @Body() body: { notes?: string | null; reminderAt?: string | null },
+    @Body() body: { notes?: string | null; reminderAt?: string | null; tags?: string[] },
   ) {
-    return this.service.updateNotes(req.user, id, body.notes ?? null, body.reminderAt);
+    return this.service.updateNotes(req.user, id, body.notes ?? null, body.reminderAt, body.tags);
+  }
+
+  @Post(':id/pin')
+  @ApiOperation({ summary: 'Закріпити / відкріпити файл' })
+  pin(@Req() req: any, @Param('id') id: string) {
+    return this.service.togglePin(req.user, id);
+  }
+
+  @Post(':id/archive')
+  @ApiOperation({ summary: 'Архівувати / розархівувати файл' })
+  archive(@Req() req: any, @Param('id') id: string) {
+    return this.service.toggleArchive(req.user, id);
   }
 
   @Delete(':id')
