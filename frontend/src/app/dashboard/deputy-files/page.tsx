@@ -38,7 +38,6 @@ const TAG_COLORS: Record<string, string> = {
   'Відео': 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
   'Інше': 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 }
-const LOCK_TIMEOUT_MS = 10 * 60 * 1000
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -64,15 +63,7 @@ function fileIcon(mimeType: string) {
 function isViewable(mimeType: string) {
   return mimeType.startsWith('image/') || mimeType.startsWith('video/') || mimeType === 'application/pdf'
 }
-async function hashPin(pin: string): Promise<string> {
-  if (typeof window === 'undefined') return ''
-  const encoder = new TextEncoder()
-  const data = encoder.encode('deputy_salt_' + pin)
-  const buf = await crypto.subtle.digest('SHA-256', data)
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
-}
 
-// Thumbnail cache — module level, persists across re-renders
 const thumbCache = new Map<string, string>()
 
 // ── ImageThumb ─────────────────────────────────────────────────────────────────
@@ -115,15 +106,6 @@ export default function DeputyFilesPage() {
   const { user } = useAuthStore()
   const router = useRouter()
   const token = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
-
-  // Lock
-  const [isLocked, setIsLocked] = useState(true)
-  const [hasPin, setHasPin] = useState(false)
-  const [pinInput, setPinInput] = useState('')
-  const [pinError, setPinError] = useState(false)
-  const [pinSetupStep, setPinSetupStep] = useState<'set' | 'confirm' | null>(null)
-  const [pinSetupFirst, setPinSetupFirst] = useState('')
-  const lockTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
   // Navigation
   const [departments, setDepartments] = useState<Department[]>([])
@@ -176,103 +158,19 @@ export default function DeputyFilesPage() {
     if (user && user.role !== 'deputy_head') router.replace('/dashboard')
   }, [user, router])
 
-  // ── PIN init ──────────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!user) return
-    const storedHash = localStorage.getItem(`dfpin-${user.id}`)
-    if (storedHash) {
-      setHasPin(true)
-      setIsLocked(true)
-    } else {
-      setIsLocked(false) // first time: no PIN yet, show setup prompt
-      setPinSetupStep('set')
-    }
-  }, [user])
-
-  // ── Auto-lock ─────────────────────────────────────────────────────────────────
-
-  const resetLockTimer = useCallback(() => {
-    clearTimeout(lockTimerRef.current)
-    lockTimerRef.current = setTimeout(() => setIsLocked(true), LOCK_TIMEOUT_MS)
-  }, [])
-
-  useEffect(() => {
-    if (isLocked) return
-    const events = ['mousemove', 'keydown', 'click', 'scroll']
-    events.forEach(e => document.addEventListener(e, resetLockTimer))
-    resetLockTimer()
-    return () => {
-      events.forEach(e => document.removeEventListener(e, resetLockTimer))
-      clearTimeout(lockTimerRef.current)
-    }
-  }, [isLocked, resetLockTimer])
-
-  // ── PIN handlers ──────────────────────────────────────────────────────────────
-
-  const handlePinDigit = (digit: string) => {
-    if (pinInput.length >= 4) return
-    const next = pinInput + digit
-    setPinInput(next)
-    setPinError(false)
-
-    if (next.length === 4) {
-      setTimeout(() => processPin(next), 150) // small delay for visual feedback
-    }
-  }
-
-  const handlePinDelete = () => setPinInput(prev => prev.slice(0, -1))
-
-  const processPin = async (pin: string) => {
-    if (pinSetupStep === 'set') {
-      setPinSetupFirst(pin)
-      setPinInput('')
-      setPinSetupStep('confirm')
-      return
-    }
-    if (pinSetupStep === 'confirm') {
-      if (pin !== pinSetupFirst) {
-        setPinError(true)
-        setPinInput('')
-        setPinSetupStep('set')
-        setPinSetupFirst('')
-        return
-      }
-      const h = await hashPin(pin)
-      localStorage.setItem(`dfpin-${user!.id}`, h)
-      setHasPin(true)
-      setPinSetupStep(null)
-      setPinInput('')
-      setIsLocked(false)
-      return
-    }
-    // Verify
-    const stored = localStorage.getItem(`dfpin-${user!.id}`)
-    const h = await hashPin(pin)
-    if (h === stored) {
-      setIsLocked(false)
-      setPinInput('')
-      setPinError(false)
-    } else {
-      setPinError(true)
-      setPinInput('')
-    }
-  }
-
-  const handlePinKeydown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key >= '0' && e.key <= '9') handlePinDigit(e.key)
-    else if (e.key === 'Backspace') handlePinDelete()
-  }, [pinInput, pinSetupStep]) // eslint-disable-line
-
   // ── Data loading ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!token || isLocked) return
+    if (!token) return
     fetch('/api/v1/departments', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(data => setDepartments(Array.isArray(data) ? data : data.data || []))
       .catch(() => {})
-  }, [token, isLocked])
+    fetch('/api/v1/deputy-files/reminders', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(data => setReminders(Array.isArray(data) ? data : []))
+      .catch(() => {})
+  }, [token])
 
   const loadFiles = useCallback(async (entityType: 'department' | 'user', entityId: string) => {
     if (!token) return
@@ -299,12 +197,8 @@ export default function DeputyFilesPage() {
   }, [token])
 
   useEffect(() => {
-    if (!isLocked && token) loadReminders()
-  }, [isLocked, token, loadReminders])
-
-  useEffect(() => {
-    if (viewMode === 'all' && !isLocked) loadAllFiles()
-  }, [viewMode, isLocked, loadAllFiles, showArchived])
+    if (viewMode === 'all') loadAllFiles()
+  }, [viewMode, loadAllFiles, showArchived])
 
   const loadTeam = useCallback(async (deptId: string) => {
     if (!token || teamMap[deptId] !== undefined) return
@@ -340,16 +234,10 @@ export default function DeputyFilesPage() {
     reader.onload = async () => {
       const contentBase64 = reader.result as string
       let thumbnailBase64: string | undefined
-
-      // Generate thumbnail for images client-side
       if (file.type.startsWith('image/')) {
-        thumbnailBase64 = await generateThumbnail(contentBase64, file.type)
+        thumbnailBase64 = await generateThumbnail(contentBase64)
       }
-
-      const targetEntity = parentFileId
-        ? await getFileEntity(parentFileId)
-        : entity
-
+      const targetEntity = parentFileId ? await getFileEntity(parentFileId) : entity
       if (!targetEntity) { setUploading(false); return }
 
       const r = await fetch('/api/v1/deputy-files', {
@@ -370,8 +258,7 @@ export default function DeputyFilesPage() {
         showToast('ok', parentFileId ? 'Нова версія збережена' : 'Файл завантажено')
         await refreshCurrentView()
         if (versionsModal) {
-          const versions = await loadVersionsData(versionsModal.id)
-          setVersions(versions)
+          setVersions(await loadVersionsData(versionsModal.id))
         }
       } else {
         showToast('err', 'Помилка завантаження')
@@ -381,13 +268,13 @@ export default function DeputyFilesPage() {
   }
 
   const getFileEntity = async (fileId: string): Promise<{ type: 'department' | 'user'; id: string } | null> => {
-    const allKnown = [...Object.values(filesMap).flat(), ...allFiles]
-    const found = allKnown.find(f => f.id === fileId)
-    return found ? { type: found.entityType, id: found.entityId } : null
+    const all = [...Object.values(filesMap).flat(), ...allFiles]
+    const f = all.find(f => f.id === fileId)
+    return f ? { type: f.entityType, id: f.entityId } : null
   }
 
-  const generateThumbnail = (dataUrl: string, mimeType: string): Promise<string> => {
-    return new Promise(resolve => {
+  const generateThumbnail = (dataUrl: string): Promise<string> =>
+    new Promise(resolve => {
       const img = new Image()
       img.onload = () => {
         const MAX = 200
@@ -395,21 +282,16 @@ export default function DeputyFilesPage() {
         const canvas = document.createElement('canvas')
         canvas.width = img.width * scale
         canvas.height = img.height * scale
-        const ctx = canvas.getContext('2d')
-        ctx?.drawImage(img, 0, 0, canvas.width, canvas.height)
+        canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height)
         resolve(canvas.toDataURL('image/jpeg', 0.75))
       }
       img.onerror = () => resolve('')
       img.src = dataUrl
     })
-  }
 
   const refreshCurrentView = async () => {
-    if (viewMode === 'all') {
-      await loadAllFiles()
-    } else if (selectedEntity) {
-      await loadFiles(selectedEntity.type, selectedEntity.id)
-    }
+    if (viewMode === 'all') await loadAllFiles()
+    else if (selectedEntity) await loadFiles(selectedEntity.type, selectedEntity.id)
     await loadReminders()
   }
 
@@ -429,8 +311,7 @@ export default function DeputyFilesPage() {
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true) }
   const handleDragLeave = () => setIsDragOver(false)
   const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(false)
+    e.preventDefault(); setIsDragOver(false)
     const file = e.dataTransfer.files[0]
     if (file) uploadFile(file)
   }
@@ -453,8 +334,7 @@ export default function DeputyFilesPage() {
     setViewer({ ...file })
     const r = await fetch(`/api/v1/deputy-files/${file.id}/content`, { headers: { Authorization: `Bearer ${token}` } })
     const blob = await r.blob()
-    const blobUrl = URL.createObjectURL(blob)
-    setViewer(v => v ? { ...v, blobUrl } : null)
+    setViewer(v => v ? { ...v, blobUrl: URL.createObjectURL(blob) } : null)
   }
 
   const closeViewer = () => {
@@ -481,14 +361,15 @@ export default function DeputyFilesPage() {
 
   const toggleFilePin = async (id: string) => {
     if (!token) return
-    const r = await fetch(`/api/v1/deputy-files/${id}/pin`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
-    if (r.ok) await refreshCurrentView()
+    await fetch(`/api/v1/deputy-files/${id}/pin`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+    await refreshCurrentView()
   }
 
   const toggleFileArchive = async (id: string) => {
     if (!token) return
-    const r = await fetch(`/api/v1/deputy-files/${id}/archive`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
-    if (r.ok) { showToast('ok', 'Файл архівовано'); await refreshCurrentView() }
+    await fetch(`/api/v1/deputy-files/${id}/archive`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+    showToast('ok', 'Архів оновлено')
+    await refreshCurrentView()
   }
 
   const handleDelete = async (id: string) => {
@@ -507,17 +388,15 @@ export default function DeputyFilesPage() {
 
   const openVersions = async (file: DeputyFile) => {
     setVersionsModal(file)
-    const v = await loadVersionsData(file.id)
-    setVersions(v)
+    setVersions(await loadVersionsData(file.id))
   }
 
   const handlePrint = () => {
     if (!viewer?.blobUrl) return
-    const w = window.open(viewer.blobUrl, '_blank')
-    w?.print()
+    window.open(viewer.blobUrl, '_blank')?.print()
   }
 
-  // ── Viewer pan ────────────────────────────────────────────────────────────────
+  // ── Viewer pan / zoom ─────────────────────────────────────────────────────────
 
   const onMouseDown = (e: React.MouseEvent) => {
     if (!viewer?.mimeType.startsWith('image/')) return
@@ -529,14 +408,11 @@ export default function DeputyFilesPage() {
     setPan({ x: dragStart.current.px + e.clientX - dragStart.current.mx, y: dragStart.current.py + e.clientY - dragStart.current.my })
   }
   const onMouseUp = () => setDragging(false)
-
   const onWheelZoom = (e: React.WheelEvent) => {
     if (!viewer?.mimeType.startsWith('image/')) return
     e.preventDefault()
     setZoom(z => Math.max(0.1, Math.min(8, z - e.deltaY * 0.001)))
   }
-
-  // ── Toast ─────────────────────────────────────────────────────────────────────
 
   const showToast = (type: 'ok' | 'err', msg: string) => {
     setToast({ type, msg })
@@ -553,14 +429,12 @@ export default function DeputyFilesPage() {
       result = result.filter(f => f.fileName.toLowerCase().includes(q) || (f.notes || '').toLowerCase().includes(q))
     }
     if (activeTag) result = result.filter(f => f.tags?.includes(activeTag))
-
     switch (sortBy) {
       case 'date_asc': result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); break
       case 'name': result.sort((a, b) => a.fileName.localeCompare(b.fileName, 'uk')); break
       case 'size': result.sort((a, b) => b.fileSize - a.fileSize); break
       default: result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     }
-    // pinned always on top
     return [...result.filter(f => f.isPinned), ...result.filter(f => !f.isPinned)]
   }
 
@@ -573,40 +447,29 @@ export default function DeputyFilesPage() {
   }, {})
   const rootDepts = departments.filter(d => !d.parentId || !deptIds.has(d.parentId))
 
-  const rawFiles = viewMode === 'all'
-    ? allFiles
-    : selectedEntity
-      ? (filesMap[`${selectedEntity.type}:${selectedEntity.id}`] || [])
-      : []
-
+  const rawFiles = viewMode === 'all' ? allFiles : selectedEntity ? (filesMap[`${selectedEntity.type}:${selectedEntity.id}`] || []) : []
   const currentFiles = applyFilters(rawFiles)
-  const upcomingReminders = reminders.filter(r => new Date(r.reminderAt!) > new Date()).slice(0, 5)
+  const upcomingReminders = reminders.filter(r => new Date(r.reminderAt!) > new Date())
 
   if (user?.role !== 'deputy_head') return null
 
-  // ── DeptNode (recursive) ──────────────────────────────────────────────────────
-
+  // Recursive dept tree
   const DeptNode = ({ dept, depth = 0 }: { dept: Department; depth?: number }) => {
     const isExpanded = expandedDepts.has(dept.id)
     const isSelected = selectedEntity?.id === dept.id && selectedEntity.type === 'department'
     const children = childMap[dept.id] || []
     const members = teamMap[dept.id] || []
-    const indent = depth * 14
 
     const handleClick = async () => {
       await selectEntity('department', dept.id, dept.nameUk)
       if (!isExpanded) await toggleDept(dept.id)
     }
-    const handleArrow = async (e: React.MouseEvent) => {
-      e.stopPropagation()
-      await toggleDept(dept.id)
-    }
 
     return (
       <div>
-        <div className="flex items-center" style={{ paddingLeft: indent }}>
+        <div className="flex items-center" style={{ paddingLeft: depth * 14 }}>
           <button
-            onClick={handleArrow}
+            onClick={e => { e.stopPropagation(); toggleDept(dept.id) }}
             className="w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-foreground shrink-0"
             style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}
           >
@@ -619,7 +482,6 @@ export default function DeputyFilesPage() {
             {depth === 0 ? '🏛' : '📁'} {dept.nameUk}
           </button>
         </div>
-
         {isExpanded && (
           <div>
             {children.map(child => <DeptNode key={child.id} dept={child} depth={depth + 1} />)}
@@ -627,7 +489,7 @@ export default function DeputyFilesPage() {
               <button
                 key={m.id}
                 onClick={() => selectEntity('user', m.id, `${m.lastName} ${m.firstName}`)}
-                style={{ paddingLeft: indent + 28 }}
+                style={{ paddingLeft: depth * 14 + 28 }}
                 className={`w-full text-left pr-2 py-1.5 rounded-lg text-[11px] truncate transition-colors ${
                   selectedEntity?.id === m.id && selectedEntity.type === 'user'
                     ? 'bg-primary/10 text-primary font-medium'
@@ -647,223 +509,140 @@ export default function DeputyFilesPage() {
 
   return (
     <DashboardLayout>
+      <div className="flex h-[calc(100vh-64px)] overflow-hidden">
 
-      {/* ── PIN screen ── */}
-      {(isLocked || pinSetupStep) && (
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center">
-          <div
-            className="w-80 rounded-3xl bg-card border border-border shadow-2xl p-8 flex flex-col items-center"
-            onKeyDown={handlePinKeydown}
-            tabIndex={-1}
-          >
-            <div className="text-3xl mb-2">🔐</div>
-            <h2 className="text-base font-bold text-foreground mb-0.5">
-              {pinSetupStep === 'set' ? 'Встановіть PIN-код' : pinSetupStep === 'confirm' ? 'Підтвердіть PIN-код' : 'Введіть PIN-код'}
-            </h2>
-            <p className="text-[11px] text-muted-foreground mb-6">
-              {pinSetupStep === 'set' ? '4 цифри для захисту вашого простору' : pinSetupStep === 'confirm' ? 'Введіть PIN ще раз' : 'Мій файловий менеджер'}
-            </p>
-
-            {/* PIN dots */}
-            <div className="flex gap-3 mb-6">
-              {[0, 1, 2, 3].map(i => (
-                <div key={i} className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${i < pinInput.length ? (pinError ? 'bg-destructive border-destructive' : 'bg-primary border-primary') : 'border-border'}`} />
-              ))}
-            </div>
-            {pinError && <p className="text-[11px] text-destructive mb-4">Невірний PIN-код, спробуйте ще раз</p>}
-
-            {/* Numpad */}
-            <div className="grid grid-cols-3 gap-2 w-full">
-              {['1','2','3','4','5','6','7','8','9'].map(d => (
-                <button key={d} onClick={() => handlePinDigit(d)} className="h-12 rounded-xl bg-secondary text-foreground text-lg font-medium hover:bg-secondary/70 active:scale-95 transition-all">{d}</button>
-              ))}
-              <div />
-              <button onClick={() => handlePinDigit('0')} className="h-12 rounded-xl bg-secondary text-foreground text-lg font-medium hover:bg-secondary/70 active:scale-95 transition-all">0</button>
-              <button onClick={handlePinDelete} className="h-12 rounded-xl bg-secondary text-foreground text-lg hover:bg-secondary/70 active:scale-95 transition-all">⌫</button>
+        {/* ── Sidebar ── */}
+        {viewMode === 'tree' && (
+          <aside className="w-64 shrink-0 border-r border-border bg-card flex flex-col overflow-hidden">
+            <div className="px-3 py-3 border-b border-border flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-foreground">Мої файли</h2>
+              <span className="text-[10px] text-muted-foreground">Приватно</span>
             </div>
 
-            {hasPin && !pinSetupStep && (
-              <button
-                onClick={() => { localStorage.removeItem(`dfpin-${user!.id}`); setHasPin(false); setIsLocked(false); setPinSetupStep('set') }}
-                className="mt-4 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Скинути PIN
+            {upcomingReminders.length > 0 && (
+              <button onClick={() => setRemindersModal(true)} className="mx-2 mt-2 rounded-xl px-3 py-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 text-left hover:bg-amber-100 transition-colors">
+                <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">⏰ Нагадування · {upcomingReminders.length}</p>
+                <p className="text-[10px] text-amber-600 dark:text-amber-500 truncate mt-0.5">{upcomingReminders[0].fileName}</p>
               </button>
             )}
-          </div>
-        </div>
-      )}
 
-      {!isLocked && !pinSetupStep && (
-        <div className="flex h-[calc(100vh-64px)] overflow-hidden">
-
-          {/* ── Sidebar ── */}
-          {viewMode === 'tree' && (
-            <aside className="w-64 shrink-0 border-r border-border bg-card flex flex-col overflow-hidden">
-              <div className="px-3 py-3 border-b border-border">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-semibold text-foreground">Мої файли</h2>
-                  <span className="text-[10px] text-muted-foreground">Приватно</span>
-                </div>
-              </div>
-
-              {upcomingReminders.length > 0 && (
-                <button onClick={() => setRemindersModal(true)} className="mx-2 mt-2 rounded-xl px-3 py-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 text-left hover:bg-amber-100 dark:hover:bg-amber-950/30 transition-colors">
-                  <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">⏰ Нагадування · {upcomingReminders.length}</p>
-                  <p className="text-[10px] text-amber-600 dark:text-amber-500 truncate mt-0.5">{upcomingReminders[0].fileName}</p>
-                </button>
+            <nav className="flex-1 overflow-y-auto p-2 space-y-0.5 mt-1">
+              {rootDepts.length === 0 && (
+                <p className="text-[11px] text-muted-foreground px-2 py-4 text-center">Завантаження…</p>
               )}
+              {rootDepts.map(dept => <DeptNode key={dept.id} dept={dept} depth={0} />)}
+            </nav>
+          </aside>
+        )}
 
-              <nav className="flex-1 overflow-y-auto p-2 space-y-0.5 mt-1">
-                {rootDepts.map(dept => <DeptNode key={dept.id} dept={dept} depth={0} />)}
-              </nav>
-            </aside>
+        {/* ── Main panel ── */}
+        <main
+          className={`flex-1 flex flex-col overflow-hidden bg-background relative ${isDragOver ? 'ring-2 ring-inset ring-primary' : ''}`}
+          onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+        >
+          {isDragOver && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-primary/5 pointer-events-none">
+              <div className="text-center">
+                <div className="text-5xl mb-2">📂</div>
+                <p className="text-base font-semibold text-primary">Відпустіть файл</p>
+              </div>
+            </div>
           )}
 
-          {/* ── Main panel ── */}
-          <main
-            className={`flex-1 flex flex-col overflow-hidden bg-background relative ${isDragOver ? 'ring-2 ring-inset ring-primary' : ''}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            {isDragOver && (
-              <div className="absolute inset-0 z-20 flex items-center justify-center bg-primary/5 pointer-events-none">
-                <div className="text-center">
-                  <div className="text-5xl mb-2">📂</div>
-                  <p className="text-base font-semibold text-primary">Відпустіть файл</p>
-                </div>
-              </div>
+          {/* Top bar */}
+          <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-border bg-card">
+            <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
+              <button onClick={() => setViewMode('tree')} className={`px-3 py-1.5 text-xs transition-colors ${viewMode === 'tree' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-secondary'}`}>🌲 Дерево</button>
+              <button onClick={() => setViewMode('all')} className={`px-3 py-1.5 text-xs transition-colors ${viewMode === 'all' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-secondary'}`}>📋 Всі файли</button>
+            </div>
+
+            <div className="relative flex-1 min-w-36">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">🔍</span>
+              <input
+                value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Пошук за назвою або нотаткою…"
+                className="w-full pl-7 pr-3 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+
+            <select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}
+              className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none">
+              <option value="date_desc">Нові спочатку</option>
+              <option value="date_asc">Старі спочатку</option>
+              <option value="name">За назвою</option>
+              <option value="size">За розміром</option>
+            </select>
+
+            <button onClick={() => setShowArchived(p => !p)}
+              className={`px-3 py-1.5 rounded-lg text-xs transition-colors border ${showArchived ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-secondary'}`}>
+              📦 Архів
+            </button>
+
+            <button onClick={() => setRemindersModal(true)} className="px-3 py-1.5 rounded-lg text-xs border border-border text-muted-foreground hover:bg-secondary transition-colors">
+              ⏰{upcomingReminders.length > 0 && <span className="ml-1 text-amber-500 font-semibold">{upcomingReminders.length}</span>}
+            </button>
+
+            {(selectedEntity || viewMode === 'all') && (
+              <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                className="ml-auto px-4 py-1.5 rounded-lg bg-primary text-white text-xs font-medium disabled:opacity-50 hover:bg-primary/90 transition-colors shrink-0">
+                {uploading ? '⏳' : '+ Завантажити'}
+              </button>
             )}
 
-            {/* Top bar */}
-            <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-border bg-card">
-              {/* View toggle */}
-              <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
-                <button onClick={() => setViewMode('tree')} className={`px-3 py-1.5 text-xs transition-colors ${viewMode === 'tree' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-secondary'}`}>🌲 Дерево</button>
-                <button onClick={() => { setViewMode('all'); loadAllFiles() }} className={`px-3 py-1.5 text-xs transition-colors ${viewMode === 'all' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-secondary'}`}>📋 Всі файли</button>
-              </div>
-
-              {/* Search */}
-              <div className="relative flex-1 min-w-36">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">🔍</span>
-                <input
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Пошук за назвою або нотаткою…"
-                  className="w-full pl-7 pr-3 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-
-              {/* Sort */}
-              <select
-                value={sortBy}
-                onChange={e => setSortBy(e.target.value as typeof sortBy)}
-                className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none"
-              >
-                <option value="date_desc">Нові спочатку</option>
-                <option value="date_asc">Старі спочатку</option>
-                <option value="name">За назвою</option>
-                <option value="size">За розміром</option>
-              </select>
-
-              {/* Archive toggle */}
-              <button
-                onClick={() => setShowArchived(p => !p)}
-                className={`px-3 py-1.5 rounded-lg text-xs transition-colors border ${showArchived ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-secondary'}`}
-              >
-                📦 Архів
+            <div className="w-full flex gap-1.5 flex-wrap pt-0.5">
+              <button onClick={() => setActiveTag(null)}
+                className={`px-2.5 py-0.5 rounded-full text-[11px] transition-colors ${!activeTag ? 'bg-primary text-white' : 'bg-secondary text-muted-foreground hover:bg-secondary/70'}`}>
+                Всі
               </button>
-
-              {/* Reminders */}
-              <button onClick={() => setRemindersModal(true)} className="px-3 py-1.5 rounded-lg text-xs border border-border text-muted-foreground hover:bg-secondary transition-colors">
-                ⏰{upcomingReminders.length > 0 && <span className="ml-1 text-amber-500 font-semibold">{upcomingReminders.length}</span>}
-              </button>
-
-              {/* Lock */}
-              <button onClick={() => setIsLocked(true)} className="px-3 py-1.5 rounded-lg text-xs border border-border text-muted-foreground hover:bg-secondary transition-colors" title="Заблокувати">🔒</button>
-
-              {/* Upload */}
-              {(selectedEntity || viewMode === 'all') && (
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading || (viewMode === 'all' && !selectedEntity)}
-                  className="ml-auto px-4 py-1.5 rounded-lg bg-primary text-white text-xs font-medium disabled:opacity-50 hover:bg-primary/90 transition-colors shrink-0"
-                >
-                  {uploading ? '⏳' : '+ Завантажити'}
+              {TAGS.map(tag => (
+                <button key={tag} onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] transition-colors ${activeTag === tag ? 'ring-2 ring-primary ' : ''} ${TAG_COLORS[tag]}`}>
+                  {tag}
                 </button>
-              )}
+              ))}
+            </div>
+          </div>
 
-              {/* Tag filter row */}
-              <div className="w-full flex gap-1.5 flex-wrap pt-0.5">
-                <button
-                  onClick={() => setActiveTag(null)}
-                  className={`px-2.5 py-0.5 rounded-full text-[11px] transition-colors ${!activeTag ? 'bg-primary text-white' : 'bg-secondary text-muted-foreground hover:bg-secondary/70'}`}
-                >
-                  Всі
-                </button>
-                {TAGS.map(tag => (
-                  <button
-                    key={tag}
-                    onClick={() => setActiveTag(activeTag === tag ? null : tag)}
-                    className={`px-2.5 py-0.5 rounded-full text-[11px] transition-colors ${activeTag === tag ? 'ring-2 ring-primary ' : ''} ${TAG_COLORS[tag]}`}
-                  >
-                    {tag}
-                  </button>
+          {viewMode === 'tree' && selectedEntity && (
+            <div className="px-4 py-2 border-b border-border bg-card/50 flex items-center gap-2">
+              <span className="text-sm font-medium text-foreground truncate">
+                {selectedEntity.type === 'department' ? '📁' : '👤'} {selectedEntity.label}
+              </span>
+              <span className="text-xs text-muted-foreground ml-auto">{currentFiles.length} файлів</span>
+            </div>
+          )}
+
+          <div className="flex-1 overflow-y-auto p-4">
+            {viewMode === 'tree' && !selectedEntity ? (
+              <div className="h-full flex flex-col items-center justify-center text-center">
+                <div className="text-6xl mb-4 opacity-20">🗂</div>
+                <p className="text-sm font-medium text-foreground/50">Оберіть управління, відділ або особу</p>
+                <p className="text-xs text-muted-foreground mt-1">Або перейдіть у режим «Всі файли»</p>
+              </div>
+            ) : currentFiles.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center">
+                <div className="text-5xl mb-3 opacity-20">📂</div>
+                <p className="text-sm text-muted-foreground">Файлів немає</p>
+                {selectedEntity && <p className="text-xs text-muted-foreground mt-1">Перетягніть файл або натисніть «Завантажити»</p>}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+                {currentFiles.map(file => (
+                  <FileCard key={file.id} file={file} token={token || ''}
+                    onOpen={() => openViewer(file)}
+                    onPin={() => toggleFilePin(file.id)}
+                    onArchive={() => toggleFileArchive(file.id)}
+                    onNewVersion={() => { setVersionTargetId(file.id); versionInputRef.current?.click() }}
+                    onVersions={() => openVersions(file)}
+                    onDelete={() => setConfirmDeleteId(file.id)}
+                  />
                 ))}
               </div>
-            </div>
-
-            {/* Entity header (tree mode) */}
-            {viewMode === 'tree' && selectedEntity && (
-              <div className="px-4 py-2 border-b border-border bg-card/50 flex items-center gap-2">
-                <span className="text-sm font-medium text-foreground truncate">
-                  {selectedEntity.type === 'department' ? '📁' : '👤'} {selectedEntity.label}
-                </span>
-                <span className="text-xs text-muted-foreground ml-auto shrink-0">
-                  {currentFiles.length} файлів
-                </span>
-              </div>
             )}
+          </div>
+        </main>
+      </div>
 
-            {/* File grid / empty state */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {(viewMode === 'tree' && !selectedEntity) ? (
-                <div className="h-full flex flex-col items-center justify-center text-center">
-                  <div className="text-6xl mb-4 opacity-20">🗂</div>
-                  <p className="text-sm font-medium text-foreground/50">Оберіть управління, відділ або особу</p>
-                  <p className="text-xs text-muted-foreground mt-1">Або перейдіть у режим «Всі файли»</p>
-                </div>
-              ) : currentFiles.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center">
-                  <div className="text-5xl mb-3 opacity-20">📂</div>
-                  <p className="text-sm text-muted-foreground">Файлів немає</p>
-                  {selectedEntity && <p className="text-xs text-muted-foreground mt-1">Перетягніть файл або натисніть «Завантажити»</p>}
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-                  {currentFiles.map(file => (
-                    <FileCard
-                      key={file.id}
-                      file={file}
-                      token={token || ''}
-                      showEntity={viewMode === 'all'}
-                      onOpen={() => openViewer(file)}
-                      onPin={() => toggleFilePin(file.id)}
-                      onArchive={() => toggleFileArchive(file.id)}
-                      onNewVersion={() => { setVersionTargetId(file.id); versionInputRef.current?.click() }}
-                      onVersions={() => openVersions(file)}
-                      onDelete={() => setConfirmDeleteId(file.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </main>
-        </div>
-      )}
-
-      {/* Hidden file inputs */}
       <input ref={fileInputRef} type="file" className="hidden"
         accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.avi,.mkv,.webm"
         onChange={handleFileInput} />
@@ -871,10 +650,9 @@ export default function DeputyFilesPage() {
         accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.avi,.mkv,.webm"
         onChange={handleVersionInput} />
 
-      {/* ── File Viewer ── */}
+      {/* ── Viewer ── */}
       {viewer && (
         <div className="fixed inset-0 z-50 bg-black/85 flex flex-col" style={{ animation: 'fadeIn 0.18s ease' }}>
-          {/* Toolbar */}
           <div className="flex items-center gap-2 px-4 py-2 bg-black/60 border-b border-white/10 shrink-0">
             <span className="text-white text-sm font-medium truncate max-w-xs">{fileIcon(viewer.mimeType)} {viewer.fileName}</span>
             {viewer.version > 1 && <span className="text-[10px] text-white/50 bg-white/10 px-1.5 py-0.5 rounded">v{viewer.version}</span>}
@@ -891,29 +669,23 @@ export default function DeputyFilesPage() {
               <button onClick={() => setNotePanelOpen(p => !p)} className="px-2 py-1 text-xs rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors">
                 {notePanelOpen ? '📝 ×' : '📝'}
               </button>
-              <button onClick={closeViewer} className="w-8 h-8 flex items-center justify-center rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors ml-1">✕</button>
+              <button onClick={closeViewer} className="w-8 h-8 flex items-center justify-center rounded-lg text-white/80 hover:text-white hover:bg-white/10 ml-1">✕</button>
             </div>
           </div>
 
-          {/* Content + Notes */}
           <div className="flex-1 flex min-h-0">
-            {/* Content area */}
-            <div
-              className="flex-1 overflow-hidden flex items-center justify-center"
+            <div className="flex-1 overflow-hidden flex items-center justify-center"
               style={{ cursor: viewer.mimeType.startsWith('image/') ? (dragging ? 'grabbing' : 'grab') : 'default' }}
               onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
-              onWheel={onWheelZoom}
-            >
+              onWheel={onWheelZoom}>
               {!viewer.blobUrl ? (
                 <div className="flex flex-col items-center gap-3">
                   <div className="w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                   <span className="text-white/40 text-sm">Завантаження…</span>
                 </div>
               ) : viewer.mimeType.startsWith('image/') ? (
-                <img
-                  src={viewer.blobUrl} alt={viewer.fileName} draggable={false}
-                  style={{ transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`, transformOrigin: 'center', transition: dragging ? 'none' : 'transform 0.1s ease', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', userSelect: 'none' }}
-                />
+                <img src={viewer.blobUrl} alt={viewer.fileName} draggable={false}
+                  style={{ transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`, transformOrigin: 'center', transition: dragging ? 'none' : 'transform 0.1s ease', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', userSelect: 'none' }} />
               ) : viewer.mimeType.startsWith('video/') ? (
                 <video src={viewer.blobUrl} controls autoPlay className="max-w-full max-h-full rounded-xl" />
               ) : (
@@ -921,42 +693,31 @@ export default function DeputyFilesPage() {
               )}
             </div>
 
-            {/* Notes side panel */}
             {notePanelOpen && (
               <div className="w-72 shrink-0 border-l border-white/10 bg-black/40 flex flex-col p-4 gap-3" style={{ animation: 'slideLeft 0.2s ease' }}>
                 <p className="text-white/60 text-xs font-semibold uppercase tracking-wide">Нотатка</p>
-                <textarea
-                  value={viewerNotes}
-                  onChange={e => setViewerNotes(e.target.value)}
-                  placeholder="Додайте нотатку…"
-                  rows={5}
-                  className="rounded-xl bg-white/10 text-white placeholder:text-white/30 text-sm px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-white/30"
-                />
+                <textarea value={viewerNotes} onChange={e => setViewerNotes(e.target.value)}
+                  placeholder="Додайте нотатку…" rows={5}
+                  className="rounded-xl bg-white/10 text-white placeholder:text-white/30 text-sm px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-white/30" />
                 <div>
                   <p className="text-white/50 text-xs mb-1">Нагадати</p>
                   <input type="datetime-local" value={viewerReminder} onChange={e => setViewerReminder(e.target.value)}
-                    className="rounded-xl bg-white/10 text-white text-xs px-3 py-2 w-full focus:outline-none focus:ring-1 focus:ring-white/30"
-                  />
+                    className="rounded-xl bg-white/10 text-white text-xs px-3 py-2 w-full focus:outline-none focus:ring-1 focus:ring-white/30" />
                 </div>
                 <div>
                   <p className="text-white/50 text-xs mb-1.5">Теги</p>
                   <div className="flex flex-wrap gap-1">
                     {TAGS.map(tag => (
-                      <button
-                        key={tag}
+                      <button key={tag}
                         onClick={() => setViewerTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
-                        className={`px-2 py-0.5 rounded-full text-[10px] transition-colors ${viewerTags.includes(tag) ? 'bg-primary text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
-                      >
+                        className={`px-2 py-0.5 rounded-full text-[10px] transition-colors ${viewerTags.includes(tag) ? 'bg-primary text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}>
                         {tag}
                       </button>
                     ))}
                   </div>
                 </div>
-                <button
-                  onClick={saveViewerNote}
-                  disabled={savingViewerNote}
-                  className="mt-auto rounded-xl bg-primary py-2 text-sm font-medium text-white disabled:opacity-60"
-                >
+                <button onClick={saveViewerNote} disabled={savingViewerNote}
+                  className="mt-auto rounded-xl bg-primary py-2 text-sm font-medium text-white disabled:opacity-60">
                   {savingViewerNote ? 'Збереження…' : 'Зберегти'}
                 </button>
               </div>
@@ -984,10 +745,7 @@ export default function DeputyFilesPage() {
                     {r.notes && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{r.notes}</p>}
                     <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">⏰ {formatDatetime(r.reminderAt!)}</p>
                   </div>
-                  <button
-                    onClick={() => { setRemindersModal(false); openViewer(r) }}
-                    className="shrink-0 text-xs text-primary hover:underline"
-                  >Відкрити</button>
+                  <button onClick={() => { setRemindersModal(false); openViewer(r) }} className="shrink-0 text-xs text-primary hover:underline">Відкрити</button>
                 </div>
               ))}
             </div>
@@ -1013,20 +771,15 @@ export default function DeputyFilesPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm truncate text-foreground">{v.fileName}</p>
                     <p className="text-xs text-muted-foreground">{formatDate(v.createdAt)} · {formatBytes(v.fileSize)}</p>
-                    {v.archivedAt && <span className="text-[10px] text-amber-600">📦 Архів</span>}
                   </div>
-                  <div className="flex gap-1 shrink-0">
-                    <button onClick={() => openViewer(v)} className="text-xs text-primary hover:underline">Відкрити</button>
-                  </div>
+                  <button onClick={() => openViewer(v)} className="text-xs text-primary hover:underline shrink-0">Відкрити</button>
                   {i === 0 && <span className="text-[10px] text-green-600 dark:text-green-400 font-medium shrink-0">Поточна</span>}
                 </div>
               ))}
             </div>
             <div className="px-5 py-3 border-t border-border">
-              <button
-                onClick={() => { setVersionTargetId(versionsModal.id); versionInputRef.current?.click() }}
-                className="w-full rounded-xl bg-primary py-2 text-sm font-medium text-white"
-              >
+              <button onClick={() => { setVersionTargetId(versionsModal.id); versionInputRef.current?.click() }}
+                className="w-full rounded-xl bg-primary py-2 text-sm font-medium text-white">
                 + Завантажити нову версію
               </button>
             </div>
@@ -1049,7 +802,6 @@ export default function DeputyFilesPage() {
         </div>
       )}
 
-      {/* ── Toast ── */}
       {toast && (
         <div className={`fixed bottom-6 right-6 z-[60] rounded-xl px-4 py-3 text-sm font-medium shadow-lg ${toast.type === 'ok' ? 'bg-emerald-600 text-white' : 'bg-destructive text-white'}`}
           style={{ animation: 'slideUp 0.2s ease' }}>
@@ -1066,38 +818,28 @@ export default function DeputyFilesPage() {
   )
 }
 
-// ── FileCard ───────────────────────────────────────────────────────────────────
-
-function FileCard({
-  file, token, showEntity, onOpen, onPin, onArchive, onNewVersion, onVersions, onDelete,
-}: {
-  file: DeputyFile; token: string; showEntity: boolean
+function FileCard({ file, token, onOpen, onPin, onArchive, onNewVersion, onVersions, onDelete }: {
+  file: DeputyFile; token: string
   onOpen: () => void; onPin: () => void; onArchive: () => void
   onNewVersion: () => void; onVersions: () => void; onDelete: () => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const isArchived = !!file.archivedAt
-  const hasVersions = file.version > 1
 
   return (
-    <div className={`group relative rounded-2xl border bg-card transition-all duration-200 overflow-hidden ${isArchived ? 'opacity-60 border-dashed border-border' : 'border-border hover:border-primary/40 hover:shadow-md'}`}>
-      {/* Thumbnail area */}
+    <div className={`relative rounded-2xl border bg-card transition-all duration-200 overflow-hidden ${file.archivedAt ? 'opacity-60 border-dashed border-border' : 'border-border hover:border-primary/40 hover:shadow-md'}`}>
       <button onClick={onOpen} className="w-full aspect-square flex flex-col items-center justify-center bg-secondary/40 hover:bg-secondary/70 transition-colors relative overflow-hidden">
         {file.mimeType.startsWith('image/')
           ? <ImageThumb fileId={file.id} token={token} />
           : <span className="text-4xl">{fileIcon(file.mimeType)}</span>}
-
-        {/* Badges overlay */}
         <div className="absolute top-1.5 left-1.5 flex gap-1">
           {file.isPinned && <span className="text-[10px] bg-primary text-white px-1 py-0.5 rounded-md">📌</span>}
-          {hasVersions && <span className="text-[10px] bg-black/50 text-white px-1 py-0.5 rounded-md">v{file.version}</span>}
+          {file.version > 1 && <span className="text-[10px] bg-black/50 text-white px-1 py-0.5 rounded-md">v{file.version}</span>}
         </div>
         {file.reminderAt && new Date(file.reminderAt) > new Date() && (
           <div className="absolute bottom-1.5 right-1.5 text-[10px] bg-amber-500 text-white px-1 py-0.5 rounded-md">⏰</div>
         )}
       </button>
 
-      {/* Info */}
       <div className="px-2.5 py-2">
         <p className="text-xs font-medium text-foreground truncate" title={file.fileName}>{file.fileName}</p>
         <p className="text-[10px] text-muted-foreground mt-0.5">{formatBytes(file.fileSize)}</p>
@@ -1111,17 +853,16 @@ function FileCard({
         {file.notes && <p className="text-[10px] text-muted-foreground mt-1 line-clamp-1">📝 {file.notes}</p>}
       </div>
 
-      {/* Actions */}
       <div className="flex border-t border-border">
-        <button onClick={onPin} className={`flex-1 py-1.5 text-[11px] transition-colors ${file.isPinned ? 'text-primary' : 'text-muted-foreground'} hover:bg-secondary`} title={file.isPinned ? 'Відкріпити' : 'Закріпити'}>📌</button>
-        <button onClick={onOpen} className="flex-1 py-1.5 text-[11px] text-muted-foreground hover:bg-secondary transition-colors border-x border-border" title="Відкрити">👁</button>
+        <button onClick={onPin} className={`flex-1 py-1.5 text-[11px] transition-colors ${file.isPinned ? 'text-primary' : 'text-muted-foreground'} hover:bg-secondary`}>📌</button>
+        <button onClick={onOpen} className="flex-1 py-1.5 text-[11px] text-muted-foreground hover:bg-secondary transition-colors border-x border-border">👁</button>
         <div className="relative flex-1">
           <button onClick={() => setMenuOpen(p => !p)} className="w-full py-1.5 text-[11px] text-muted-foreground hover:bg-secondary transition-colors">⋯</button>
           {menuOpen && (
-            <div className="absolute bottom-full right-0 mb-1 w-40 rounded-xl bg-popover border border-border shadow-xl z-10 overflow-hidden">
+            <div className="absolute bottom-full right-0 mb-1 w-44 rounded-xl bg-popover border border-border shadow-xl z-10 overflow-hidden">
               <button onClick={() => { onVersions(); setMenuOpen(false) }} className="w-full px-3 py-2 text-xs text-left text-foreground hover:bg-secondary transition-colors">🔄 Версії</button>
               <button onClick={() => { onNewVersion(); setMenuOpen(false) }} className="w-full px-3 py-2 text-xs text-left text-foreground hover:bg-secondary transition-colors">⬆ Нова версія</button>
-              <button onClick={() => { onArchive(); setMenuOpen(false) }} className="w-full px-3 py-2 text-xs text-left text-foreground hover:bg-secondary transition-colors">{isArchived ? '📤 Розархівувати' : '📦 Архівувати'}</button>
+              <button onClick={() => { onArchive(); setMenuOpen(false) }} className="w-full px-3 py-2 text-xs text-left text-foreground hover:bg-secondary transition-colors">{file.archivedAt ? '📤 Розархівувати' : '📦 Архівувати'}</button>
               <div className="border-t border-border" />
               <button onClick={() => { onDelete(); setMenuOpen(false) }} className="w-full px-3 py-2 text-xs text-left text-destructive hover:bg-secondary transition-colors">🗑 Видалити</button>
             </div>
@@ -1131,8 +872,6 @@ function FileCard({
     </div>
   )
 }
-
-// ── ToolBtn ────────────────────────────────────────────────────────────────────
 
 function ToolBtn({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
