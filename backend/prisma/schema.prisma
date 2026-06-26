@@ -166,6 +166,7 @@ model User {
   digestSubscriptions DigestSubscription[]
   slaEscalations      SlaEscalationEvent[] @relation("SlaActor")
   deputyFiles         DeputyFile[]         @relation("DeputyFileUploader")
+  deputyFolders       DeputyFolder[]        @relation("DeputyFolderUploader")
 
   @@map("users")
 }
@@ -561,6 +562,7 @@ model DeputyFile {
   uploaderId    String
   entityType    DeputyFileEntityType
   entityId      String
+  folderId      String?
   fileName      String
   mimeType      String               @default("application/octet-stream")
   fileSize      Int                  @default(0)
@@ -576,14 +578,31 @@ model DeputyFile {
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
 
-  uploader   User        @relation("DeputyFileUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
-  parentFile DeputyFile? @relation("DeputyFileVersions", fields: [parentFileId], references: [id], onDelete: SetNull)
-  childFiles DeputyFile[] @relation("DeputyFileVersions")
+  uploader   User          @relation("DeputyFileUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
+  folder     DeputyFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  parentFile DeputyFile?   @relation("DeputyFileVersions", fields: [parentFileId], references: [id], onDelete: SetNull)
+  childFiles DeputyFile[]  @relation("DeputyFileVersions")
 
   @@index([uploaderId, entityType, entityId])
   @@index([uploaderId, reminderAt])
   @@index([uploaderId, isPinned])
   @@index([uploaderId, archivedAt])
   @@index([parentFileId])
+  @@index([folderId])
   @@map("deputy_files")
+}
+
+model DeputyFolder {
+  id         String               @id @default(uuid())
+  uploaderId String
+  entityType DeputyFileEntityType
+  entityId   String
+  name       String
+  createdAt  DateTime             @default(now())
+
+  uploader User         @relation("DeputyFolderUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
+  files    DeputyFile[]
+
+  @@index([uploaderId, entityType, entityId])
+  @@map("deputy_folders")
 }

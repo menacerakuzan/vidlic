@@ -5,6 +5,7 @@ const META_SELECT = {
   id: true,
   entityType: true,
   entityId: true,
+  folderId: true,
   fileName: true,
   mimeType: true,
   fileSize: true,
@@ -33,15 +34,28 @@ export class DeputyFilesService {
     return (this.prisma as any).deputyFile;
   }
 
-  async list(user: any, entityType?: string, entityId?: string, showArchived = false) {
+  private folderDb() {
+    return (this.prisma as any).deputyFolder;
+  }
+
+  // ── Files ──────────────────────────────────────────────────────────────────
+
+  async list(
+    user: any,
+    entityType?: string,
+    entityId?: string,
+    showArchived = false,
+    folderId?: string | null,
+  ) {
     this.assertDeputyHead(user);
     const where: any = {
       uploaderId: user.id,
-      parentFileId: null, // only show current/root versions
+      parentFileId: null,
     };
     if (entityType) where.entityType = entityType;
     if (entityId) where.entityId = entityId;
     if (!showArchived) where.archivedAt = null;
+    if (folderId !== undefined) where.folderId = folderId ?? null;
 
     return this.db().findMany({
       where,
@@ -55,6 +69,7 @@ export class DeputyFilesService {
     dto: {
       entityType: 'department' | 'user';
       entityId: string;
+      folderId?: string | null;
       fileName: string;
       mimeType: string;
       contentBase64: string;
@@ -81,14 +96,16 @@ export class DeputyFilesService {
     }
 
     let version = 1;
+    let resolvedFolderId = dto.folderId ?? null;
+
     if (dto.parentFileId) {
       const parent = await this.db().findUnique({
         where: { id: dto.parentFileId },
-        select: { id: true, uploaderId: true, version: true },
+        select: { id: true, uploaderId: true, version: true, folderId: true },
       });
       if (!parent || parent.uploaderId !== user.id) throw new ForbiddenException();
       version = parent.version + 1;
-      // archive old version
+      resolvedFolderId = parent.folderId; // keep same folder as parent
       await this.db().update({
         where: { id: dto.parentFileId },
         data: { archivedAt: new Date() },
@@ -102,6 +119,7 @@ export class DeputyFilesService {
         uploaderId: user.id,
         entityType: dto.entityType,
         entityId: dto.entityId,
+        folderId: resolvedFolderId,
         fileName: safe,
         mimeType: dto.mimeType || 'application/octet-stream',
         fileSize: buffer.length,
@@ -160,6 +178,26 @@ export class DeputyFilesService {
     });
   }
 
+  async rename(user: any, id: string, fileName: string) {
+    this.assertDeputyHead(user);
+    const file = await this.db().findUnique({ where: { id }, select: { id: true, uploaderId: true } });
+    if (!file) throw new NotFoundException('Файл не знайдено');
+    if (file.uploaderId !== user.id) throw new ForbiddenException();
+    return this.db().update({
+      where: { id },
+      data: { fileName: this.safeFileName(fileName) },
+      select: META_SELECT,
+    });
+  }
+
+  async moveToFolder(user: any, id: string, folderId: string | null) {
+    this.assertDeputyHead(user);
+    const file = await this.db().findUnique({ where: { id }, select: { id: true, uploaderId: true } });
+    if (!file) throw new NotFoundException();
+    if (file.uploaderId !== user.id) throw new ForbiddenException();
+    return this.db().update({ where: { id }, data: { folderId }, select: META_SELECT });
+  }
+
   async togglePin(user: any, id: string) {
     this.assertDeputyHead(user);
     const file = await this.db().findUnique({ where: { id }, select: { id: true, uploaderId: true, isPinned: true } });
@@ -182,20 +220,14 @@ export class DeputyFilesService {
 
   async getVersions(user: any, id: string) {
     this.assertDeputyHead(user);
-    // id may be the root or a child — find the root
     const target = await this.db().findUnique({ where: { id }, select: { id: true, uploaderId: true, parentFileId: true } });
     if (!target || target.uploaderId !== user.id) throw new NotFoundException();
-
     const rootId = target.parentFileId ?? target.id;
-
-    // All versions: root + children (recursively)
-    const all = await this.db().findMany({
+    return this.db().findMany({
       where: { OR: [{ id: rootId }, { parentFileId: rootId }] },
       orderBy: { version: 'asc' },
       select: META_SELECT,
     });
-
-    return all;
   }
 
   async delete(user: any, id: string) {
@@ -211,14 +243,53 @@ export class DeputyFilesService {
     this.assertDeputyHead(user);
     const now = new Date();
     return this.db().findMany({
-      where: {
-        uploaderId: user.id,
-        reminderAt: { gte: now },
-        archivedAt: null,
-      },
+      where: { uploaderId: user.id, reminderAt: { gte: now }, archivedAt: null },
       orderBy: { reminderAt: 'asc' },
-      select: { ...META_SELECT },
+      select: META_SELECT,
     });
+  }
+
+  // ── Folders ────────────────────────────────────────────────────────────────
+
+  async listFolders(user: any, entityType?: string, entityId?: string) {
+    this.assertDeputyHead(user);
+    const where: any = { uploaderId: user.id };
+    if (entityType) where.entityType = entityType;
+    if (entityId) where.entityId = entityId;
+    return this.folderDb().findMany({ where, orderBy: { name: 'asc' } });
+  }
+
+  async createFolder(user: any, dto: { entityType: string; entityId: string; name: string }) {
+    this.assertDeputyHead(user);
+    const name = dto.name?.trim().slice(0, 80);
+    if (!name) throw new ForbiddenException('Назва папки обовʼязкова');
+    return this.folderDb().create({
+      data: {
+        uploaderId: user.id,
+        entityType: dto.entityType,
+        entityId: dto.entityId,
+        name,
+      },
+    });
+  }
+
+  async renameFolder(user: any, id: string, name: string) {
+    this.assertDeputyHead(user);
+    const folder = await this.folderDb().findUnique({ where: { id }, select: { id: true, uploaderId: true } });
+    if (!folder) throw new NotFoundException();
+    if (folder.uploaderId !== user.id) throw new ForbiddenException();
+    return this.folderDb().update({ where: { id }, data: { name: name.trim().slice(0, 80) } });
+  }
+
+  async deleteFolder(user: any, id: string) {
+    this.assertDeputyHead(user);
+    const folder = await this.folderDb().findUnique({ where: { id }, select: { id: true, uploaderId: true } });
+    if (!folder) throw new NotFoundException();
+    if (folder.uploaderId !== user.id) throw new ForbiddenException();
+    // Remove folder reference from files (set folderId = null)
+    await this.db().updateMany({ where: { folderId: id }, data: { folderId: null } });
+    await this.folderDb().delete({ where: { id } });
+    return { success: true };
   }
 
   private safeFileName(value: string) {

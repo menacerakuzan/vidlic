@@ -413,9 +413,19 @@ export class DepartmentsService {
           expanded.add(depId);
           const dep = await this.prisma.department.findUnique({
             where: { id: depId },
-            select: { children: { select: { id: true } } },
+            select: { parentId: true, children: { select: { id: true } } },
           });
           for (const child of dep?.children || []) expanded.add(child.id);
+          // Include full parent chain so the navigation tree renders correctly
+          let parentId = dep?.parentId ?? null;
+          while (parentId) {
+            expanded.add(parentId);
+            const parent = await this.prisma.department.findUnique({
+              where: { id: parentId },
+              select: { parentId: true },
+            });
+            parentId = parent?.parentId ?? null;
+          }
         }
         return Array.from(expanded);
       }

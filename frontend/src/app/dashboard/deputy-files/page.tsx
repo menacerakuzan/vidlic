@@ -14,8 +14,13 @@ type TeamMember = {
   role: string; position?: { titleUk?: string }
 }
 
+type DeputyFolder = {
+  id: string; name: string; entityType: string; entityId: string; createdAt: string
+}
+
 type DeputyFile = {
   id: string; entityType: 'department' | 'user'; entityId: string
+  folderId: string | null
   fileName: string; mimeType: string; fileSize: number
   notes: string | null; reminderAt: string | null
   tags: string[]; isPinned: boolean; archivedAt: string | null
@@ -105,7 +110,10 @@ function ImageThumb({ fileId, token }: { fileId: string; token: string }) {
 export default function DeputyFilesPage() {
   const { user } = useAuthStore()
   const router = useRouter()
-  const token = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
+
+  // Token — read client-side only to avoid SSR null issue
+  const [token, setToken] = useState<string | null>(null)
+  useEffect(() => { setToken(localStorage.getItem('vidlik-accessToken')) }, [])
 
   // Navigation
   const [departments, setDepartments] = useState<Department[]>([])
@@ -113,9 +121,11 @@ export default function DeputyFilesPage() {
   const [expandedDepts, setExpandedDepts] = useState<Set<string>>(new Set())
   const [selectedEntity, setSelectedEntity] = useState<{ type: 'department' | 'user'; id: string; label: string } | null>(null)
 
-  // Files
+  // Files & folders
   const [filesMap, setFilesMap] = useState<Record<string, DeputyFile[]>>({})
   const [allFiles, setAllFiles] = useState<DeputyFile[]>([])
+  const [folders, setFolders] = useState<DeputyFolder[]>([])
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null | undefined>(undefined) // undefined = no folder filter
   const [viewMode, setViewMode] = useState<'tree' | 'all'>('tree')
 
   // Filters
@@ -124,11 +134,24 @@ export default function DeputyFilesPage() {
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'name' | 'size'>('date_desc')
   const [showArchived, setShowArchived] = useState(false)
 
-  // Upload
+  // Upload staging (selected file waits for modal)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [pendingParentId, setPendingParentId] = useState<string | null>(null)
+  const [uploadMeta, setUploadMeta] = useState({ fileName: '', tags: [] as string[], notes: '', reminderAt: '', folderId: '' })
   const [uploading, setUploading] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const versionInputRef = useRef<HTMLInputElement>(null)
+
+  // Folder management
+  const [newFolderName, setNewFolderName] = useState('')
+  const [creatingFolder, setCreatingFolder] = useState(false)
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null)
+  const [renameFolderName, setRenameFolderName] = useState('')
+
+  // File rename
+  const [renamingFileId, setRenamingFileId] = useState<string | null>(null)
+  const [renameFileName, setRenameFileName] = useState('')
 
   // Viewer
   const [viewer, setViewer] = useState<ViewerFile | null>(null)
@@ -175,15 +198,26 @@ export default function DeputyFilesPage() {
   const loadFiles = useCallback(async (entityType: 'department' | 'user', entityId: string) => {
     if (!token) return
     const key = `${entityType}:${entityId}`
-    const url = `/api/v1/deputy-files?entityType=${entityType}&entityId=${entityId}${showArchived ? '&archived=true' : ''}`
+    let url = `/api/v1/deputy-files?entityType=${entityType}&entityId=${entityId}`
+    if (showArchived) url += '&archived=true'
+    if (selectedFolderId !== undefined) url += `&folderId=${selectedFolderId === null ? 'null' : selectedFolderId}`
     const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     const data = await r.json()
     setFilesMap(prev => ({ ...prev, [key]: Array.isArray(data) ? data : [] }))
-  }, [token, showArchived])
+  }, [token, showArchived, selectedFolderId])
+
+  const loadFolders = useCallback(async (entityType: string, entityId: string) => {
+    if (!token) return
+    const r = await fetch(`/api/v1/deputy-files/folders?entityType=${entityType}&entityId=${entityId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const data = await r.json()
+    setFolders(Array.isArray(data) ? data : [])
+  }, [token])
 
   const loadAllFiles = useCallback(async () => {
     if (!token) return
-    const url = `/api/v1/deputy-files${showArchived ? '?archived=true' : ''}`
+    const url = '/api/v1/deputy-files' + (showArchived ? '?archived=true' : '')
     const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     const data = await r.json()
     setAllFiles(Array.isArray(data) ? data : [])
@@ -197,8 +231,8 @@ export default function DeputyFilesPage() {
   }, [token])
 
   useEffect(() => {
-    if (viewMode === 'all') loadAllFiles()
-  }, [viewMode, loadAllFiles, showArchived])
+    if (viewMode === 'all' && token) loadAllFiles()
+  }, [viewMode, loadAllFiles, showArchived, token])
 
   const loadTeam = useCallback(async (deptId: string) => {
     if (!token || teamMap[deptId] !== undefined) return
@@ -210,8 +244,9 @@ export default function DeputyFilesPage() {
 
   const selectEntity = useCallback(async (type: 'department' | 'user', id: string, label: string) => {
     setSelectedEntity({ type, id, label })
-    await loadFiles(type, id)
-  }, [loadFiles])
+    setSelectedFolderId(undefined)
+    await Promise.all([loadFiles(type, id), loadFolders(type, id)])
+  }, [loadFiles, loadFolders])
 
   const toggleDept = useCallback(async (deptId: string) => {
     setExpandedDepts(prev => {
@@ -222,55 +257,65 @@ export default function DeputyFilesPage() {
     await loadTeam(deptId)
   }, [loadTeam])
 
-  // ── Upload ────────────────────────────────────────────────────────────────────
+  const refreshCurrentView = useCallback(async () => {
+    if (viewMode === 'all') await loadAllFiles()
+    else if (selectedEntity) await loadFiles(selectedEntity.type, selectedEntity.id)
+    await loadReminders()
+  }, [viewMode, selectedEntity, loadAllFiles, loadFiles, loadReminders])
 
-  const uploadFile = async (file: File, parentFileId?: string) => {
-    if (!token) return
+  // ── Upload flow ───────────────────────────────────────────────────────────────
+
+  const stageFile = (file: File, parentFileId?: string) => {
+    setPendingFile(file)
+    setPendingParentId(parentFileId ?? null)
+    setUploadMeta({
+      fileName: file.name,
+      tags: [],
+      notes: '',
+      reminderAt: '',
+      folderId: (selectedFolderId as string) ?? '',
+    })
+  }
+
+  const confirmUpload = async () => {
+    if (!token || !pendingFile) return
     const entity = selectedEntity
-    if (!entity && viewMode !== 'all') { showToast('err', 'Оберіть управління або особу'); return }
-
+    if (!entity) { showToast('err', 'Оберіть підрозділ або особу'); return }
     setUploading(true)
     const reader = new FileReader()
     reader.onload = async () => {
       const contentBase64 = reader.result as string
       let thumbnailBase64: string | undefined
-      if (file.type.startsWith('image/')) {
-        thumbnailBase64 = await generateThumbnail(contentBase64)
-      }
-      const targetEntity = parentFileId ? await getFileEntity(parentFileId) : entity
-      if (!targetEntity) { setUploading(false); return }
+      if (pendingFile.type.startsWith('image/')) thumbnailBase64 = await generateThumbnail(contentBase64)
 
       const r = await fetch('/api/v1/deputy-files', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          entityType: targetEntity.type,
-          entityId: targetEntity.id,
-          fileName: file.name,
-          mimeType: file.type || 'application/octet-stream',
+          entityType: entity.type,
+          entityId: entity.id,
+          folderId: uploadMeta.folderId || null,
+          fileName: uploadMeta.fileName || pendingFile.name,
+          mimeType: pendingFile.type || 'application/octet-stream',
           contentBase64,
           thumbnailBase64,
-          parentFileId: parentFileId ?? null,
+          notes: uploadMeta.notes || null,
+          reminderAt: uploadMeta.reminderAt || null,
+          tags: uploadMeta.tags,
+          parentFileId: pendingParentId ?? null,
         }),
       })
       setUploading(false)
+      setPendingFile(null)
       if (r.ok) {
-        showToast('ok', parentFileId ? 'Нова версія збережена' : 'Файл завантажено')
+        showToast('ok', pendingParentId ? 'Нова версія збережена' : 'Файл завантажено')
         await refreshCurrentView()
-        if (versionsModal) {
-          setVersions(await loadVersionsData(versionsModal.id))
-        }
+        if (versionsModal) setVersions(await loadVersionsData(versionsModal.id))
       } else {
         showToast('err', 'Помилка завантаження')
       }
     }
-    reader.readAsDataURL(file)
-  }
-
-  const getFileEntity = async (fileId: string): Promise<{ type: 'department' | 'user'; id: string } | null> => {
-    const all = [...Object.values(filesMap).flat(), ...allFiles]
-    const f = all.find(f => f.id === fileId)
-    return f ? { type: f.entityType, id: f.entityId } : null
+    reader.readAsDataURL(pendingFile)
   }
 
   const generateThumbnail = (dataUrl: string): Promise<string> =>
@@ -280,8 +325,7 @@ export default function DeputyFilesPage() {
         const MAX = 200
         const scale = Math.min(MAX / img.width, MAX / img.height)
         const canvas = document.createElement('canvas')
-        canvas.width = img.width * scale
-        canvas.height = img.height * scale
+        canvas.width = img.width * scale; canvas.height = img.height * scale
         canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height)
         resolve(canvas.toDataURL('image/jpeg', 0.75))
       }
@@ -289,37 +333,59 @@ export default function DeputyFilesPage() {
       img.src = dataUrl
     })
 
-  const refreshCurrentView = async () => {
-    if (viewMode === 'all') await loadAllFiles()
-    else if (selectedEntity) await loadFiles(selectedEntity.type, selectedEntity.id)
-    await loadReminders()
-  }
-
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) uploadFile(file)
-    e.target.value = ''
+    const file = e.target.files?.[0]; if (file) stageFile(file); e.target.value = ''
   }
-
   const handleVersionInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file && versionTargetId) uploadFile(file, versionTargetId)
-    e.target.value = ''
-    setVersionTargetId(null)
+    if (file && versionTargetId) stageFile(file, versionTargetId)
+    e.target.value = ''; setVersionTargetId(null)
   }
-
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true) }
   const handleDragLeave = () => setIsDragOver(false)
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault(); setIsDragOver(false)
-    const file = e.dataTransfer.files[0]
-    if (file) uploadFile(file)
+    const file = e.dataTransfer.files[0]; if (file) stageFile(file)
+  }
+
+  // ── Folder actions ────────────────────────────────────────────────────────────
+
+  const handleCreateFolder = async () => {
+    if (!token || !selectedEntity || !newFolderName.trim()) return
+    setCreatingFolder(false)
+    const r = await fetch('/api/v1/deputy-files/folders', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entityType: selectedEntity.type, entityId: selectedEntity.id, name: newFolderName.trim() }),
+    })
+    setNewFolderName('')
+    if (r.ok) { showToast('ok', 'Папку створено'); await loadFolders(selectedEntity.type, selectedEntity.id) }
+  }
+
+  const handleRenameFolder = async (id: string) => {
+    if (!token || !renameFolderName.trim()) return
+    await fetch(`/api/v1/deputy-files/folders/${id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: renameFolderName.trim() }),
+    })
+    setRenamingFolderId(null)
+    if (selectedEntity) { showToast('ok', 'Папку перейменовано'); await loadFolders(selectedEntity.type, selectedEntity.id) }
+  }
+
+  const handleDeleteFolder = async (id: string) => {
+    if (!token) return
+    await fetch(`/api/v1/deputy-files/folders/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+    if (selectedFolderId === id) setSelectedFolderId(undefined)
+    if (selectedEntity) await loadFolders(selectedEntity.type, selectedEntity.id)
+    await refreshCurrentView()
   }
 
   // ── File actions ──────────────────────────────────────────────────────────────
 
   const openViewer = async (file: DeputyFile) => {
-    if (!isViewable(file.mimeType) || !token) {
+    if (!token) return
+    if (!isViewable(file.mimeType)) {
       const r = await fetch(`/api/v1/deputy-files/${file.id}/content`, { headers: { Authorization: `Bearer ${token}` } })
       const blob = await r.blob()
       const url = URL.createObjectURL(blob)
@@ -328,19 +394,14 @@ export default function DeputyFilesPage() {
       return
     }
     setZoom(1); setPan({ x: 0, y: 0 })
-    setViewerNotes(file.notes || '')
-    setViewerReminder(file.reminderAt ? file.reminderAt.slice(0, 16) : '')
-    setViewerTags(file.tags || [])
-    setViewer({ ...file })
+    setViewerNotes(file.notes || ''); setViewerReminder(file.reminderAt ? file.reminderAt.slice(0, 16) : '')
+    setViewerTags(file.tags || []); setViewer({ ...file })
     const r = await fetch(`/api/v1/deputy-files/${file.id}/content`, { headers: { Authorization: `Bearer ${token}` } })
     const blob = await r.blob()
     setViewer(v => v ? { ...v, blobUrl: URL.createObjectURL(blob) } : null)
   }
 
-  const closeViewer = () => {
-    if (viewer?.blobUrl) URL.revokeObjectURL(viewer.blobUrl)
-    setViewer(null)
-  }
+  const closeViewer = () => { if (viewer?.blobUrl) URL.revokeObjectURL(viewer.blobUrl); setViewer(null) }
 
   const saveViewerNote = async () => {
     if (!viewer || !token) return
@@ -351,12 +412,18 @@ export default function DeputyFilesPage() {
       body: JSON.stringify({ notes: viewerNotes || null, reminderAt: viewerReminder || null, tags: viewerTags }),
     })
     setSavingViewerNote(false)
-    if (r.ok) {
-      const updated = await r.json()
-      setViewer(v => v ? { ...v, ...updated } : null)
-      showToast('ok', 'Нотатку збережено')
-      await refreshCurrentView()
-    }
+    if (r.ok) { const updated = await r.json(); setViewer(v => v ? { ...v, ...updated } : null); showToast('ok', 'Нотатку збережено'); await refreshCurrentView() }
+  }
+
+  const handleRenameFile = async () => {
+    if (!token || !renamingFileId || !renameFileName.trim()) return
+    const r = await fetch(`/api/v1/deputy-files/${renamingFileId}/rename`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName: renameFileName.trim() }),
+    })
+    setRenamingFileId(null)
+    if (r.ok) { showToast('ok', 'Перейменовано'); await refreshCurrentView() }
   }
 
   const toggleFilePin = async (id: string) => {
@@ -368,8 +435,7 @@ export default function DeputyFilesPage() {
   const toggleFileArchive = async (id: string) => {
     if (!token) return
     await fetch(`/api/v1/deputy-files/${id}/archive`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
-    showToast('ok', 'Архів оновлено')
-    await refreshCurrentView()
+    showToast('ok', 'Архів оновлено'); await refreshCurrentView()
   }
 
   const handleDelete = async (id: string) => {
@@ -379,29 +445,21 @@ export default function DeputyFilesPage() {
     else showToast('err', 'Помилка видалення')
   }
 
-  const loadVersionsData = async (id: string): Promise<DeputyFile[]> => {
+  const loadVersionsData = useCallback(async (id: string): Promise<DeputyFile[]> => {
     if (!token) return []
     const r = await fetch(`/api/v1/deputy-files/${id}/versions`, { headers: { Authorization: `Bearer ${token}` } })
     const data = await r.json()
     return Array.isArray(data) ? data : []
-  }
+  }, [token])
 
-  const openVersions = async (file: DeputyFile) => {
-    setVersionsModal(file)
-    setVersions(await loadVersionsData(file.id))
-  }
-
-  const handlePrint = () => {
-    if (!viewer?.blobUrl) return
-    window.open(viewer.blobUrl, '_blank')?.print()
-  }
+  const openVersions = async (file: DeputyFile) => { setVersionsModal(file); setVersions(await loadVersionsData(file.id)) }
+  const handlePrint = () => { if (viewer?.blobUrl) window.open(viewer.blobUrl, '_blank')?.print() }
 
   // ── Viewer pan / zoom ─────────────────────────────────────────────────────────
 
   const onMouseDown = (e: React.MouseEvent) => {
     if (!viewer?.mimeType.startsWith('image/')) return
-    setDragging(true)
-    dragStart.current = { mx: e.clientX, my: e.clientY, px: pan.x, py: pan.y }
+    setDragging(true); dragStart.current = { mx: e.clientX, my: e.clientY, px: pan.x, py: pan.y }
   }
   const onMouseMove = (e: React.MouseEvent) => {
     if (!dragging) return
@@ -410,13 +468,11 @@ export default function DeputyFilesPage() {
   const onMouseUp = () => setDragging(false)
   const onWheelZoom = (e: React.WheelEvent) => {
     if (!viewer?.mimeType.startsWith('image/')) return
-    e.preventDefault()
-    setZoom(z => Math.max(0.1, Math.min(8, z - e.deltaY * 0.001)))
+    e.preventDefault(); setZoom(z => Math.max(0.1, Math.min(8, z - e.deltaY * 0.001)))
   }
 
   const showToast = (type: 'ok' | 'err', msg: string) => {
-    setToast({ type, msg })
-    setTimeout(() => setToast(null), 3000)
+    setToast({ type, msg }); setTimeout(() => setToast(null), 3000)
   }
 
   // ── Filter + sort ─────────────────────────────────────────────────────────────
@@ -424,6 +480,7 @@ export default function DeputyFilesPage() {
   const applyFilters = (files: DeputyFile[]) => {
     let result = [...files]
     if (!showArchived) result = result.filter(f => !f.archivedAt)
+    if (selectedFolderId !== undefined) result = result.filter(f => f.folderId === (selectedFolderId ?? null))
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
       result = result.filter(f => f.fileName.toLowerCase().includes(q) || (f.notes || '').toLowerCase().includes(q))
@@ -453,7 +510,6 @@ export default function DeputyFilesPage() {
 
   if (user?.role !== 'deputy_head') return null
 
-  // Recursive dept tree
   const DeptNode = ({ dept, depth = 0 }: { dept: Department; depth?: number }) => {
     const isExpanded = expandedDepts.has(dept.id)
     const isSelected = selectedEntity?.id === dept.id && selectedEntity.type === 'department'
@@ -527,10 +583,13 @@ export default function DeputyFilesPage() {
             )}
 
             <nav className="flex-1 overflow-y-auto p-2 space-y-0.5 mt-1">
-              {rootDepts.length === 0 && (
+              {!token ? (
                 <p className="text-[11px] text-muted-foreground px-2 py-4 text-center">Завантаження…</p>
+              ) : departments.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground px-2 py-4 text-center">Немає доступних підрозділів</p>
+              ) : (
+                rootDepts.map(dept => <DeptNode key={dept.id} dept={dept} depth={0} />)
               )}
-              {rootDepts.map(dept => <DeptNode key={dept.id} dept={dept} depth={0} />)}
             </nav>
           </aside>
         )}
@@ -542,10 +601,7 @@ export default function DeputyFilesPage() {
         >
           {isDragOver && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-primary/5 pointer-events-none">
-              <div className="text-center">
-                <div className="text-5xl mb-2">📂</div>
-                <p className="text-base font-semibold text-primary">Відпустіть файл</p>
-              </div>
+              <div className="text-center"><div className="text-5xl mb-2">📂</div><p className="text-base font-semibold text-primary">Відпустіть файл</p></div>
             </div>
           )}
 
@@ -555,16 +611,11 @@ export default function DeputyFilesPage() {
               <button onClick={() => setViewMode('tree')} className={`px-3 py-1.5 text-xs transition-colors ${viewMode === 'tree' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-secondary'}`}>🌲 Дерево</button>
               <button onClick={() => setViewMode('all')} className={`px-3 py-1.5 text-xs transition-colors ${viewMode === 'all' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-secondary'}`}>📋 Всі файли</button>
             </div>
-
             <div className="relative flex-1 min-w-36">
               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">🔍</span>
-              <input
-                value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Пошук за назвою або нотаткою…"
-                className="w-full pl-7 pr-3 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
+              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Пошук…"
+                className="w-full pl-7 pr-3 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30" />
             </div>
-
             <select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}
               className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none">
               <option value="date_desc">Нові спочатку</option>
@@ -572,23 +623,20 @@ export default function DeputyFilesPage() {
               <option value="name">За назвою</option>
               <option value="size">За розміром</option>
             </select>
-
             <button onClick={() => setShowArchived(p => !p)}
               className={`px-3 py-1.5 rounded-lg text-xs transition-colors border ${showArchived ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-secondary'}`}>
               📦 Архів
             </button>
-
             <button onClick={() => setRemindersModal(true)} className="px-3 py-1.5 rounded-lg text-xs border border-border text-muted-foreground hover:bg-secondary transition-colors">
               ⏰{upcomingReminders.length > 0 && <span className="ml-1 text-amber-500 font-semibold">{upcomingReminders.length}</span>}
             </button>
-
             {(selectedEntity || viewMode === 'all') && (
-              <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
-                className="ml-auto px-4 py-1.5 rounded-lg bg-primary text-white text-xs font-medium disabled:opacity-50 hover:bg-primary/90 transition-colors shrink-0">
-                {uploading ? '⏳' : '+ Завантажити'}
+              <button onClick={() => fileInputRef.current?.click()}
+                className="ml-auto px-4 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors shrink-0">
+                + Завантажити
               </button>
             )}
-
+            {/* Tag filter */}
             <div className="w-full flex gap-1.5 flex-wrap pt-0.5">
               <button onClick={() => setActiveTag(null)}
                 className={`px-2.5 py-0.5 rounded-full text-[11px] transition-colors ${!activeTag ? 'bg-primary text-white' : 'bg-secondary text-muted-foreground hover:bg-secondary/70'}`}>
@@ -596,19 +644,67 @@ export default function DeputyFilesPage() {
               </button>
               {TAGS.map(tag => (
                 <button key={tag} onClick={() => setActiveTag(activeTag === tag ? null : tag)}
-                  className={`px-2.5 py-0.5 rounded-full text-[11px] transition-colors ${activeTag === tag ? 'ring-2 ring-primary ' : ''} ${TAG_COLORS[tag]}`}>
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] transition-colors border-2 ${activeTag === tag ? 'border-primary' : 'border-transparent'} ${TAG_COLORS[tag]}`}>
                   {tag}
                 </button>
               ))}
             </div>
           </div>
 
+          {/* Entity header + folder bar */}
           {viewMode === 'tree' && selectedEntity && (
-            <div className="px-4 py-2 border-b border-border bg-card/50 flex items-center gap-2">
-              <span className="text-sm font-medium text-foreground truncate">
-                {selectedEntity.type === 'department' ? '📁' : '👤'} {selectedEntity.label}
-              </span>
-              <span className="text-xs text-muted-foreground ml-auto">{currentFiles.length} файлів</span>
+            <div className="border-b border-border bg-card/50">
+              <div className="px-4 py-2 flex items-center gap-2">
+                <span className="text-sm font-medium text-foreground truncate">
+                  {selectedEntity.type === 'department' ? '📁' : '👤'} {selectedEntity.label}
+                </span>
+                <span className="text-xs text-muted-foreground ml-auto">{currentFiles.length} файлів</span>
+              </div>
+              <div className="px-4 pb-2 flex items-center gap-2 flex-wrap">
+                <button onClick={() => setSelectedFolderId(undefined)}
+                  className={`px-3 py-1 rounded-lg text-xs transition-colors ${selectedFolderId === undefined ? 'bg-primary text-white' : 'bg-secondary text-muted-foreground hover:bg-secondary/70'}`}>
+                  Всі
+                </button>
+                <button onClick={() => setSelectedFolderId(null)}
+                  className={`px-3 py-1 rounded-lg text-xs transition-colors ${selectedFolderId === null ? 'bg-primary text-white' : 'bg-secondary text-muted-foreground hover:bg-secondary/70'}`}>
+                  Без папки
+                </button>
+                {folders.map(f => (
+                  <div key={f.id} className="flex items-center gap-0.5 group">
+                    {renamingFolderId === f.id ? (
+                      <form onSubmit={e => { e.preventDefault(); handleRenameFolder(f.id) }} className="flex gap-1">
+                        <input value={renameFolderName} onChange={e => setRenameFolderName(e.target.value)} autoFocus
+                          className="w-28 text-xs rounded-lg border border-border px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                          onBlur={() => setRenamingFolderId(null)} />
+                        <button type="submit" className="text-xs text-primary">✓</button>
+                      </form>
+                    ) : (
+                      <>
+                        <button onClick={() => setSelectedFolderId(f.id)}
+                          className={`px-3 py-1 rounded-lg text-xs transition-colors ${selectedFolderId === f.id ? 'bg-primary text-white' : 'bg-secondary text-muted-foreground hover:bg-secondary/70'}`}>
+                          📁 {f.name}
+                        </button>
+                        <button onClick={() => { setRenamingFolderId(f.id); setRenameFolderName(f.name) }}
+                          className="opacity-0 group-hover:opacity-100 text-[11px] text-muted-foreground hover:text-foreground px-0.5 transition-opacity">✎</button>
+                        <button onClick={() => handleDeleteFolder(f.id)}
+                          className="opacity-0 group-hover:opacity-100 text-[11px] text-destructive hover:text-destructive/80 px-0.5 transition-opacity">✕</button>
+                      </>
+                    )}
+                  </div>
+                ))}
+                {creatingFolder ? (
+                  <form onSubmit={e => { e.preventDefault(); handleCreateFolder() }} className="flex gap-1">
+                    <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Назва папки…" autoFocus
+                      className="w-32 text-xs rounded-lg border border-border px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary"
+                      onBlur={() => setCreatingFolder(false)} />
+                    <button type="submit" className="text-xs text-primary font-medium">+ Створити</button>
+                  </form>
+                ) : (
+                  <button onClick={() => setCreatingFolder(true)} className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg hover:bg-secondary transition-colors">
+                    + Папка
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -628,12 +724,22 @@ export default function DeputyFilesPage() {
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                 {currentFiles.map(file => (
-                  <FileCard key={file.id} file={file} token={token || ''}
+                  <FileCard key={file.id} file={file} token={token || ''} folders={folders}
                     onOpen={() => openViewer(file)}
                     onPin={() => toggleFilePin(file.id)}
                     onArchive={() => toggleFileArchive(file.id)}
                     onNewVersion={() => { setVersionTargetId(file.id); versionInputRef.current?.click() }}
                     onVersions={() => openVersions(file)}
+                    onRename={() => { setRenamingFileId(file.id); setRenameFileName(file.fileName) }}
+                    onMove={async (folderId) => {
+                      if (!token) return
+                      await fetch(`/api/v1/deputy-files/${file.id}/move`, {
+                        method: 'PATCH',
+                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ folderId }),
+                      })
+                      await refreshCurrentView()
+                    }}
                     onDelete={() => setConfirmDeleteId(file.id)}
                   />
                 ))}
@@ -649,6 +755,66 @@ export default function DeputyFilesPage() {
       <input ref={versionInputRef} type="file" className="hidden"
         accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.avi,.mkv,.webm"
         onChange={handleVersionInput} />
+
+      {/* ── Upload modal ── */}
+      {pendingFile && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" style={{ animation: 'fadeIn 0.15s ease' }}>
+          <div className="w-full max-w-md rounded-2xl bg-card border border-border shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <h3 className="font-semibold text-foreground">Завантажити файл</h3>
+              <button onClick={() => setPendingFile(null)} className="text-muted-foreground hover:text-foreground text-xl">✕</button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">Назва файлу</label>
+                <input value={uploadMeta.fileName} onChange={e => setUploadMeta(m => ({ ...m, fileName: e.target.value }))}
+                  className="w-full rounded-xl border border-border px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30" />
+              </div>
+              {folders.length > 0 && (
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground block mb-1">Папка</label>
+                  <select value={uploadMeta.folderId} onChange={e => setUploadMeta(m => ({ ...m, folderId: e.target.value }))}
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none">
+                    <option value="">Без папки</option>
+                    {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1.5">Тип документа</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {TAGS.map(tag => (
+                    <button key={tag}
+                      onClick={() => setUploadMeta(m => ({
+                        ...m, tags: m.tags.includes(tag) ? m.tags.filter(t => t !== tag) : [...m.tags, tag],
+                      }))}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border-2 ${uploadMeta.tags.includes(tag) ? 'border-primary' : 'border-transparent'} ${TAG_COLORS[tag]}`}>
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">Нотатка</label>
+                <textarea value={uploadMeta.notes} onChange={e => setUploadMeta(m => ({ ...m, notes: e.target.value }))} rows={2}
+                  className="w-full rounded-xl border border-border px-3 py-2 text-sm text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="Необов'язково…" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">Нагадати</label>
+                <input type="datetime-local" value={uploadMeta.reminderAt} onChange={e => setUploadMeta(m => ({ ...m, reminderAt: e.target.value }))}
+                  className="w-full rounded-xl border border-border px-3 py-2 text-sm text-foreground focus:outline-none" />
+              </div>
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              <button onClick={confirmUpload} disabled={uploading}
+                className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-medium text-white disabled:opacity-60">
+                {uploading ? 'Завантаження…' : '⬆ Завантажити'}
+              </button>
+              <button onClick={() => setPendingFile(null)} className="px-4 rounded-xl border border-border text-sm text-muted-foreground">Скасувати</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Viewer ── */}
       {viewer && (
@@ -672,12 +838,10 @@ export default function DeputyFilesPage() {
               <button onClick={closeViewer} className="w-8 h-8 flex items-center justify-center rounded-lg text-white/80 hover:text-white hover:bg-white/10 ml-1">✕</button>
             </div>
           </div>
-
           <div className="flex-1 flex min-h-0">
             <div className="flex-1 overflow-hidden flex items-center justify-center"
               style={{ cursor: viewer.mimeType.startsWith('image/') ? (dragging ? 'grabbing' : 'grab') : 'default' }}
-              onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
-              onWheel={onWheelZoom}>
+              onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onWheel={onWheelZoom}>
               {!viewer.blobUrl ? (
                 <div className="flex flex-col items-center gap-3">
                   <div className="w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
@@ -692,12 +856,10 @@ export default function DeputyFilesPage() {
                 <iframe src={viewer.blobUrl} title={viewer.fileName} className="w-full h-full border-none" />
               )}
             </div>
-
             {notePanelOpen && (
               <div className="w-72 shrink-0 border-l border-white/10 bg-black/40 flex flex-col p-4 gap-3" style={{ animation: 'slideLeft 0.2s ease' }}>
                 <p className="text-white/60 text-xs font-semibold uppercase tracking-wide">Нотатка</p>
-                <textarea value={viewerNotes} onChange={e => setViewerNotes(e.target.value)}
-                  placeholder="Додайте нотатку…" rows={5}
+                <textarea value={viewerNotes} onChange={e => setViewerNotes(e.target.value)} placeholder="Додайте нотатку…" rows={5}
                   className="rounded-xl bg-white/10 text-white placeholder:text-white/30 text-sm px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-white/30" />
                 <div>
                   <p className="text-white/50 text-xs mb-1">Нагадати</p>
@@ -722,6 +884,23 @@ export default function DeputyFilesPage() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Rename file modal ── */}
+      {renamingFileId && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="w-80 rounded-2xl bg-card border border-border shadow-2xl p-6">
+            <h3 className="font-semibold text-foreground mb-3">Перейменувати файл</h3>
+            <form onSubmit={e => { e.preventDefault(); handleRenameFile() }}>
+              <input value={renameFileName} onChange={e => setRenameFileName(e.target.value)} autoFocus
+                className="w-full rounded-xl border border-border px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 mb-4" />
+              <div className="flex gap-2">
+                <button type="submit" className="flex-1 rounded-xl bg-primary text-white py-2.5 text-sm font-medium">Зберегти</button>
+                <button type="button" onClick={() => setRenamingFileId(null)} className="flex-1 rounded-xl border border-border text-foreground py-2.5 text-sm">Скасувати</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -818,10 +997,16 @@ export default function DeputyFilesPage() {
   )
 }
 
-function FileCard({ file, token, onOpen, onPin, onArchive, onNewVersion, onVersions, onDelete }: {
-  file: DeputyFile; token: string
+// ── FileCard ───────────────────────────────────────────────────────────────────
+
+function FileCard({
+  file, token, folders,
+  onOpen, onPin, onArchive, onNewVersion, onVersions, onRename, onMove, onDelete,
+}: {
+  file: DeputyFile; token: string; folders: DeputyFolder[]
   onOpen: () => void; onPin: () => void; onArchive: () => void
-  onNewVersion: () => void; onVersions: () => void; onDelete: () => void
+  onNewVersion: () => void; onVersions: () => void; onRename: () => void
+  onMove: (folderId: string | null) => void; onDelete: () => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -859,11 +1044,22 @@ function FileCard({ file, token, onOpen, onPin, onArchive, onNewVersion, onVersi
         <div className="relative flex-1">
           <button onClick={() => setMenuOpen(p => !p)} className="w-full py-1.5 text-[11px] text-muted-foreground hover:bg-secondary transition-colors">⋯</button>
           {menuOpen && (
-            <div className="absolute bottom-full right-0 mb-1 w-44 rounded-xl bg-popover border border-border shadow-xl z-10 overflow-hidden">
+            <div className="absolute bottom-full right-0 mb-1 w-48 rounded-xl bg-popover border border-border shadow-xl z-10 overflow-hidden">
+              <button onClick={() => { onRename(); setMenuOpen(false) }} className="w-full px-3 py-2 text-xs text-left text-foreground hover:bg-secondary transition-colors">✎ Перейменувати</button>
               <button onClick={() => { onVersions(); setMenuOpen(false) }} className="w-full px-3 py-2 text-xs text-left text-foreground hover:bg-secondary transition-colors">🔄 Версії</button>
               <button onClick={() => { onNewVersion(); setMenuOpen(false) }} className="w-full px-3 py-2 text-xs text-left text-foreground hover:bg-secondary transition-colors">⬆ Нова версія</button>
-              <button onClick={() => { onArchive(); setMenuOpen(false) }} className="w-full px-3 py-2 text-xs text-left text-foreground hover:bg-secondary transition-colors">{file.archivedAt ? '📤 Розархівувати' : '📦 Архівувати'}</button>
+              {folders.length > 0 && (
+                <>
+                  <div className="border-t border-border" />
+                  <p className="px-3 pt-1.5 pb-0.5 text-[10px] text-muted-foreground font-medium">Перемістити до:</p>
+                  <button onClick={() => { onMove(null); setMenuOpen(false) }} className="w-full px-3 py-1.5 text-xs text-left text-foreground hover:bg-secondary transition-colors">📭 Без папки</button>
+                  {folders.map(f => (
+                    <button key={f.id} onClick={() => { onMove(f.id); setMenuOpen(false) }} className="w-full px-3 py-1.5 text-xs text-left text-foreground hover:bg-secondary transition-colors truncate">📁 {f.name}</button>
+                  ))}
+                </>
+              )}
               <div className="border-t border-border" />
+              <button onClick={() => { onArchive(); setMenuOpen(false) }} className="w-full px-3 py-2 text-xs text-left text-foreground hover:bg-secondary transition-colors">{file.archivedAt ? '📤 Розархівувати' : '📦 Архівувати'}</button>
               <button onClick={() => { onDelete(); setMenuOpen(false) }} className="w-full px-3 py-2 text-xs text-left text-destructive hover:bg-secondary transition-colors">🗑 Видалити</button>
             </div>
           )}
