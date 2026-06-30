@@ -150,10 +150,11 @@ model User {
   sessions     Session[]
   notifications Notification[]
   auditLogs    AuditLog[]
-  
+
   managedDepartments   Department[] @relation("DepartmentManager")
   clerkedDepartments  Department[] @relation("DepartmentClerk")
   directedDepartments  Department[] @relation("DepartmentDirector")
+  ledManagements       Management[] @relation("ManagementHead")
   approvedReports     Report[]    @relation("ReportApprover")
   reportVersions      ReportVersion[]
   reportStatusHistories ReportStatusHistory[]
@@ -172,31 +173,52 @@ model User {
 }
 
 model Department {
-  id           String  @id @default(uuid())
+  id            String  @id @default(uuid())
+  name          String
+  nameUk        String
+  code          String  @unique
+  parentId      String?
+  managerId     String?
+  clerkId       String?
+  directorId    String?
+  divisionTag   String?
+  managementId  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  parent     Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children   Department[] @relation("DepartmentHierarchy")
+  manager    User?        @relation("DepartmentManager", fields: [managerId], references: [id])
+  clerk      User?        @relation("DepartmentClerk", fields: [clerkId], references: [id])
+  director   User?        @relation("DepartmentDirector", fields: [directorId], references: [id])
+  management Management? @relation("SectionManagement", fields: [managementId], references: [id], onDelete: SetNull)
+
+  users        User[]
+  positions    Position[]
+  reports      Report[]
+  tasks        Task[]
+  reportTemplate DepartmentReportTemplate?
+  managements  Management[] @relation("DeptManagements")
+
+  @@index([managementId])
+  @@map("departments")
+}
+
+model Management {
+  id           String   @id @default(uuid())
   name         String
   nameUk       String
-  code         String  @unique
-  parentId     String?
-  managerId    String?
-  clerkId      String?
-  directorId   String?
-  divisionTag  String?
+  departmentId String
+  headId       String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  parent    Department? @relation("DepartmentHierarchy", fields: [parentId], references: [id])
-  children  Department[] @relation("DepartmentHierarchy")
-  manager   User?        @relation("DepartmentManager", fields: [managerId], references: [id])
-  clerk     User?        @relation("DepartmentClerk", fields: [clerkId], references: [id])
-  director  User?        @relation("DepartmentDirector", fields: [directorId], references: [id])
+  department Department   @relation("DeptManagements", fields: [departmentId], references: [id], onDelete: Cascade)
+  head       User?        @relation("ManagementHead", fields: [headId], references: [id])
+  sections   Department[] @relation("SectionManagement")
 
-  users     User[]
-  positions Position[]
-  reports   Report[]
-  tasks     Task[]
-  reportTemplate DepartmentReportTemplate?
-
-  @@map("departments")
+  @@index([departmentId])
+  @@map("managements")
 }
 
 model Position {

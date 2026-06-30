@@ -46,6 +46,7 @@ export class DepartmentsService {
       code: d.code,
       parentId: d.parentId,
       divisionTag: d.divisionTag ?? null,
+      managementId: (d as any).managementId ?? null,
       parent: d.parent ? { id: d.parent.id, name: d.parent.name } : null,
       manager: d.manager,
       clerk: d.clerk,

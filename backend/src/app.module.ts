@@ -19,6 +19,7 @@ import { SearchModule } from './domains/search/search.module';
 import { HealthModule } from './health/health.module';
 import { SharedModule } from './shared/shared.module';
 import { DeputyFilesModule } from './domains/deputy-files/deputy-files.module';
+import { ManagementsModule } from './domains/users/managements/managements.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { DeputyFilesModule } from './domains/deputy-files/deputy-files.module';
     AttachmentsModule,
     SearchModule,
     DeputyFilesModule,
+    ManagementsModule,
   ],
 })
 export class AppModule {}

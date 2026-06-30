@@ -1,1393 +1,918 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useAuthStore } from '@/store/auth-store'
-import { getRoleLabel } from '@/lib/utils'
 import { extractApiErrorMessage } from '@/lib/error-message'
 
-type Department = {
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type RootDept = {
   id: string
   name: string
   nameUk: string
   code: string
-  parentId?: string | null
-  divisionTag?: string | null
+  usersCount: number
+  director?: { id: string; firstName: string; lastName: string } | null
+  manager?: { id: string; firstName: string; lastName: string } | null
+  clerk?: { id: string; firstName: string; lastName: string } | null
+}
+
+type Management = {
+  id: string
+  name: string
+  nameUk: string
+  departmentId: string
+  headId: string | null
+  head?: { id: string; firstName: string; lastName: string } | null
+}
+
+type Section = {
+  id: string
+  name: string
+  nameUk: string
+  code: string
+  parentId: string
+  managementId: string | null
   usersCount: number
   manager?: { id: string; firstName: string; lastName: string } | null
   clerk?: { id: string; firstName: string; lastName: string } | null
-  director?: { id: string; firstName: string; lastName: string } | null
 }
 
-type TeamUser = {
+type OrgUser = {
   id: string
   firstName: string
   lastName: string
   email: string
+  employeeId: string
   role: string
-  isSecondary?: boolean
-  secondaryDepartmentIds?: string[]
-  department?: {
-    id: string
-    nameUk?: string
-    code?: string
-  } | null
+  isActive: boolean
+  departmentId: string | null
+  position?: { title: string; titleUk?: string } | null
 }
 
-type UserOption = {
-  id: string
-  firstName: string
-  lastName: string
-  role: string
-  departmentId?: string | null
-  scopeDepartmentIds?: string[]
-  secondaryDepartmentIds?: string[]
+type SelectedNode =
+  | { type: 'dept'; id: string }
+  | { type: 'management'; id: string }
+  | { type: 'section'; id: string }
+
+const ROLE_LABELS: Record<string, string> = {
+  specialist: 'Спеціаліст',
+  manager: 'Керівник відділу',
+  clerk: 'Діловод',
+  director: 'Директор',
+  deputy_director: 'Заступник директора',
+  deputy_head: 'Заступник голови',
+  lawyer: 'Юрист',
+  accountant: 'Бухгалтер',
+  hr: 'HR',
+  admin: 'Адміністратор',
 }
+
+const ALL_ROLES = ['specialist', 'manager', 'clerk', 'director', 'deputy_director', 'deputy_head', 'lawyer', 'accountant', 'hr', 'admin'] as const
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export default function DepartmentsPage() {
   const { user } = useAuthStore()
-  const [departments, setDepartments] = useState<Department[]>([])
-  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('')
-  const [team, setTeam] = useState<TeamUser[]>([])
-  const [loading, setLoading] = useState(true)
-  const [newRootDepartmentName, setNewRootDepartmentName] = useState('')
-  const [newRootDepartmentCode, setNewRootDepartmentCode] = useState('')
-  const [newRootDepartmentDirectorId, setNewRootDepartmentDirectorId] = useState('')
-  const [newSectionName, setNewSectionName] = useState('')
-  const [newSectionCode, setNewSectionCode] = useState('')
-  const [newSectionParentId, setNewSectionParentId] = useState('')
-  const [newSectionManagerId, setNewSectionManagerId] = useState('')
-  const [newSectionClerkId, setNewSectionClerkId] = useState('')
-  const [newSectionDivisionTag, setNewSectionDivisionTag] = useState('')
-  const [newManagementName, setNewManagementName] = useState('')
-  const [selectedManagementTag, setSelectedManagementTag] = useState('')
-  const [managementSourceTag, setManagementSourceTag] = useState('')
-  const [managementDepartmentIds, setManagementDepartmentIds] = useState<string[]>([])
-  const [managementDeputyIds, setManagementDeputyIds] = useState<string[]>([])
-  const [savingManagement, setSavingManagement] = useState(false)
-  const [editingDivisionTag, setEditingDivisionTag] = useState('')
-  const [usersOptions, setUsersOptions] = useState<UserOption[]>([])
-  const [selectedDirectorId, setSelectedDirectorId] = useState('')
-  const [selectedManagerId, setSelectedManagerId] = useState('')
-  const [selectedClerkId, setSelectedClerkId] = useState('')
-  const [savingLeads, setSavingLeads] = useState(false)
-  const [secondaryUserId, setSecondaryUserId] = useState('')
-  const [addingSecondary, setAddingSecondary] = useState(false)
-  const [newUserEmail, setNewUserEmail] = useState('')
-  const [newUserFirstName, setNewUserFirstName] = useState('')
-  const [newUserLastName, setNewUserLastName] = useState('')
-  const [newUserRole, setNewUserRole] = useState<
-    'specialist' | 'manager' | 'clerk' | 'director' | 'deputy_director' | 'deputy_head' | 'lawyer' | 'accountant' | 'hr'
-  >('specialist')
-  const [selectedExistingUserId, setSelectedExistingUserId] = useState('')
-  const [assigningExistingUser, setAssigningExistingUser] = useState(false)
-  const [expandedDepartmentIds, setExpandedDepartmentIds] = useState<string[]>([])
-  const [selectedDeputyDirectorIds, setSelectedDeputyDirectorIds] = useState<string[]>([])
-  const [selectedDeputyHeadId, setSelectedDeputyHeadId] = useState('')
-  const [savingDeputyScope, setSavingDeputyScope] = useState(false)
-  const [actionError, setActionError] = useState('')
-  const [actionSuccess, setActionSuccess] = useState('')
-  const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
-
-  useEffect(() => {
-    if (!actionSuccess) return
-    const t = setTimeout(() => setActionSuccess(''), 3000)
-    return () => clearTimeout(t)
-  }, [actionSuccess])
+  const token = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   const isAdmin = user?.role === 'admin'
   const isDirector = user?.role === 'director' || user?.role === 'deputy_director'
-  const isScopedReader = ['specialist', 'manager', 'clerk', 'director', 'deputy_director', 'lawyer', 'accountant', 'hr'].includes(user?.role || '')
-  const visibleDepartments = useMemo(() => {
-    if (!isScopedReader || !user?.department?.id) return departments
-    const current = departments.find((d) => d.id === user.department?.id)
-    const rootId = current?.parentId || current?.id || user.department.id
-    return departments.filter((d) => d.id === rootId || d.parentId === rootId)
-  }, [departments, isScopedReader, user?.department?.id])
-  const rootDepartments = useMemo(
-    () => visibleDepartments.filter((department) => !department.parentId),
-    [visibleDepartments],
-  )
-  const childDepartmentsMap = useMemo(() => {
-    const map = new Map<string, Department[]>()
-    visibleDepartments.forEach((department) => {
-      if (!department.parentId) return
-      const current = map.get(department.parentId) || []
-      current.push(department)
-      map.set(department.parentId, current)
-    })
-    for (const [key, items] of map.entries()) {
-      map.set(key, [...items].sort((a, b) => (a.nameUk || a.name).localeCompare((b.nameUk || b.name), 'uk')))
-    }
-    return map
-  }, [visibleDepartments])
+  const canManage = isAdmin || isDirector
 
-  // Групування дочірніх відділів по divisionTag (для відображення всередині департаменту)
-  const groupChildrenByDivision = (children: Department[]): { tag: string | null; items: Department[] }[] => {
-    const groups = new Map<string, Department[]>()
-    for (const child of children) {
-      const tag = child.divisionTag || ''
-      const existing = groups.get(tag) || []
-      existing.push(child)
-      groups.set(tag, existing)
-    }
-    // Відділи без управління йдуть останніми
-    const result: { tag: string | null; items: Department[] }[] = []
-    for (const [tag, items] of groups.entries()) {
-      if (tag) result.push({ tag, items })
-    }
-    result.sort((a, b) => (a.tag || '').localeCompare(b.tag || '', 'uk'))
-    const untagged = groups.get('') || []
-    if (untagged.length > 0) result.push({ tag: null, items: untagged })
-    return result
-  }
-  const selectedRootDepartmentId = useMemo(() => {
-    if (!selectedDepartmentId) return ''
-    const current = departments.find((d) => d.id === selectedDepartmentId)
-    return current?.parentId || current?.id || ''
-  }, [departments, selectedDepartmentId])
-  const selectedRootDepartment = useMemo(
-    () => departments.find((d) => d.id === selectedRootDepartmentId),
-    [departments, selectedRootDepartmentId],
-  )
-  const deputyDirectorCandidates = useMemo(() => {
-    if (!selectedRootDepartmentId) return []
-    const rootAndChildren = new Set<string>([
-      selectedRootDepartmentId,
-      ...(childDepartmentsMap.get(selectedRootDepartmentId) || []).map((d) => d.id),
-    ])
-    return usersOptions
-      .filter((candidate) => {
-        if (!candidate.departmentId || !rootAndChildren.has(candidate.departmentId)) return false
-        return !['admin', 'director', 'deputy_head'].includes(candidate.role)
-      })
-      .sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, 'uk'))
-  }, [selectedRootDepartmentId, childDepartmentsMap, usersOptions])
-  const managementTags = useMemo(() => {
-    const children = childDepartmentsMap.get(selectedRootDepartmentId) || []
-    const tags = Array.from(new Set(children.map((d) => (d.divisionTag || '').trim()).filter(Boolean)))
-    return tags.sort((a, b) => a.localeCompare(b, 'uk'))
-  }, [childDepartmentsMap, selectedRootDepartmentId])
+  // ── Data ─────────────────────────────────────────────────────────────────
 
-  const loadDepartments = async () => {
-    if (!accessToken) return
+  const [allDepts, setAllDepts] = useState<(RootDept | Section)[]>([])
+  const [managements, setManagements] = useState<Management[]>([])
+  const [allUsers, setAllUsers] = useState<OrgUser[]>([])
+  const [members, setMembers] = useState<OrgUser[]>([])
+
+  const [loading, setLoading] = useState(true)
+  const [membersLoading, setMembersLoading] = useState(false)
+
+  // ── Selection / tree ──────────────────────────────────────────────────────
+
+  const [selected, setSelected] = useState<SelectedNode | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  // ── Modals ────────────────────────────────────────────────────────────────
+
+  type ModalState =
+    | { type: 'create-dept' }
+    | { type: 'create-management'; parentDeptId: string }
+    | { type: 'create-section'; parentDeptId: string; managementId?: string | null }
+    | { type: 'create-user'; departmentId?: string | null }
+    | { type: 'edit-dept'; id: string }
+    | { type: 'edit-management'; id: string }
+    | { type: 'edit-section'; id: string }
+    | { type: 'edit-user'; id: string }
+
+  const [modal, setModal] = useState<ModalState | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  // ── Create Dept form ──────────────────────────────────────────────────────
+
+  const [cf, setCf] = useState({
+    // dept
+    deptName: '', deptCode: '', deptDirectorId: '',
+    // management
+    mgmtName: '',
+    // section
+    sectionName: '', sectionCode: '', sectionManagerId: '', sectionClerkId: '',
+    // user
+    uFirstName: '', uLastName: '', uPatronymic: '', uEmail: '', uEmployeeId: '',
+    uPassword: '', uRole: 'specialist' as string, uDeptId: '', uPositionTitle: '',
+  })
+
+  const setCfField = (key: keyof typeof cf, value: string) => setCf(p => ({ ...p, [key]: value }))
+
+  // ── Load helpers ──────────────────────────────────────────────────────────
+
+  const authHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+
+  const loadDepts = useCallback(async () => {
+    if (!token) return
     setLoading(true)
-    const resp = await fetch('/api/v1/departments', { headers: { Authorization: `Bearer ${accessToken}` } })
-    if (!resp.ok) {
-      setLoading(false)
-      return
-    }
-    const data = await resp.json()
-    setDepartments(data || [])
-
-    const scopedVisible = isScopedReader && user?.department?.id
-      ? (data || []).filter((d: Department) => {
-          const current = (data || []).find((item: Department) => item.id === user.department?.id)
-          const rootId = current?.parentId || current?.id || user.department?.id
-          return d.id === rootId || d.parentId === rootId
-        })
-      : data || []
-    const defaultDeptId = isScopedReader
-      ? (user?.department?.id && scopedVisible.some((d: Department) => d.id === user?.department?.id)
-          ? user?.department?.id
-          : scopedVisible?.[0]?.id || '')
-      : (data?.[0]?.id || '')
-    setSelectedDepartmentId(defaultDeptId)
+    const r = await fetch('/api/v1/departments', { headers: authHeaders })
+    if (r.ok) setAllDepts(await r.json())
     setLoading(false)
-  }
+  }, [token])
 
-  const loadUsers = async () => {
-    if (!accessToken || (!isAdmin && !isDirector)) return
-    const resp = await fetch('/api/v1/users/assignees', { headers: { Authorization: `Bearer ${accessToken}` } })
-    if (!resp.ok) return
-    const data = await resp.json()
-    const list = Array.isArray(data) ? data : (data?.data || [])
-    setUsersOptions(list.map((u: any) => ({
-      id: u.id,
-      firstName: u.firstName,
-      lastName: u.lastName,
-      role: u.role,
-      departmentId: u.department?.id || null,
-      scopeDepartmentIds: Array.isArray(u.scopeDepartmentIds) ? u.scopeDepartmentIds : [],
-      secondaryDepartmentIds: Array.isArray(u.secondaryDepartmentIds) ? u.secondaryDepartmentIds : [],
-    })))
-  }
-
-  const loadTeam = async (departmentId: string) => {
-    if (!accessToken || !departmentId) return
-    const resp = await fetch(`/api/v1/departments/${departmentId}/team`, { headers: { Authorization: `Bearer ${accessToken}` } })
-    if (!resp.ok) return
-    const data = await resp.json()
-    setTeam(data || [])
-  }
-
-  useEffect(() => {
-    loadDepartments()
-    loadUsers()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, user?.id])
-
-  useEffect(() => {
-    if (selectedDepartmentId) {
-      loadTeam(selectedDepartmentId)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDepartmentId, accessToken])
-
-  const selectedDepartment = useMemo(
-    () => departments.find((d) => d.id === selectedDepartmentId),
-    [departments, selectedDepartmentId],
-  )
-
-  // All active users sorted by last name — role filter removed so any person can be assigned any position
-  const allActiveUsers = useMemo(
-    () => [...usersOptions].sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, 'uk')),
-    [usersOptions],
-  )
-  const directors = allActiveUsers
-  const managers = allActiveUsers
-  const clerks = allActiveUsers
-  const deputyDirectors = useMemo(
-    () => usersOptions.filter((userOption) => userOption.role === 'deputy_director'),
-    [usersOptions],
-  )
-  const deputyHeads = useMemo(
-    () => usersOptions.filter((userOption) => userOption.role === 'deputy_head'),
-    [usersOptions],
-  )
-  const transferableUsers = useMemo(() => {
-    if (!selectedDepartmentId) return []
-    const teamIds = new Set(team.map((member) => member.id))
-    return usersOptions.filter((u) =>
-      u.role !== 'admin' &&
-      u.role !== 'deputy_head' &&
-      u.role !== 'director' &&
-      !teamIds.has(u.id) &&
-      u.departmentId !== selectedDepartmentId,
-    )
-  }, [usersOptions, team, selectedDepartmentId])
-
-  useEffect(() => {
-    if (!selectedDepartment) return
-    setSelectedManagerId(selectedDepartment.manager?.id || '')
-    setSelectedClerkId(selectedDepartment.clerk?.id || '')
-    setEditingDivisionTag(selectedDepartment.divisionTag || '')
-  }, [selectedDepartment])
-
-  useEffect(() => {
-    if (!selectedRootDepartment) return
-    setSelectedDirectorId(selectedRootDepartment.director?.id || '')
-  }, [selectedRootDepartment])
-
-  useEffect(() => {
-    if (!isAdmin && !isDirector) return
-    if (isDirector) {
-      setNewSectionParentId(user?.department?.id || '')
-      return
-    }
-    if (selectedRootDepartmentId) {
-      setNewSectionParentId(selectedRootDepartmentId)
-      return
-    }
-    if (rootDepartments.length > 0) {
-      setNewSectionParentId(rootDepartments[0].id)
-    }
-  }, [isAdmin, isDirector, selectedRootDepartmentId, rootDepartments, user?.department?.id])
-
-  useEffect(() => {
-    if (!selectedRootDepartmentId) {
-      setSelectedDeputyDirectorIds([])
-      setSelectedDeputyHeadId('')
-      return
-    }
-    const rootAndChildren = new Set<string>([
-      selectedRootDepartmentId,
-      ...(childDepartmentsMap.get(selectedRootDepartmentId) || []).map((d) => d.id),
-    ])
-    const scopedDeputies = usersOptions
-      .filter((u) => u.role === 'deputy_director')
-      .filter((d) => {
-        const scope = Array.isArray(d.scopeDepartmentIds) ? d.scopeDepartmentIds : []
-        return scope.some((id) => rootAndChildren.has(id))
+  const loadManagements = useCallback(async (departmentId?: string) => {
+    if (!token) return
+    const url = departmentId ? `/api/v1/managements?departmentId=${departmentId}` : '/api/v1/managements'
+    const r = await fetch(url, { headers: authHeaders })
+    if (r.ok) {
+      const data = await r.json()
+      setManagements(prev => {
+        const withoutThisDept = departmentId ? prev.filter(m => m.departmentId !== departmentId) : []
+        return [...withoutThisDept, ...data]
       })
-      .map((d) => d.id)
-    setSelectedDeputyDirectorIds(scopedDeputies)
+    }
+  }, [token])
 
-    const deputyHeads = usersOptions.filter((u) => u.role === 'deputy_head')
-    const scopedHead = deputyHeads.find((u) => {
-      const scope = Array.isArray(u.scopeDepartmentIds) ? u.scopeDepartmentIds : []
-      return scope.some((id) => rootAndChildren.has(id))
-    })
-    setSelectedDeputyHeadId(scopedHead?.id || '')
-  }, [selectedRootDepartmentId, childDepartmentsMap, usersOptions])
+  const loadUsers = useCallback(async () => {
+    if (!token) return
+    const r = await fetch('/api/v1/users?limit=500', { headers: authHeaders })
+    if (r.ok) {
+      const data = await r.json()
+      setAllUsers(Array.isArray(data) ? data : data?.data || [])
+    }
+  }, [token])
+
+  const loadMembers = useCallback(async (departmentId: string) => {
+    if (!token) return
+    setMembersLoading(true)
+    const r = await fetch(`/api/v1/departments/${departmentId}/team`, { headers: authHeaders })
+    if (r.ok) {
+      const data = await r.json()
+      setMembers(Array.isArray(data) ? data : data?.members || [])
+    }
+    setMembersLoading(false)
+  }, [token])
+
+  useEffect(() => { loadDepts(); loadUsers() }, [loadDepts, loadUsers])
 
   useEffect(() => {
-    setNewManagementName('')
-    setSelectedManagementTag('')
-    setManagementSourceTag('')
-    setManagementDepartmentIds([])
-    setManagementDeputyIds([])
-  }, [selectedRootDepartmentId])
+    if (!success) return
+    const t = setTimeout(() => setSuccess(''), 3000)
+    return () => clearTimeout(t)
+  }, [success])
 
-  useEffect(() => {
-    if (!selectedManagementTag) return
-    const children = childDepartmentsMap.get(selectedRootDepartmentId) || []
-    const managementDepartments = children.filter((d) => (d.divisionTag || '').trim() === selectedManagementTag)
-    const depIds = managementDepartments.map((d) => d.id)
-    const depSet = new Set(depIds)
-    const deputies = deputyDirectorCandidates
-      .filter((candidate) => {
-        const scope = Array.isArray(candidate.scopeDepartmentIds) ? candidate.scopeDepartmentIds : []
-        return scope.some((id) => depSet.has(id))
-      })
-      .map((d) => d.id)
+  // ── Expand / select ───────────────────────────────────────────────────────
 
-    setManagementSourceTag(selectedManagementTag)
-    setNewManagementName(selectedManagementTag)
-    setManagementDepartmentIds(depIds)
-    setManagementDeputyIds(deputies)
-  }, [selectedManagementTag, childDepartmentsMap, selectedRootDepartmentId, deputyDirectorCandidates])
-
-  const canManageEmployees = isDirector || isAdmin
-
-  const createRootDepartment = async () => {
-    if (!isAdmin || !accessToken || !newRootDepartmentName.trim() || !newRootDepartmentCode.trim()) return
-    setActionError('')
-    setActionSuccess('')
-    const payload = {
-      name: newRootDepartmentName.trim(),
-      nameUk: newRootDepartmentName.trim(),
-      code: newRootDepartmentCode.trim().toUpperCase(),
-      directorId: newRootDepartmentDirectorId || undefined,
-    }
-    const resp = await fetch('/api/v1/departments', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
+  const toggleExpand = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
     })
-    if (resp.ok) {
-      setNewRootDepartmentName('')
-      setNewRootDepartmentCode('')
-      setNewRootDepartmentDirectorId('')
-      await loadDepartments()
-      setActionSuccess('Департамент створено')
-      return
-    }
-    const err = await resp.json().catch(() => null)
-    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося створити департамент'))
   }
 
-  const createSection = async () => {
-    if ((!isAdmin && !isDirector) || !accessToken || !newSectionName.trim() || !newSectionCode.trim()) return
-    const parentId = isDirector ? (user?.department?.id || '') : newSectionParentId
-    if (!parentId) {
-      setActionError('Спочатку оберіть департамент для створення відділу')
-      return
+  const selectNode = async (node: SelectedNode) => {
+    setSelected(node)
+    if (node.type === 'dept') {
+      if (!expanded.has(node.id)) setExpanded(prev => new Set([...prev, node.id]))
+      await loadManagements(node.id)
     }
-
-    setActionError('')
-    setActionSuccess('')
-    const payload = {
-      name: newSectionName.trim(),
-      nameUk: newSectionName.trim(),
-      code: newSectionCode.trim().toUpperCase(),
-      parentId,
-      directorId: isDirector ? user?.id : undefined,
-      managerId: newSectionManagerId || undefined,
-      clerkId: newSectionClerkId || undefined,
-      divisionTag: newSectionDivisionTag.trim() || undefined,
+    if (node.type === 'section') {
+      await loadMembers(node.id)
     }
-
-    const resp = await fetch('/api/v1/departments', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    })
-    if (resp.ok) {
-      setNewSectionName('')
-      setNewSectionCode('')
-      setNewSectionManagerId('')
-      setNewSectionClerkId('')
-      setNewSectionDivisionTag('')
-      await loadDepartments()
-      setActionSuccess('Відділ створено всередині департаменту')
-      return
+    if (node.type === 'management') {
+      const mgmt = managements.find(m => m.id === node.id)
+      if (mgmt) await loadManagements(mgmt.departmentId)
     }
-    const err = await resp.json().catch(() => null)
-    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося створити відділ'))
   }
 
-  const saveDepartmentLeads = async () => {
-    if ((!isAdmin && !isDirector) || !accessToken || !selectedDepartmentId) return
-    setActionError('')
-    setActionSuccess('')
-    setSavingLeads(true)
-    const payload = {
-      managerId: selectedManagerId || null,
-      clerkId: selectedClerkId || null,
-      divisionTag: editingDivisionTag.trim() || null,
-    }
-    const resp = await fetch(`/api/v1/departments/${selectedDepartmentId}`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    })
-    setSavingLeads(false)
-    if (resp.ok) {
-      await loadDepartments()
-      await loadTeam(selectedDepartmentId)
-      setActionSuccess('Керівника відділу, діловода та управління оновлено')
-      return
-    }
-    const err = await resp.json().catch(() => null)
-    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося оновити керівництво підрозділу'))
-  }
+  // ── Derived data ──────────────────────────────────────────────────────────
 
-  const addEmployee = async () => {
-    if (!canManageEmployees || !accessToken || !selectedDepartmentId) return
-    if (!newUserEmail.trim() || !newUserFirstName.trim() || !newUserLastName.trim()) return
-    setActionError('')
-    setActionSuccess('')
+  const rootDepts = allDepts.filter(d => !(d as Section).parentId) as RootDept[]
+  const sections = allDepts.filter(d => !!(d as Section).parentId) as Section[]
 
-    const payload = {
-      email: newUserEmail.trim(),
-      employeeId: `EMP-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 900 + 100)}`,
-      firstName: newUserFirstName.trim(),
-      lastName: newUserLastName.trim(),
-      role: newUserRole,
-      departmentId: selectedDepartmentId,
-      password: 'ChangeMe123!',
-    }
+  const getSections = (parentId: string, managementId?: string | null) =>
+    managementId === undefined
+      ? sections.filter(s => s.parentId === parentId)
+      : sections.filter(s => s.parentId === parentId && s.managementId === managementId)
 
-    const resp = await fetch('/api/v1/users', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    })
+  const getManagements = (departmentId: string) => managements.filter(m => m.departmentId === departmentId)
 
-    if (resp.ok) {
-      setNewUserEmail('')
-      setNewUserFirstName('')
-      setNewUserLastName('')
-      await loadTeam(selectedDepartmentId)
-      setActionSuccess('Співробітника додано')
-      return
-    }
-    const err = await resp.json().catch(() => null)
-    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося додати співробітника'))
-  }
+  const selectedDept = selected?.type === 'dept' ? rootDepts.find(d => d.id === selected.id) : null
+  const selectedMgmt = selected?.type === 'management' ? managements.find(m => m.id === selected.id) : null
+  const selectedSection = selected?.type === 'section' ? sections.find(s => s.id === selected.id) : null
 
-  const deleteEmployee = async (id: string) => {
-    if (!canManageEmployees || !accessToken) return
-    const resp = await fetch(`/api/v1/users/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-    if (resp.ok) {
-      await loadTeam(selectedDepartmentId)
-      setActionSuccess('Співробітника деактивовано')
-      return
-    }
-    const err = await resp.json().catch(() => null)
-    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося видалити співробітника'))
-  }
+  // ── CRUD ──────────────────────────────────────────────────────────────────
 
-  const resetEmployeePassword = async (id: string, fullName: string) => {
-    if (!isAdmin || !accessToken) return
-    const nextPassword = window.prompt(`Новий пароль для ${fullName} (мінімум 12 символів):`, '')
-    if (!nextPassword) return
-    if (nextPassword.length < 12) {
-      setActionError('Пароль має містити щонайменше 12 символів')
-      return
-    }
-
-    setActionError('')
-    setActionSuccess('')
-    const resp = await fetch(`/api/v1/users/${id}/password`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ password: nextPassword }),
-    })
-
-    if (resp.ok) {
-      setActionSuccess('Пароль користувача змінено')
-      return
-    }
-    const err = await resp.json().catch(() => null)
-    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося змінити пароль'))
-  }
-
-  const assignExistingEmployee = async () => {
-    if (!canManageEmployees || !accessToken || !selectedDepartmentId || !selectedExistingUserId) return
-    setActionError('')
-    setActionSuccess('')
-    setAssigningExistingUser(true)
-    const resp = await fetch(`/api/v1/users/${selectedExistingUserId}`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ departmentId: selectedDepartmentId }),
-    })
-    setAssigningExistingUser(false)
-    if (resp.ok) {
-      setSelectedExistingUserId('')
-      await loadTeam(selectedDepartmentId)
-      await loadDepartments()
-      await loadUsers()
-      setActionSuccess('Співробітника переведено у вибраний підрозділ')
-      return
-    }
-    const err = await resp.json().catch(() => null)
-    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося перевести співробітника'))
-  }
-
-  const addSecondaryDepartment = async () => {
-    if (!canManageEmployees || !accessToken || !selectedDepartmentId || !secondaryUserId) return
-    setActionError('')
-    setActionSuccess('')
-    setAddingSecondary(true)
-    const targetUser = usersOptions.find((u) => u.id === secondaryUserId)
-    const current = Array.isArray(targetUser?.secondaryDepartmentIds) ? targetUser!.secondaryDepartmentIds : []
-    if (current.includes(selectedDepartmentId)) {
-      setAddingSecondary(false)
-      setActionError('Цей співробітник вже прикріплений до підрозділу як сумісник')
-      return
-    }
-    const resp = await fetch(`/api/v1/users/${secondaryUserId}`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ secondaryDepartmentIds: [...current, selectedDepartmentId] }),
-    })
-    setAddingSecondary(false)
-    if (resp.ok) {
-      setSecondaryUserId('')
-      await loadTeam(selectedDepartmentId)
-      await loadUsers()
-      setActionSuccess('Співробітника додано як сумісника')
-      return
-    }
-    const err = await resp.json().catch(() => null)
-    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося додати сумісника'))
-  }
-
-  const removeSecondaryDepartment = async (memberId: string) => {
-    if (!canManageEmployees || !accessToken || !selectedDepartmentId) return
-    setActionError('')
-    const targetUser = usersOptions.find((u) => u.id === memberId)
-    const current = Array.isArray(targetUser?.secondaryDepartmentIds) ? targetUser!.secondaryDepartmentIds : []
-    const resp = await fetch(`/api/v1/users/${memberId}`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ secondaryDepartmentIds: current.filter((id) => id !== selectedDepartmentId) }),
-    })
-    if (resp.ok) {
-      await loadTeam(selectedDepartmentId)
-      await loadUsers()
-      setActionSuccess('Сумісника видалено з підрозділу')
-      return
-    }
-    const err = await resp.json().catch(() => null)
-    setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося видалити сумісника'))
-  }
-
-  const saveDepartmentSupervision = async () => {
-    if (!accessToken || !selectedRootDepartmentId || (!isAdmin && !isDirector)) return
-    setActionError('')
-    setActionSuccess('')
-    setSavingDeputyScope(true)
-
-    const rootChildrenIds = (childDepartmentsMap.get(selectedRootDepartmentId) || []).map((d) => d.id)
-    const scopeIds = Array.from(new Set([selectedRootDepartmentId, ...rootChildrenIds]))
-
-    const updateDirectorResp = await fetch(`/api/v1/departments/${selectedRootDepartmentId}`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        directorId: isDirector ? user?.id : (selectedDirectorId || null),
-      }),
-    })
-
-    if (!updateDirectorResp.ok) {
-      setSavingDeputyScope(false)
-      const err = await updateDirectorResp.json().catch(() => null)
-      setActionError(extractApiErrorMessage(updateDirectorResp.status, err, 'Не вдалося оновити директора департаменту'))
-      return
-    }
-
-    const deputyDirectorSet = new Set(selectedDeputyDirectorIds)
-    const usersById = new Map(usersOptions.map((option) => [option.id, option]))
-    const deputyCandidateIds = new Set<string>([
-      ...deputyDirectorCandidates.map((candidate) => candidate.id),
-      ...selectedDeputyDirectorIds,
-    ])
-    const deputyUpdates = Array.from(deputyCandidateIds)
-      .map((id) => usersById.get(id))
-      .filter(Boolean)
-      .map((candidate) => {
-        const selected = deputyDirectorSet.has(candidate!.id)
-        const newRole = selected ? 'deputy_director' : candidate!.role
-        const isDeputyRole = newRole === 'deputy_director' || newRole === 'deputy_head'
-        const body: Record<string, unknown> = {
-          role: newRole,
-          departmentId: candidate!.departmentId || selectedRootDepartmentId,
-        }
-        // only send scopeDepartmentIds for roles that accept it
-        if (isDeputyRole) {
-          body.scopeDepartmentIds = selected ? scopeIds : (Array.isArray(candidate!.scopeDepartmentIds) ? candidate!.scopeDepartmentIds : [])
-        } else {
-          // clear scope when demoting from deputy role
-          body.scopeDepartmentIds = []
-        }
-        return fetch(`/api/v1/users/${candidate!.id}`, {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
-        })
-      })
-    const deputyResults = await Promise.all(deputyUpdates)
-    if (deputyResults.some((resp) => !resp.ok)) {
-      setSavingDeputyScope(false)
-      setActionError('Не вдалося зберегти налаштування заступників директора')
-      return
-    }
-
-    if (selectedDeputyHeadId) {
-      const deputyHeadResp = await fetch(`/api/v1/users/${selectedDeputyHeadId}`, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          departmentId: selectedRootDepartmentId,
-          scopeDepartmentIds: scopeIds,
-        }),
-      })
-      if (!deputyHeadResp.ok) {
-        setSavingDeputyScope(false)
-        const err = await deputyHeadResp.json().catch(() => null)
-        setActionError(extractApiErrorMessage(deputyHeadResp.status, err, 'Не вдалося закріпити заступника голови'))
-        return
+  const withSave = async (fn: () => Promise<Response | null>) => {
+    setError(''); setSaving(true)
+    try {
+      const r = await fn()
+      if (!r) return false
+      if (r.ok) {
+        await loadDepts()
+        setModal(null)
+        setCf({ deptName: '', deptCode: '', deptDirectorId: '', mgmtName: '', sectionName: '', sectionCode: '', sectionManagerId: '', sectionClerkId: '', uFirstName: '', uLastName: '', uPatronymic: '', uEmail: '', uEmployeeId: '', uPassword: '', uRole: 'specialist', uDeptId: '', uPositionTitle: '' })
+        setSuccess('Збережено')
+        return true
       }
-    }
-    setSavingDeputyScope(false)
-    await loadUsers()
-    await loadDepartments()
-    setActionSuccess('Керівництво департаменту та зони курації оновлено')
+      const json = await r.json().catch(() => null)
+      setError(extractApiErrorMessage(r.status, json, 'Помилка збереження'))
+    } catch { setError('Мережева помилка') }
+    finally { setSaving(false) }
+    return false
   }
 
-  const saveManagementScope = async () => {
-    if (!accessToken || !selectedRootDepartmentId || (!isAdmin && !isDirector)) return
-    const managementName = newManagementName.trim()
-    if (!managementName) {
-      setActionError('Вкажіть назву управління')
-      return
-    }
-    if (managementDepartmentIds.length === 0) {
-      setActionError('Оберіть хоча б один відділ для управління')
-      return
-    }
+  const createDept = () => withSave(() => fetch('/api/v1/departments', {
+    method: 'POST', headers: authHeaders,
+    body: JSON.stringify({ name: cf.deptName, nameUk: cf.deptName, code: cf.deptCode.toUpperCase(), directorId: cf.deptDirectorId || undefined }),
+  }))
 
-    setActionError('')
-    setActionSuccess('')
-    setSavingManagement(true)
-
-    const rootChildren = childDepartmentsMap.get(selectedRootDepartmentId) || []
-    const selectedSet = new Set(managementDepartmentIds)
-    const sameTagChildren = rootChildren.filter((d) => (d.divisionTag || '').trim() === (managementSourceTag || managementName))
-
-    const departmentUpdates = rootChildren
-      .filter((d) => selectedSet.has(d.id) || sameTagChildren.some((st) => st.id === d.id))
-      .map((dep) =>
-        fetch(`/api/v1/departments/${dep.id}`, {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            divisionTag: selectedSet.has(dep.id) ? managementName : null,
-          }),
-        }),
-      )
-    const departmentResults = await Promise.all(departmentUpdates)
-    if (departmentResults.some((resp) => !resp.ok)) {
-      setSavingManagement(false)
-      setActionError('Не вдалося оновити склад управління')
-      return
-    }
-
-    const usersById = new Map(usersOptions.map((u) => [u.id, u]))
-    const deputyUpdates = managementDeputyIds
-      .map((id) => usersById.get(id))
-      .filter(Boolean)
-      .map((candidate) =>
-        fetch(`/api/v1/users/${candidate!.id}`, {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            role: 'deputy_director',
-            departmentId: selectedRootDepartmentId,
-            scopeDepartmentIds: Array.from(new Set([selectedRootDepartmentId, ...managementDepartmentIds])),
-          }),
-        }),
-      )
-    const deputyResults = await Promise.all(deputyUpdates)
-    if (deputyResults.some((resp) => !resp.ok)) {
-      setSavingManagement(false)
-      setActionError('Не вдалося призначити заступника(ів) директора до управління')
-      return
-    }
-
-    setSavingManagement(false)
-    await loadUsers()
-    await loadDepartments()
-    setSelectedManagementTag(managementName)
-    setManagementSourceTag(managementName)
-    setActionSuccess('Управління та його склад збережено')
-  }
-
-  const deleteDepartment = async (id: string, name: string) => {
-    if (!isAdmin || !accessToken) return
-    if (!window.confirm(`Видалити підрозділ "${name}"?\n\nУвага: видалення неможливе, якщо є прикріплені співробітники.`)) return
-    setActionError('')
-    const resp = await fetch(`/api/v1/departments/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${accessToken}` },
+  const createManagement = (parentDeptId: string) => withSave(async () => {
+    const r = await fetch('/api/v1/managements', {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ name: cf.mgmtName, nameUk: cf.mgmtName, departmentId: parentDeptId }),
     })
-    if (resp.ok) {
-      await loadDepartments()
-      if (selectedDepartmentId === id) setSelectedDepartmentId('')
-      setActionSuccess('Підрозділ видалено')
+    if (r.ok) await loadManagements(parentDeptId)
+    return r
+  })
+
+  const createSection = (parentDeptId: string, managementId?: string | null) => withSave(() => fetch('/api/v1/departments', {
+    method: 'POST', headers: authHeaders,
+    body: JSON.stringify({
+      name: cf.sectionName, nameUk: cf.sectionName,
+      code: cf.sectionCode.toUpperCase(),
+      parentId: parentDeptId,
+      managementId: managementId || undefined,
+      managerId: cf.sectionManagerId || undefined,
+      clerkId: cf.sectionClerkId || undefined,
+    }),
+  }))
+
+  const createUser = () => withSave(() => fetch('/api/v1/users', {
+    method: 'POST', headers: authHeaders,
+    body: JSON.stringify({
+      firstName: cf.uFirstName,
+      lastName: cf.uLastName,
+      patronymic: cf.uPatronymic || undefined,
+      email: cf.uEmail,
+      employeeId: cf.uEmployeeId,
+      password: cf.uPassword,
+      role: cf.uRole,
+      departmentId: cf.uDeptId || undefined,
+    }),
+  }))
+
+  const deleteItem = async (type: 'dept' | 'management' | 'section', id: string, name: string) => {
+    if (!window.confirm(`Видалити "${name}"?`)) return
+    const url = type === 'management' ? `/api/v1/managements/${id}` : `/api/v1/departments/${id}`
+    const r = await fetch(url, { method: 'DELETE', headers: authHeaders })
+    if (r.ok) {
+      setSelected(null)
+      await loadDepts()
+      if (type === 'management') await loadManagements()
+      setSuccess('Видалено')
     } else {
-      const err = await resp.json().catch(() => null)
-      setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося видалити підрозділ. Переконайтеся що у ньому немає співробітників.'))
+      const json = await r.json().catch(() => null)
+      setError(extractApiErrorMessage(r.status, json, 'Помилка видалення'))
     }
   }
 
-  const deleteManagement = async () => {
-    if (!accessToken || !selectedRootDepartmentId || !managementSourceTag || (!isAdmin && !isDirector)) return
-    const ok = window.confirm(`Видалити управління "${managementSourceTag}"?`)
-    if (!ok) return
-
-    setSavingManagement(true)
-    setActionError('')
-    setActionSuccess('')
-
-    const children = childDepartmentsMap.get(selectedRootDepartmentId) || []
-    const targetDepartments = children.filter((d) => (d.divisionTag || '').trim() === managementSourceTag)
-    const depIds = targetDepartments.map((d) => d.id)
-    const depSet = new Set(depIds)
-
-    const depResults = await Promise.all(
-      targetDepartments.map((dep) =>
-        fetch(`/api/v1/departments/${dep.id}`, {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ divisionTag: null }),
-        }),
-      ),
-    )
-    if (depResults.some((r) => !r.ok)) {
-      setSavingManagement(false)
-      setActionError('Не вдалося видалити управління')
-      return
-    }
-
-    const deputyToClean = deputyDirectorCandidates.filter((candidate) => {
-      const scope = Array.isArray(candidate.scopeDepartmentIds) ? candidate.scopeDepartmentIds : []
-      return scope.some((id) => depSet.has(id))
+  const updateDeptLeader = async (deptId: string, field: 'managerId' | 'clerkId' | 'directorId', userId: string) => {
+    const r = await fetch(`/api/v1/departments/${deptId}`, {
+      method: 'PUT', headers: authHeaders,
+      body: JSON.stringify({ [field]: userId || null }),
     })
-    const deputyResults = await Promise.all(
-      deputyToClean.map((candidate) => {
-        const scope = Array.isArray(candidate.scopeDepartmentIds) ? candidate.scopeDepartmentIds : []
-        const cleaned = scope.filter((id) => !depSet.has(id))
-        return fetch(`/api/v1/users/${candidate.id}`, {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            scopeDepartmentIds: cleaned.length > 0 ? cleaned : [selectedRootDepartmentId],
-          }),
-        })
-      }),
-    )
-    if (deputyResults.some((r) => !r.ok)) {
-      setSavingManagement(false)
-      setActionError('Не вдалося оновити замів директора після видалення управління')
-      return
-    }
-
-    await loadUsers()
-    await loadDepartments()
-    setSelectedManagementTag('')
-    setManagementSourceTag('')
-    setNewManagementName('')
-    setManagementDepartmentIds([])
-    setManagementDeputyIds([])
-    setSavingManagement(false)
-    setActionSuccess('Управління видалено')
+    if (r.ok) { await loadDepts(); setSuccess('Оновлено') }
+    else { const j = await r.json().catch(() => null); setError(extractApiErrorMessage(r.status, j, 'Помилка')) }
   }
 
-  return (
-    <DashboardLayout>
-      <div className="max-w-7xl mx-auto space-y-6">
-        {actionError && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300">{actionError}</div>}
-        {actionSuccess && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">{actionSuccess}</div>}
-        <div>
-          <h1 className="text-2xl font-semibold font-display">Підрозділи</h1>
-          <p className="text-muted-foreground mt-1">Керування підрозділами та співробітниками</p>
-          {(isAdmin || isDirector) && (
-            <div className="mt-2 rounded-lg border border-border bg-secondary px-4 py-3 text-xs text-muted-foreground dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 space-y-0.5">
-              <p><b>Департамент</b> — головний підрозділ з директором та заступниками.</p>
-              <p><b>Відділ</b> — дочірній підрозділ у складі департаменту; має керівника (manager) та діловода (clerk).</p>
-              <p><b>Управління</b> — необов'язкова мітка для групування відділів (наприклад: «Цифровізація», «Фінанси»).</p>
+  const updateMgmtHead = async (mgmtId: string, headId: string) => {
+    const r = await fetch(`/api/v1/managements/${mgmtId}`, {
+      method: 'PUT', headers: authHeaders,
+      body: JSON.stringify({ headId: headId || null }),
+    })
+    if (r.ok) { await loadManagements(); setSuccess('Оновлено') }
+    else { const j = await r.json().catch(() => null); setError(extractApiErrorMessage(r.status, j, 'Помилка')) }
+  }
+
+  const moveSectionToManagement = async (sectionId: string, managementId: string | null) => {
+    const r = await fetch(`/api/v1/departments/${sectionId}`, {
+      method: 'PUT', headers: authHeaders,
+      body: JSON.stringify({ managementId: managementId || null }),
+    })
+    if (r.ok) { await loadDepts(); setSuccess('Переміщено') }
+    else { const j = await r.json().catch(() => null); setError(extractApiErrorMessage(r.status, j, 'Помилка')) }
+  }
+
+  // ── Tree ──────────────────────────────────────────────────────────────────
+
+  const TreeDept = ({ dept }: { dept: RootDept }) => {
+    const isExpanded = expanded.has(dept.id)
+    const isSelected = selected?.type === 'dept' && selected.id === dept.id
+    const deptManagements = getManagements(dept.id)
+    const deptSections = getSections(dept.id, null) // sections without management
+    const hasSub = deptManagements.length > 0 || getSections(dept.id).length > 0
+
+    return (
+      <div>
+        <div className={`flex items-center group rounded-lg transition-colors ${isSelected ? 'bg-blue-50 dark:bg-blue-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+          <button onClick={e => toggleExpand(dept.id, e)} className="p-1 text-muted-foreground shrink-0">
+            {hasSub ? <span className="text-[9px] block" style={{ transform: isExpanded ? 'rotate(90deg)' : '', transition: 'transform .15s' }}>▶</span> : <span className="text-[9px] block opacity-0">▶</span>}
+          </button>
+          <button onClick={() => selectNode({ type: 'dept', id: dept.id })} className="flex-1 flex items-center gap-2 px-1 py-2 text-left min-w-0">
+            <span className="text-base shrink-0">🏛</span>
+            <span className={`text-[13px] truncate ${isSelected ? 'font-semibold text-blue-700 dark:text-blue-400' : 'text-foreground'}`}>{dept.nameUk}</span>
+            <span className="text-[10px] text-muted-foreground ml-auto shrink-0">{dept.usersCount}</span>
+          </button>
+        </div>
+        {isExpanded && (
+          <div className="ml-4 border-l border-border/50">
+            {deptManagements.map(m => <TreeManagement key={m.id} mgmt={m} parentDept={dept} />)}
+            {deptSections.map(s => <TreeSection key={s.id} section={s} />)}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const TreeManagement = ({ mgmt, parentDept }: { mgmt: Management; parentDept: RootDept }) => {
+    const isExpanded = expanded.has(mgmt.id)
+    const isSelected = selected?.type === 'management' && selected.id === mgmt.id
+    const mgmtSections = getSections(parentDept.id, mgmt.id)
+    return (
+      <div>
+        <div className={`flex items-center rounded-lg transition-colors ${isSelected ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+          <button onClick={e => toggleExpand(mgmt.id, e)} className="p-1 text-muted-foreground shrink-0">
+            {mgmtSections.length > 0 ? <span className="text-[9px] block" style={{ transform: isExpanded ? 'rotate(90deg)' : '', transition: 'transform .15s' }}>▶</span> : <span className="text-[9px] block opacity-0">▶</span>}
+          </button>
+          <button onClick={() => selectNode({ type: 'management', id: mgmt.id })} className="flex-1 flex items-center gap-2 px-1 py-1.5 text-left min-w-0">
+            <span className="text-sm shrink-0">📂</span>
+            <span className={`text-[12px] truncate ${isSelected ? 'font-semibold text-emerald-700 dark:text-emerald-400' : 'text-foreground'}`}>{mgmt.nameUk}</span>
+            <span className="text-[10px] text-muted-foreground ml-auto shrink-0">{mgmtSections.length} відд.</span>
+          </button>
+        </div>
+        {isExpanded && (
+          <div className="ml-4 border-l border-border/50">
+            {mgmtSections.map(s => <TreeSection key={s.id} section={s} />)}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const TreeSection = ({ section }: { section: Section }) => {
+    const isSelected = selected?.type === 'section' && selected.id === section.id
+    return (
+      <div className={`flex items-center rounded-lg transition-colors ${isSelected ? 'bg-violet-50 dark:bg-violet-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+        <span className="w-6 shrink-0" />
+        <button onClick={() => selectNode({ type: 'section', id: section.id })} className="flex-1 flex items-center gap-2 px-1 py-1.5 text-left min-w-0">
+          <span className="text-sm shrink-0">📁</span>
+          <span className={`text-[12px] truncate ${isSelected ? 'font-semibold text-violet-700 dark:text-violet-400' : 'text-foreground'}`}>{section.nameUk}</span>
+          <span className="text-[10px] text-muted-foreground ml-auto shrink-0">{section.usersCount}</span>
+        </button>
+      </div>
+    )
+  }
+
+  // ── Detail panel ──────────────────────────────────────────────────────────
+
+  const DetailDept = ({ dept }: { dept: RootDept }) => {
+    const deptManagements = getManagements(dept.id)
+    const unmanagedSections = getSections(dept.id, null)
+    const allSections = getSections(dept.id)
+    return (
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🏛</span>
+              <h2 className="text-xl font-bold text-foreground">{dept.nameUk}</h2>
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">Код: {dept.code} · {dept.usersCount} співробітників</p>
+          </div>
+          {canManage && (
+            <div className="flex gap-2 shrink-0">
+              <button onClick={() => setModal({ type: 'create-management', parentDeptId: dept.id })} className="px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-xs font-medium hover:bg-emerald-600 transition-colors">+ Управління</button>
+              <button onClick={() => setModal({ type: 'create-section', parentDeptId: dept.id })} className="px-3 py-1.5 rounded-lg bg-violet-500 text-white text-xs font-medium hover:bg-violet-600 transition-colors">+ Відділ</button>
+              <button onClick={() => setModal({ type: 'create-user', departmentId: dept.id })} className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors">+ Акаунт</button>
+              {isAdmin && (
+                <button onClick={() => deleteItem('dept', dept.id, dept.nameUk)} className="px-3 py-1.5 rounded-lg border border-rose-200 text-rose-600 text-xs hover:bg-rose-50 transition-colors">Видалити</button>
+              )}
             </div>
           )}
         </div>
 
-        {(isAdmin || isDirector) && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {isAdmin && (
-              <div className="rounded-2xl border border-border bg-card p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
-                <p className="text-sm font-semibold">Створити департамент</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                  <input
-                    className="h-10 w-full min-w-0 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    placeholder="Назва департаменту"
-                    value={newRootDepartmentName}
-                    onChange={(e) => setNewRootDepartmentName(e.target.value)}
-                  />
-                  <input
-                    className="h-10 w-full min-w-0 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    placeholder="Код (напр. DEP-IT)"
-                    value={newRootDepartmentCode}
-                    onChange={(e) => setNewRootDepartmentCode(e.target.value)}
-                  />
-                  <select
-                    className="h-10 w-full min-w-0 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    value={newRootDepartmentDirectorId}
-                    onChange={(e) => setNewRootDepartmentDirectorId(e.target.value)}
-                  >
-                    <option value="">Директор (опційно)</option>
-                    {directors.map((d) => (
-                      <option key={d.id} value={d.id}>{d.lastName} {d.firstName} ({getRoleLabel(d.role)})</option>
-                    ))}
-                  </select>
-                </div>
-                <button onClick={createRootDepartment} className="h-10 rounded-lg bg-primary px-4 text-white text-sm font-medium">
-                  Створити департамент
-                </button>
+        {/* Director assignment */}
+        <div className="rounded-xl border border-border p-4 space-y-3">
+          <h3 className="text-sm font-semibold">Керівництво департаменту</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {([
+              { label: 'Директор', field: 'directorId' as const, current: dept.director?.id ?? null },
+              { label: 'Керівник', field: 'managerId' as const, current: dept.manager?.id ?? null },
+              { label: 'Діловод', field: 'clerkId' as const, current: dept.clerk?.id ?? null },
+            ]).map(({ label, field, current }) => (
+              <div key={field} className="space-y-1">
+                <label className="text-xs text-muted-foreground">{label}</label>
+                <select
+                  disabled={!canManage}
+                  value={current || ''}
+                  onChange={e => updateDeptLeader(dept.id, field, e.target.value)}
+                  className="w-full h-9 rounded-lg border border-border px-2 text-sm bg-background disabled:opacity-60"
+                >
+                  <option value="">— Не призначений —</option>
+                  {allUsers.map(u => (
+                    <option key={u.id} value={u.id}>{u.lastName} {u.firstName} ({ROLE_LABELS[u.role] || u.role})</option>
+                  ))}
+                </select>
               </div>
-            )}
+            ))}
+          </div>
+        </div>
 
-            <div className="rounded-2xl border border-border bg-card p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
-              <p className="text-sm font-semibold">Створити відділ у департаменті</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {isAdmin ? (
-                  <select
-                    className="h-10 w-full min-w-0 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    value={newSectionParentId}
-                    onChange={(e) => setNewSectionParentId(e.target.value)}
-                  >
-                    <option value="">Оберіть департамент</option>
-                    {rootDepartments.map((dep) => (
-                      <option key={dep.id} value={dep.id}>
-                        {dep.nameUk || dep.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div
-                    className="h-10 w-full min-w-0 rounded-lg border border-border px-3 text-sm text-muted-foreground flex items-center overflow-hidden text-ellipsis whitespace-nowrap dark:border-slate-700 dark:text-slate-400"
-                    title={selectedRootDepartment?.nameUk || selectedRootDepartment?.name || user?.department?.nameUk || '—'}
-                  >
-                    Департамент: {selectedRootDepartment?.nameUk || selectedRootDepartment?.name || user?.department?.nameUk || '—'}
+        {/* Managements */}
+        {deptManagements.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Управління ({deptManagements.length})</h3>
+            {deptManagements.map(m => {
+              const mSections = getSections(dept.id, m.id)
+              return (
+                <div key={m.id} onClick={() => selectNode({ type: 'management', id: m.id })}
+                  className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 hover:bg-secondary/50 cursor-pointer transition-colors">
+                  <span className="text-lg">📂</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{m.nameUk}</p>
+                    <p className="text-xs text-muted-foreground">{mSections.length} відділів{m.head ? ` · Керівник: ${m.head.lastName} ${m.head.firstName}` : ''}</p>
                   </div>
-                )}
-                <input
-                  className="h-10 w-full min-w-0 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                  placeholder="Назва відділу"
-                  value={newSectionName}
-                  onChange={(e) => setNewSectionName(e.target.value)}
-                />
-                <input
-                  className="h-10 w-full min-w-0 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                  placeholder="Код відділу"
-                  value={newSectionCode}
-                  onChange={(e) => setNewSectionCode(e.target.value)}
-                />
-                <input
-                  className="h-10 w-full min-w-0 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                  placeholder="Управління (напр. Цифровізація)"
-                  value={newSectionDivisionTag}
-                  onChange={(e) => setNewSectionDivisionTag(e.target.value)}
-                />
-                <select
-                  className="h-10 w-full min-w-0 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                  value={newSectionManagerId}
-                  onChange={(e) => setNewSectionManagerId(e.target.value)}
-                >
-                  <option value="">Керівник відділу (опційно)</option>
-                  {managers.map((m) => (
-                    <option key={m.id} value={m.id}>{m.lastName} {m.firstName} ({getRoleLabel(m.role)})</option>
-                  ))}
-                </select>
-                <select
-                  className="h-10 w-full min-w-0 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                  value={newSectionClerkId}
-                  onChange={(e) => setNewSectionClerkId(e.target.value)}
-                >
-                  <option value="">Діловод (опційно)</option>
-                  {clerks.map((c) => (
-                    <option key={c.id} value={c.id}>{c.lastName} {c.firstName} ({getRoleLabel(c.role)})</option>
-                  ))}
-                </select>
-              </div>
-              <button onClick={createSection} className="h-10 rounded-lg bg-primary px-4 text-white text-sm font-medium">
-                Створити відділ
-              </button>
-            </div>
-
-            <div className="rounded-2xl border border-border bg-card p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900">
-              <p className="text-sm font-semibold">
-                Управління {selectedRootDepartment ? `(${selectedRootDepartment.nameUk || selectedRootDepartment.name})` : ''}
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <select
-                  className="h-10 w-full rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                  value={selectedManagementTag}
-                  onChange={(e) => setSelectedManagementTag(e.target.value)}
-                >
-                  <option value="">Нове управління</option>
-                  {managementTags.map((tag) => (
-                    <option key={tag} value={tag}>{tag}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => {
-                    setSelectedManagementTag('')
-                    setManagementSourceTag('')
-                    setNewManagementName('')
-                    setManagementDepartmentIds([])
-                    setManagementDeputyIds([])
-                  }}
-                  className="h-10 rounded-lg border border-border px-4 text-sm font-medium dark:border-slate-600"
-                >
-                  Очистити форму
-                </button>
-              </div>
-              <input
-                className="h-10 w-full rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                placeholder="Назва управління (можна перейменувати)"
-                value={newManagementName}
-                onChange={(e) => setNewManagementName(e.target.value)}
-              />
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground dark:text-slate-400">Відділи, що входять в управління</p>
-                <div className="grid grid-cols-1 gap-2 max-h-36 overflow-auto">
-                  {(childDepartmentsMap.get(selectedRootDepartmentId) || []).map((dep) => (
-                    <label key={dep.id} className="flex items-center gap-2 rounded border border-border px-3 py-2 text-sm dark:border-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={managementDepartmentIds.includes(dep.id)}
-                        onChange={(e) => {
-                          setManagementDepartmentIds((prev) =>
-                            e.target.checked ? Array.from(new Set([...prev, dep.id])) : prev.filter((id) => id !== dep.id),
-                          )
-                        }}
-                      />
-                      <span>{dep.nameUk || dep.name}</span>
-                    </label>
-                  ))}
+                  <span className="text-xs text-muted-foreground">›</span>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground dark:text-slate-400">Заступник(и) директора для управління</p>
-                <div className="grid grid-cols-1 gap-2 max-h-36 overflow-auto">
-                  {deputyDirectorCandidates.map((candidate) => (
-                    <label key={candidate.id} className="flex items-center gap-2 rounded border border-border px-3 py-2 text-sm dark:border-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={managementDeputyIds.includes(candidate.id)}
-                        onChange={(e) => {
-                          setManagementDeputyIds((prev) =>
-                            e.target.checked ? Array.from(new Set([...prev, candidate.id])) : prev.filter((id) => id !== candidate.id),
-                          )
-                        }}
-                      />
-                      <span>{candidate.firstName} {candidate.lastName}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button disabled={savingManagement} onClick={saveManagementScope} className="h-10 rounded-lg border border-border px-4 text-sm font-medium disabled:opacity-60 dark:border-slate-600">
-                  {savingManagement ? 'Збереження...' : 'Зберегти управління'}
-                </button>
-                <button
-                  disabled={savingManagement || !managementSourceTag}
-                  onClick={deleteManagement}
-                  className="h-10 rounded-lg border border-rose-300 px-4 text-sm font-medium text-rose-700 disabled:opacity-60"
-                >
-                  Видалити управління
-                </button>
-              </div>
-            </div>
+              )
+            })}
           </div>
         )}
 
-        {loading ? <div className="rounded-xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Завантаження...</div> : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="rounded-2xl border border-border bg-card overflow-hidden dark:border-slate-700 dark:bg-slate-900">
-              <div className="px-4 py-3 border-b border-border text-sm font-semibold dark:border-slate-700">Підрозділи</div>
-              {rootDepartments.map((department) => {
-                const children = childDepartmentsMap.get(department.id) || []
-                const expanded = expandedDepartmentIds.includes(department.id)
-                return (
-                  <div key={department.id} className="border-b border-border dark:border-slate-700 group">
-                    <div className={`flex items-center ${selectedDepartmentId === department.id ? 'bg-secondary dark:bg-slate-800' : ''}`}>
-                      <button
-                        onClick={() => {
-                          setSelectedDepartmentId(department.id)
-                          setExpandedDepartmentIds((prev) =>
-                            prev.includes(department.id) ? prev.filter((id) => id !== department.id) : [...prev, department.id],
-                          )
-                        }}
-                        className="flex-1 text-left px-4 py-3 text-sm"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className={selectedDepartmentId === department.id ? 'font-medium' : ''}>{department.nameUk || department.name}</span>
-                          <span className="text-xs text-muted-foreground">{expanded ? '▾' : '▸'}</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground dark:text-slate-400 mt-1">
-                          {department.code} • {department.usersCount} осіб • Департамент
-                        </div>
-                      </button>
-                      {isAdmin && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); deleteDepartment(department.id, department.nameUk || department.name) }}
-                          title="Видалити підрозділ"
-                          className="px-3 py-1 text-xs text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded transition-colors opacity-0 group-hover:opacity-100 mr-1"
-                        >
-                          🗑
-                        </button>
-                      )}
-                    </div>
-                    {expanded && children.length > 0 && (
-                      <div className="bg-secondary/70 dark:bg-slate-800/40">
-                        {groupChildrenByDivision(children).map(({ tag, items }) => (
-                          <div key={tag ?? '__untagged__'}>
-                            {tag && (
-                              <div className="px-4 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-t border-border dark:border-slate-700 dark:text-slate-500">
-                                {tag}
-                              </div>
-                            )}
-                            {items.map((child) => (
-                              <button
-                                key={child.id}
-                                onClick={() => setSelectedDepartmentId(child.id)}
-                                className={`w-full text-left px-8 py-2.5 text-sm border-t border-border dark:border-slate-700 ${
-                                  selectedDepartmentId === child.id ? 'bg-secondary dark:bg-slate-800 font-medium' : ''
-                                }`}
-                              >
-                                <div>{child.nameUk || child.name}</div>
-                                <div className="text-xs text-muted-foreground dark:text-slate-400 mt-1">
-                                  {child.code} • {child.usersCount} осіб{child.divisionTag ? ` • ${child.divisionTag}` : ''}
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-
-            <div className="lg:col-span-2 rounded-2xl border border-border bg-card overflow-hidden dark:border-slate-700 dark:bg-slate-900">
-              <div className="px-4 py-3 border-b border-border text-sm font-semibold dark:border-slate-700">Команда {selectedDepartment ? `(${selectedDepartment.nameUk || selectedDepartment.name})` : ''}</div>
-
-              {(isAdmin || isDirector) && selectedDepartmentId && (
-                <div className="p-4 space-y-3 border-b border-border bg-secondary dark:border-slate-700 dark:bg-slate-800/60">
-                  <p className="text-xs font-semibold text-muted-foreground dark:text-slate-400 uppercase tracking-wide">Налаштування відділу</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground dark:text-slate-400">Керівник відділу — хто погоджує звіти спеціалістів</p>
-                      <select className="h-10 w-full rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedManagerId} onChange={(e) => setSelectedManagerId(e.target.value)}>
-                        <option value="">— Не призначений —</option>
-                        {managers.map((m) => (
-                          <option key={m.id} value={m.id}>{m.lastName} {m.firstName} ({getRoleLabel(m.role)})</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground dark:text-slate-400">Діловод відділу — погоджує зведені звіти</p>
-                      <select className="h-10 w-full rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={selectedClerkId} onChange={(e) => setSelectedClerkId(e.target.value)}>
-                        <option value="">— Не призначений —</option>
-                        {clerks.map((c) => (
-                          <option key={c.id} value={c.id}>{c.lastName} {c.firstName} ({getRoleLabel(c.role)})</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground dark:text-slate-400">Управління — необовʼязкова група відділів (наприклад «Цифровізація»)</p>
-                    <input
-                      className="h-10 w-full rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                      placeholder="Назва управління або залиште порожнім"
-                      value={editingDivisionTag}
-                      onChange={(e) => setEditingDivisionTag(e.target.value)}
-                    />
-                  </div>
-                  <button disabled={savingLeads} onClick={saveDepartmentLeads} className="h-10 rounded-lg bg-primary px-4 text-white text-sm font-medium disabled:opacity-60">
-                    {savingLeads ? 'Збереження...' : 'Зберегти'}
-                  </button>
+        {/* Unmanaged sections */}
+        {unmanagedSections.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Відділи без управління ({unmanagedSections.length})</h3>
+            {unmanagedSections.map(s => (
+              <div key={s.id} onClick={() => selectNode({ type: 'section', id: s.id })}
+                className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 hover:bg-secondary/50 cursor-pointer transition-colors">
+                <span className="text-lg">📁</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{s.nameUk}</p>
+                  <p className="text-xs text-muted-foreground">{s.usersCount} співробітників · {s.code}</p>
                 </div>
-              )}
-
-              {(isAdmin || isDirector) && (
-                <div className="p-4 border-b border-border bg-secondary/70 dark:border-slate-700 dark:bg-slate-800/40 space-y-4">
-                  <p className="text-xs font-semibold text-muted-foreground dark:text-slate-400 uppercase tracking-wide">
-                    Керівництво департаменту {selectedRootDepartment ? `— ${selectedRootDepartment.nameUk || selectedRootDepartment.name}` : ''}
-                  </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground dark:text-slate-400">Директор — фінально погоджує зведені звіти</p>
-                      <select
-                        className="h-10 w-full rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                        value={selectedDirectorId}
-                        onChange={(e) => setSelectedDirectorId(e.target.value)}
-                      >
-                        <option value="">— Не призначений —</option>
-                        {directors.map((d) => (
-                          <option key={d.id} value={d.id}>{d.lastName} {d.firstName} ({getRoleLabel(d.role)})</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground dark:text-slate-400">Заступник голови — має доступ до всього без обмежень</p>
-                      <select
-                        className="h-10 w-full rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                        value={selectedDeputyHeadId}
-                        onChange={(e) => setSelectedDeputyHeadId(e.target.value)}
-                      >
-                        <option value="">— Не призначений —</option>
-                        {deputyHeads.map((d) => (
-                          <option key={d.id} value={d.id}>{d.lastName} {d.firstName}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground dark:text-slate-400">
-                      Заступники директора — курують окремі відділи, бачать їх звіти
-                    </p>
-                    {deputyDirectorCandidates.length === 0 && (
-                      <p className="text-xs text-muted-foreground dark:text-slate-500 italic">Немає кандидатів у цьому департаменті</p>
-                    )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {deputyDirectorCandidates.map((depDir) => (
-                        <label key={depDir.id} className="flex items-center gap-2 rounded border border-border px-3 py-2 text-sm dark:border-slate-700 cursor-pointer hover:bg-secondary dark:hover:bg-slate-800">
-                          <input
-                            type="checkbox"
-                            checked={selectedDeputyDirectorIds.includes(depDir.id)}
-                            onChange={(e) => {
-                              setSelectedDeputyDirectorIds((prev) =>
-                                e.target.checked ? Array.from(new Set([...prev, depDir.id])) : prev.filter((id) => id !== depDir.id),
-                              )
-                            }}
-                          />
-                          <span>{depDir.lastName} {depDir.firstName} <span className="text-muted-foreground text-xs">({getRoleLabel(depDir.role)})</span></span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <button
-                    onClick={saveDepartmentSupervision}
-                    disabled={savingDeputyScope || !selectedRootDepartmentId}
-                    className="h-10 rounded-lg bg-primary px-4 text-white text-sm font-medium disabled:opacity-60"
-                  >
-                    {savingDeputyScope ? 'Збереження...' : 'Зберегти'}
-                  </button>
-                </div>
-              )}
-
-              {isAdmin && selectedDepartmentId && (
-                <div className="p-4 border-b border-border dark:border-slate-700 space-y-3">
-                  <p className="text-sm font-semibold">Адміністрування акаунтів</p>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                  <input className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="Email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} />
-                  <input className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="Ім'я" value={newUserFirstName} onChange={(e) => setNewUserFirstName(e.target.value)} />
-                  <input className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="Прізвище" value={newUserLastName} onChange={(e) => setNewUserLastName(e.target.value)} />
+                {canManage && deptManagements.length > 0 && (
                   <select
-                    className="h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    value={newUserRole}
-                    onChange={(e) =>
-                      setNewUserRole(
-                        e.target.value as 'specialist' | 'manager' | 'clerk' | 'director' | 'deputy_director' | 'deputy_head' | 'lawyer' | 'accountant' | 'hr',
-                      )
-                    }
+                    onClick={e => e.stopPropagation()}
+                    value=""
+                    onChange={e => e.target.value && moveSectionToManagement(s.id, e.target.value)}
+                    className="h-7 rounded-lg border border-border px-2 text-xs bg-background"
                   >
-                    <option value="specialist">{getRoleLabel('specialist')}</option>
-                    <option value="manager">{getRoleLabel('manager')}</option>
-                    <option value="clerk">{getRoleLabel('clerk')}</option>
-                    <option value="lawyer">{getRoleLabel('lawyer')}</option>
-                    <option value="accountant">{getRoleLabel('accountant')}</option>
-                    <option value="hr">{getRoleLabel('hr')}</option>
-                    {isAdmin && <option value="deputy_director">{getRoleLabel('deputy_director')}</option>}
-                    {isAdmin && <option value="deputy_head">{getRoleLabel('deputy_head')}</option>}
-                    {isAdmin && <option value="director">{getRoleLabel('director')}</option>}
+                    <option value="">Перемістити в управління…</option>
+                    {deptManagements.map(m => <option key={m.id} value={m.id}>{m.nameUk}</option>)}
                   </select>
-                  <button onClick={addEmployee} className="md:col-span-4 h-10 rounded-lg bg-primary text-white text-sm font-medium">Додати співробітника</button>
-                  </div>
-                </div>
-              )}
-
-              {canManageEmployees && selectedDepartmentId && (
-                <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-3 border-b border-border bg-secondary dark:border-slate-700 dark:bg-slate-800/60">
-                  <select
-                    className="md:col-span-3 h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    value={selectedExistingUserId}
-                    onChange={(e) => setSelectedExistingUserId(e.target.value)}
-                  >
-                    <option value="">Додати існуючого співробітника до цього підрозділу</option>
-                    {transferableUsers.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.firstName} {u.lastName} ({getRoleLabel(u.role)})
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    disabled={assigningExistingUser || !selectedExistingUserId}
-                    onClick={assignExistingEmployee}
-                    className="h-10 rounded-lg border border-border text-sm font-medium disabled:opacity-60 dark:border-slate-600"
-                  >
-                    {assigningExistingUser ? 'Перенесення...' : 'Додати в підрозділ'}
-                  </button>
-                </div>
-              )}
-
-              {canManageEmployees && selectedDepartmentId && (
-                <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-3 border-b border-border bg-primary/5/40 dark:border-slate-700 dark:bg-primary/15">
-                  <p className="md:col-span-4 text-xs font-semibold text-muted-foreground dark:text-slate-300">
-                    Додати сумісника — людина залишається у своєму відділі, але також видна тут
-                  </p>
-                  <select
-                    className="md:col-span-3 h-10 rounded-lg border border-border px-3 text-sm bg-card text-foreground dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    value={secondaryUserId}
-                    onChange={(e) => setSecondaryUserId(e.target.value)}
-                  >
-                    <option value="">Оберіть співробітника з іншого відділу...</option>
-                    {usersOptions
-                      .filter((u) => u.departmentId !== selectedDepartmentId && u.role !== 'admin')
-                      .map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.firstName} {u.lastName} ({getRoleLabel(u.role)})
-                        </option>
-                      ))}
-                  </select>
-                  <button
-                    disabled={addingSecondary || !secondaryUserId}
-                    onClick={addSecondaryDepartment}
-                    className="h-10 rounded-lg border border-primary/30 text-sm font-medium text-primary disabled:opacity-60 dark:border-primary/30 dark:text-primary"
-                  >
-                    {addingSecondary ? 'Додаємо...' : 'Додати сумісником'}
-                  </button>
-                </div>
-              )}
-
-              <div>
-                {team.length === 0 && (
-                  <div className="px-4 py-6 text-sm text-muted-foreground dark:text-slate-400">
-                    <p className="font-medium mb-1">У цьому підрозділі ще немає співробітників.</p>
-                    {canManageEmployees && (
-                      <p>Скористайтеся формою вище, щоб додати нового або перевести існуючого.</p>
-                    )}
-                  </div>
                 )}
-                {team.map((member) => (
-                  <div key={member.id} className="px-4 py-3 border-b border-border flex items-center justify-between dark:border-slate-700">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium">{member.firstName} {member.lastName}</p>
-                        {member.isSecondary && (
-                          <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary dark:bg-primary/15 dark:text-primary">
-                            Суміщення
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground dark:text-slate-400">{member.email} • {getRoleLabel(member.role)}</p>
-                      {member.department && (
-                        <p className="text-xs text-muted-foreground dark:text-slate-500">
-                          Основний відділ: {member.department.nameUk || member.department.code || member.department.id}
-                        </p>
-                      )}
-                    </div>
-                    {canManageEmployees && member.role !== 'director' && member.role !== 'deputy_head' && member.role !== 'admin' && (
-                      <div className="flex items-center gap-3">
-                        {member.isSecondary ? (
-                          <button
-                            onClick={() => removeSecondaryDepartment(member.id)}
-                            className="text-sm text-primary hover:underline dark:text-primary"
-                          >
-                            Прибрати суміщення
-                          </button>
-                        ) : (
-                          <>
-                            {isAdmin && (
-                              <button
-                                onClick={() => resetEmployeePassword(member.id, `${member.firstName} ${member.lastName}`)}
-                                className="text-sm text-amber-600 hover:underline"
-                              >
-                                Змінити пароль
-                              </button>
-                            )}
-                            <button onClick={() => deleteEmployee(member.id)} className="text-sm text-rose-600 hover:underline">Видалити</button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                <span className="text-xs text-muted-foreground">›</span>
               </div>
-            </div>
+            ))}
+          </div>
+        )}
 
+        {allSections.length === 0 && deptManagements.length === 0 && (
+          <div className="rounded-xl border border-dashed border-border py-8 text-center">
+            <p className="text-sm text-muted-foreground">Немає відділів чи управлінь</p>
+            {canManage && <p className="text-xs text-muted-foreground mt-1">Натисніть «+ Управління» або «+ Відділ» щоб почати</p>}
           </div>
         )}
       </div>
+    )
+  }
+
+  const DetailManagement = ({ mgmt }: { mgmt: Management }) => {
+    const parentDept = rootDepts.find(d => d.id === mgmt.departmentId)
+    const mgmtSections = sections.filter(s => s.managementId === mgmt.id)
+    const deptManagements = getManagements(mgmt.departmentId)
+    return (
+      <div className="space-y-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => selectNode({ type: 'dept', id: mgmt.departmentId })} className="text-sm text-muted-foreground hover:text-foreground transition-colors">{parentDept?.nameUk}</button>
+              <span className="text-muted-foreground">/</span>
+              <span className="text-2xl">📂</span>
+              <h2 className="text-xl font-bold text-foreground">{mgmt.nameUk}</h2>
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">{mgmtSections.length} відділів в управлінні</p>
+          </div>
+          {canManage && (
+            <div className="flex gap-2 shrink-0">
+              <button onClick={() => setModal({ type: 'create-section', parentDeptId: mgmt.departmentId, managementId: mgmt.id })} className="px-3 py-1.5 rounded-lg bg-violet-500 text-white text-xs font-medium hover:bg-violet-600 transition-colors">+ Відділ</button>
+              {isAdmin && (
+                <button onClick={() => deleteItem('management', mgmt.id, mgmt.nameUk)} className="px-3 py-1.5 rounded-lg border border-rose-200 text-rose-600 text-xs hover:bg-rose-50 transition-colors">Видалити</button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Head assignment */}
+        <div className="rounded-xl border border-border p-4 space-y-2">
+          <h3 className="text-sm font-semibold">Керівник управління</h3>
+          <select
+            disabled={!canManage}
+            value={mgmt.headId || ''}
+            onChange={e => updateMgmtHead(mgmt.id, e.target.value)}
+            className="w-full h-9 rounded-lg border border-border px-2 text-sm bg-background disabled:opacity-60"
+          >
+            <option value="">— Не призначений —</option>
+            {allUsers.filter(u => ['manager', 'director', 'deputy_director', 'deputy_head'].includes(u.role)).map(u => (
+              <option key={u.id} value={u.id}>{u.lastName} {u.firstName} ({ROLE_LABELS[u.role] || u.role})</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Sections in this management */}
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Відділи в управлінні</h3>
+          {mgmtSections.length === 0 && (
+            <div className="rounded-xl border border-dashed border-border py-6 text-center">
+              <p className="text-sm text-muted-foreground">Немає відділів</p>
+              {canManage && <p className="text-xs text-muted-foreground mt-1">Натисніть «+ Відділ»</p>}
+            </div>
+          )}
+          {mgmtSections.map(s => (
+            <div key={s.id} className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 hover:bg-secondary/50 cursor-pointer transition-colors" onClick={() => selectNode({ type: 'section', id: s.id })}>
+              <span className="text-lg">📁</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{s.nameUk}</p>
+                <p className="text-xs text-muted-foreground">{s.usersCount} ос.{s.manager ? ` · ${s.manager.lastName} ${s.manager.firstName}` : ''}</p>
+              </div>
+              {canManage && (
+                <button onClick={e => { e.stopPropagation(); moveSectionToManagement(s.id, null) }}
+                  className="text-xs text-muted-foreground hover:text-rose-500 px-2 py-1 rounded transition-colors">
+                  Відкріпити
+                </button>
+              )}
+              <span className="text-xs text-muted-foreground">›</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Unassigned sections of same dept (to assign here) */}
+        {canManage && (() => {
+          const unassigned = sections.filter(s => s.parentId === mgmt.departmentId && s.managementId === null)
+          if (!unassigned.length) return null
+          return (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Додати відділ з «Без управління»</h3>
+              {unassigned.map(s => (
+                <div key={s.id} className="flex items-center gap-3 rounded-xl border border-dashed border-border px-4 py-2">
+                  <span className="text-sm">📁</span>
+                  <span className="text-sm flex-1 text-muted-foreground">{s.nameUk}</span>
+                  <button onClick={() => moveSectionToManagement(s.id, mgmt.id)} className="px-3 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors">Перемістити сюди</button>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
+      </div>
+    )
+  }
+
+  const DetailSection = ({ section }: { section: Section }) => {
+    const parentDept = rootDepts.find(d => d.id === section.parentId)
+    const parentMgmt = section.managementId ? managements.find(m => m.id === section.managementId) : null
+    return (
+      <div className="space-y-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {parentDept && (
+                <><button onClick={() => selectNode({ type: 'dept', id: parentDept.id })} className="text-sm text-muted-foreground hover:text-foreground">{parentDept.nameUk}</button><span className="text-muted-foreground">/</span></>
+              )}
+              {parentMgmt && (
+                <><button onClick={() => selectNode({ type: 'management', id: parentMgmt.id })} className="text-sm text-muted-foreground hover:text-foreground">{parentMgmt.nameUk}</button><span className="text-muted-foreground">/</span></>
+              )}
+              <span className="text-xl">📁</span>
+              <h2 className="text-xl font-bold text-foreground">{section.nameUk}</h2>
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">Код: {section.code} · {section.usersCount} співробітників</p>
+          </div>
+          {canManage && (
+            <div className="flex gap-2 shrink-0">
+              <button onClick={() => setModal({ type: 'create-user', departmentId: section.id })} className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors">+ Акаунт</button>
+              {isAdmin && (
+                <button onClick={() => deleteItem('section', section.id, section.nameUk)} className="px-3 py-1.5 rounded-lg border border-rose-200 text-rose-600 text-xs hover:bg-rose-50 transition-colors">Видалити</button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Leader assignment */}
+        <div className="rounded-xl border border-border p-4 space-y-3">
+          <h3 className="text-sm font-semibold">Керівництво відділу</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {([
+              { label: 'Керівник відділу', field: 'managerId' as const, current: section.manager?.id ?? null },
+              { label: 'Діловод', field: 'clerkId' as const, current: section.clerk?.id ?? null },
+            ]).map(({ label, field, current }) => (
+              <div key={field} className="space-y-1">
+                <label className="text-xs text-muted-foreground">{label}</label>
+                <select
+                  disabled={!canManage}
+                  value={current || ''}
+                  onChange={e => updateDeptLeader(section.id, field, e.target.value)}
+                  className="w-full h-9 rounded-lg border border-border px-2 text-sm bg-background disabled:opacity-60"
+                >
+                  <option value="">— Не призначений —</option>
+                  {allUsers.map(u => (
+                    <option key={u.id} value={u.id}>{u.lastName} {u.firstName} ({ROLE_LABELS[u.role] || u.role})</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Members */}
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Співробітники</h3>
+          {membersLoading && <div className="text-sm text-muted-foreground py-4 text-center">Завантаження…</div>}
+          {!membersLoading && members.length === 0 && (
+            <div className="rounded-xl border border-dashed border-border py-6 text-center">
+              <p className="text-sm text-muted-foreground">Немає співробітників</p>
+            </div>
+          )}
+          {members.map(m => (
+            <div key={m.id} className="flex items-center gap-3 rounded-xl border border-border px-4 py-3">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                {m.lastName[0]}{m.firstName[0]}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{m.lastName} {m.firstName} {(m as any).patronymic || ''}</p>
+                <p className="text-xs text-muted-foreground">{ROLE_LABELS[m.role] || m.role}{m.position ? ` · ${m.position.titleUk || m.position.title}` : ''}</p>
+              </div>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full ${m.isActive !== false ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-rose-100 text-rose-700'}`}>
+                {m.isActive !== false ? 'Активний' : 'Неактивний'}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Modal ─────────────────────────────────────────────────────────────────
+
+  const Modal = () => {
+    if (!modal) return null
+    const isCreateDept = modal.type === 'create-dept'
+    const isCreateMgmt = modal.type === 'create-management'
+    const isCreateSection = modal.type === 'create-section'
+    const isCreateUser = modal.type === 'create-user'
+
+    let title = ''
+    let onSubmit = async () => {}
+
+    if (isCreateDept) { title = 'Новий департамент'; onSubmit = createDept }
+    if (isCreateMgmt) { title = 'Нове управління'; onSubmit = () => createManagement((modal as any).parentDeptId) }
+    if (isCreateSection) { title = 'Новий відділ'; onSubmit = () => createSection((modal as any).parentDeptId, (modal as any).managementId) }
+    if (isCreateUser) { title = 'Новий акаунт'; onSubmit = createUser }
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setModal(null)} />
+        <div className="relative bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold">{title}</h3>
+            <button onClick={() => setModal(null)} className="w-8 h-8 rounded-full hover:bg-secondary flex items-center justify-center text-muted-foreground">✕</button>
+          </div>
+
+          {error && <div className="rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 px-4 py-3 text-sm text-rose-700 dark:text-rose-400">{error}</div>}
+
+          <div className="space-y-3">
+            {/* Dept form */}
+            {isCreateDept && (<>
+              <Field label="Назва департаменту *" value={cf.deptName} onChange={v => setCfField('deptName', v)} />
+              <Field label="Код (напр. DEP01) *" value={cf.deptCode} onChange={v => setCfField('deptCode', v)} />
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Директор</label>
+                <select value={cf.deptDirectorId} onChange={e => setCfField('deptDirectorId', e.target.value)} className="w-full h-9 rounded-lg border border-border px-2 text-sm bg-background">
+                  <option value="">— Не призначений —</option>
+                  {allUsers.filter(u => ['director', 'admin', 'deputy_director'].includes(u.role)).map(u => (
+                    <option key={u.id} value={u.id}>{u.lastName} {u.firstName}</option>
+                  ))}
+                </select>
+              </div>
+            </>)}
+
+            {/* Management form */}
+            {isCreateMgmt && (<>
+              <Field label="Назва управління *" value={cf.mgmtName} onChange={v => setCfField('mgmtName', v)} placeholder="напр. Управління цифровізації" />
+            </>)}
+
+            {/* Section form */}
+            {isCreateSection && (<>
+              <Field label="Назва відділу *" value={cf.sectionName} onChange={v => setCfField('sectionName', v)} />
+              <Field label="Код (напр. SEC01) *" value={cf.sectionCode} onChange={v => setCfField('sectionCode', v)} />
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Управління</label>
+                <div className="h-9 rounded-lg border border-border px-3 flex items-center text-sm text-muted-foreground bg-secondary/30">
+                  {(modal as any).managementId
+                    ? managements.find(m => m.id === (modal as any).managementId)?.nameUk || 'Вибрано'
+                    : 'Без управління'}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Керівник відділу</label>
+                <select value={cf.sectionManagerId} onChange={e => setCfField('sectionManagerId', e.target.value)} className="w-full h-9 rounded-lg border border-border px-2 text-sm bg-background">
+                  <option value="">— Не призначений —</option>
+                  {allUsers.map(u => <option key={u.id} value={u.id}>{u.lastName} {u.firstName} ({ROLE_LABELS[u.role] || u.role})</option>)}
+                </select>
+              </div>
+            </>)}
+
+            {/* User form */}
+            {isCreateUser && (<>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Прізвище *" value={cf.uLastName} onChange={v => setCfField('uLastName', v)} />
+                <Field label="Ім'я *" value={cf.uFirstName} onChange={v => setCfField('uFirstName', v)} />
+              </div>
+              <Field label="По батькові" value={cf.uPatronymic} onChange={v => setCfField('uPatronymic', v)} />
+              <Field label="Email *" type="email" value={cf.uEmail} onChange={v => setCfField('uEmail', v)} />
+              <Field label="Табельний номер *" value={cf.uEmployeeId} onChange={v => setCfField('uEmployeeId', v)} placeholder="EMP001" />
+              <Field label="Пароль (мін. 12 симв.) *" type="password" value={cf.uPassword} onChange={v => setCfField('uPassword', v)} />
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Роль *</label>
+                <select value={cf.uRole} onChange={e => setCfField('uRole', e.target.value)} className="w-full h-9 rounded-lg border border-border px-2 text-sm bg-background">
+                  {ALL_ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Підрозділ</label>
+                <select
+                  value={cf.uDeptId || (modal as any).departmentId || ''}
+                  onChange={e => setCfField('uDeptId', e.target.value)}
+                  className="w-full h-9 rounded-lg border border-border px-2 text-sm bg-background"
+                >
+                  <option value="">— Без підрозділу —</option>
+                  {rootDepts.map(d => <option key={d.id} value={d.id}>🏛 {d.nameUk}</option>)}
+                  {sections.map(s => {
+                    const parent = rootDepts.find(d => d.id === s.parentId)
+                    return <option key={s.id} value={s.id}>📁 {s.nameUk} ({parent?.nameUk || ''})</option>
+                  })}
+                </select>
+              </div>
+            </>)}
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-secondary transition-colors">Скасувати</button>
+            <button onClick={onSubmit} disabled={saving} className="px-5 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-60">
+              {saving ? 'Збереження…' : 'Зберегти'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const Field = ({ label, value, onChange, type = 'text', placeholder = '' }: { label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string }) => (
+    <div className="space-y-1">
+      <label className="text-xs text-muted-foreground">{label}</label>
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        className="w-full h-9 rounded-lg border border-border px-3 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40" />
+    </div>
+  )
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  return (
+    <DashboardLayout>
+      <div className="flex h-[calc(100vh-64px)] overflow-hidden">
+
+        {/* Left: Org tree */}
+        <aside className="w-72 shrink-0 border-r border-border bg-card flex flex-col overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
+            <h2 className="text-sm font-bold text-foreground">Структура організації</h2>
+            {isAdmin && (
+              <button onClick={() => setModal({ type: 'create-dept' })}
+                className="w-7 h-7 rounded-lg bg-primary text-white text-sm flex items-center justify-center hover:bg-primary/90 transition-colors">+</button>
+            )}
+          </div>
+
+          <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
+            {loading && (
+              <div className="text-xs text-muted-foreground text-center py-8">Завантаження…</div>
+            )}
+            {!loading && rootDepts.length === 0 && (
+              <div className="text-xs text-muted-foreground text-center py-8">Немає підрозділів</div>
+            )}
+            {rootDepts.map(dept => <TreeDept key={dept.id} dept={dept} />)}
+          </nav>
+        </aside>
+
+        {/* Right: Detail panel */}
+        <main className="flex-1 overflow-y-auto bg-background">
+          {/* Success/error toast */}
+          {(success || error) && (
+            <div className={`mx-6 mt-4 rounded-xl border px-4 py-3 text-sm ${
+              success ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400'
+                      : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-400'}`}>
+              {success || error}
+            </div>
+          )}
+
+          <div className="p-6">
+            {!selected && (
+              <div className="flex flex-col items-center justify-center h-80 text-center">
+                <div className="text-5xl mb-4">🏛</div>
+                <h2 className="text-xl font-semibold text-foreground">Оберіть підрозділ</h2>
+                <p className="text-sm text-muted-foreground mt-2 max-w-sm">
+                  Натисніть на департамент, управління або відділ в дереві зліва щоб переглянути деталі та керувати структурою
+                </p>
+                {isAdmin && (
+                  <button onClick={() => setModal({ type: 'create-dept' })} className="mt-6 px-5 py-2.5 rounded-xl bg-primary text-white font-medium hover:bg-primary/90 transition-colors">
+                    + Новий департамент
+                  </button>
+                )}
+              </div>
+            )}
+
+            {selectedDept && <DetailDept dept={selectedDept} />}
+            {selectedMgmt && <DetailManagement mgmt={selectedMgmt} />}
+            {selectedSection && <DetailSection section={selectedSection} />}
+          </div>
+        </main>
+
+        {/* Users panel — right sidebar, show when account creation context */}
+        {canManage && selected && (
+          <aside className="w-56 shrink-0 border-l border-border bg-card flex flex-col overflow-hidden">
+            <div className="px-4 py-3 border-b border-border shrink-0">
+              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Дії</h3>
+            </div>
+            <div className="p-3 space-y-2">
+              {selected.type === 'dept' && (<>
+                <SideBtn icon="📂" label="+ Управління" onClick={() => setModal({ type: 'create-management', parentDeptId: selected.id })} />
+                <SideBtn icon="📁" label="+ Відділ" onClick={() => setModal({ type: 'create-section', parentDeptId: selected.id })} />
+                <SideBtn icon="👤" label="+ Акаунт" onClick={() => setModal({ type: 'create-user', departmentId: selected.id })} />
+              </>)}
+              {selected.type === 'management' && (() => {
+                const m = managements.find(mg => mg.id === selected.id)
+                return m ? <>
+                  <SideBtn icon="📁" label="+ Відділ в управлінні" onClick={() => setModal({ type: 'create-section', parentDeptId: m.departmentId, managementId: m.id })} />
+                  <SideBtn icon="👤" label="+ Акаунт" onClick={() => setModal({ type: 'create-user' })} />
+                </> : null
+              })()}
+              {selected.type === 'section' && (<>
+                <SideBtn icon="👤" label="+ Акаунт у відділ" onClick={() => setModal({ type: 'create-user', departmentId: selected.id })} />
+              </>)}
+              <div className="border-t border-border my-2" />
+              <SideBtn icon="👤" label="+ Будь-який акаунт" onClick={() => setModal({ type: 'create-user' })} secondary />
+            </div>
+          </aside>
+        )}
+      </div>
+
+      <Modal />
     </DashboardLayout>
+  )
+}
+
+function SideBtn({ icon, label, onClick, secondary = false }: { icon: string; label: string; onClick: () => void; secondary?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 transition-colors ${
+        secondary ? 'text-muted-foreground hover:bg-secondary' : 'bg-primary/5 text-primary hover:bg-primary/10'
+      }`}
+    >
+      <span>{icon}</span>
+      <span>{label}</span>
+    </button>
   )
 }
