@@ -8,16 +8,19 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import type { UiPresetConfig, UiWidgetConfig } from '@/types/ui-config'
 import { GlassCard } from '@/components/ui/glass-card'
-import { Save } from 'lucide-react'
+import { Save, LayoutDashboard, GitBranch } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export default function LayoutBuilderPage() {
   const { isAuthenticated, user } = useAuthStore()
+  const [tab, setTab] = useState<'layout' | 'flow'>('layout')
   const [config, setConfig] = useState<UiPresetConfig | null>(null)
   const [widgets, setWidgets] = useState<UiWidgetConfig[]>([])
   const [loading, setLoading] = useState(true)
+  const [savingLayout, setSavingLayout] = useState(false)
   const [approvalSteps, setApprovalSteps] = useState<Array<{ order: number; role: 'manager' | 'clerk' | 'director'; required: boolean }>>([])
   const [savingFlow, setSavingFlow] = useState(false)
+  const [saveOk, setSaveOk] = useState(false)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('vidlik-accessToken') : null
 
   useEffect(() => {
@@ -28,39 +31,23 @@ export default function LayoutBuilderPage() {
       const res = await fetch('/api/v1/ai/ui-config?page=dashboard', {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
-      if (!res.ok) {
-        if (!cancelled) setLoading(false)
-        return
-      }
+      if (!res.ok) { if (!cancelled) setLoading(false); return }
       const data = await res.json()
-      if (!cancelled) {
-        setConfig(data)
-        setWidgets(data.layout?.widgets || [])
-        setLoading(false)
-      }
+      if (!cancelled) { setConfig(data); setWidgets(data.layout?.widgets || []); setLoading(false) }
     }
-
     if (isAuthenticated) loadConfig()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [accessToken, isAuthenticated])
 
   useEffect(() => {
     let cancelled = false
     async function loadFlow() {
       if (!accessToken || user?.role === 'specialist') return
-      const res = await fetch('/api/v1/approvals/flows/report', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
+      const res = await fetch('/api/v1/approvals/flows/report', { headers: { Authorization: `Bearer ${accessToken}` } })
       if (!res.ok) return
       const data = await res.json()
       if (!cancelled) {
-        const steps = (data.steps || []).map((s: any) => ({
-          order: s.order,
-          role: s.role,
-          required: s.required !== false,
-        }))
+        const steps = (data.steps || []).map((s: any) => ({ order: s.order, role: s.role, required: s.required !== false }))
         setApprovalSteps(steps.length ? steps : [
           { order: 1, role: 'manager', required: true },
           { order: 2, role: 'clerk', required: true },
@@ -69,18 +56,14 @@ export default function LayoutBuilderPage() {
       }
     }
     loadFlow()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [accessToken, user?.role])
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
-
     const oldIndex = widgets.findIndex(w => w.id === active.id)
     const newIndex = widgets.findIndex(w => w.id === over.id)
-
     const updated = [...widgets]
     const [moved] = updated.splice(oldIndex, 1)
     updated.splice(newIndex, 0, moved)
@@ -90,26 +73,23 @@ export default function LayoutBuilderPage() {
   const updateSpan = (id: string, col?: number, row?: number) => {
     setWidgets(prev =>
       prev.map(widget =>
-        widget.id === id
-          ? { ...widget, span: { col: col ?? widget.span.col, row: row ?? widget.span.row } }
-          : widget
+        widget.id === id ? { ...widget, span: { col: col ?? widget.span.col, row: row ?? widget.span.row } } : widget
       )
     )
   }
 
+  const showSuccess = () => { setSaveOk(true); setTimeout(() => setSaveOk(false), 2500) }
+
   const saveLayout = async () => {
     if (!accessToken || !config) return
+    setSavingLayout(true)
     await fetch('/api/v1/ai/ui-config?page=dashboard', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        id: config.layout.id,
-        widgets,
-      }),
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: config.layout.id, widgets }),
     })
+    setSavingLayout(false)
+    showSuccess()
   }
 
   const saveFlow = async () => {
@@ -117,13 +97,11 @@ export default function LayoutBuilderPage() {
     setSavingFlow(true)
     await fetch('/api/v1/approvals/flows/report', {
       method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ steps: approvalSteps }),
     })
     setSavingFlow(false)
+    showSuccess()
   }
 
   const updateStepRole = (index: number, role: 'manager' | 'clerk' | 'director') => {
@@ -133,61 +111,93 @@ export default function LayoutBuilderPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold font-display">Конструктор дашборду</h1>
-            <p className="text-muted-foreground mt-1">Перетягуйте віджети та змінюйте розміри</p>
-          </div>
-          <Button className="rounded-full" onClick={saveLayout}>
-            <Save className="w-4 h-4 mr-2" />
-            Зберегти
-          </Button>
+        <div>
+          <h1 className="text-2xl font-semibold font-display">Налаштування</h1>
+          <p className="text-muted-foreground mt-1">Конструктор дашборду та маршрут погодження</p>
         </div>
 
-        {loading && <div className="glass-card p-6 text-sm text-muted-foreground">Завантаження...</div>}
+        {saveOk && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
+            Збережено
+          </div>
+        )}
 
-        {!loading && (
-          <div className="space-y-6">
-            <DndContext onDragEnd={handleDragEnd}>
-              <SortableContext items={widgets.map(w => w.id)} strategy={verticalListSortingStrategy}>
-                <div className="space-y-3">
-                  {widgets.map(widget => (
-                    <WidgetRow key={widget.id} widget={widget} onSpanChange={updateSpan} />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
+        {/* Tabs */}
+        <div className="flex rounded-xl border border-border overflow-hidden w-fit">
+          <button
+            onClick={() => setTab('layout')}
+            className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium transition-colors ${tab === 'layout' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-secondary'}`}
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            Конструктор дашборду
+          </button>
+          {user?.role !== 'specialist' && (
+            <button
+              onClick={() => setTab('flow')}
+              className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium transition-colors border-l border-border ${tab === 'flow' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-secondary'}`}
+            >
+              <GitBranch className="w-4 h-4" />
+              Маршрут погодження
+            </button>
+          )}
+        </div>
 
-            {user?.role !== 'specialist' && (
-              <GlassCard className="p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold">Конструктор погодження звітів</h2>
-                    <p className="text-sm text-muted-foreground">Налаштуйте послідовність: керівник → діловод → директор</p>
+        {/* Layout tab */}
+        {tab === 'layout' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">Перетягуйте віджети та змінюйте їх розміри</p>
+              <Button className="rounded-full" onClick={saveLayout} disabled={savingLayout}>
+                <Save className="w-4 h-4 mr-2" />
+                {savingLayout ? 'Збереження...' : 'Зберегти розміщення'}
+              </Button>
+            </div>
+
+            {loading && <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Завантаження...</div>}
+
+            {!loading && (
+              <DndContext onDragEnd={handleDragEnd}>
+                <SortableContext items={widgets.map(w => w.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-3">
+                    {widgets.map(widget => (
+                      <WidgetRow key={widget.id} widget={widget} onSpanChange={updateSpan} />
+                    ))}
                   </div>
-                  <Button onClick={saveFlow} disabled={savingFlow}>
-                    {savingFlow ? 'Збереження...' : 'Зберегти flow'}
-                  </Button>
-                </div>
-                <div className="space-y-2">
-                  {approvalSteps.map((step, idx) => (
-                    <div key={idx} className="flex items-center gap-3 rounded-lg border border-border px-3 py-2">
-                      <span className="text-sm text-muted-foreground min-w-10">Крок {step.order}</span>
-                      <select
-                        value={step.role}
-                        onChange={(e) => updateStepRole(idx, e.target.value as 'manager' | 'clerk' | 'director')}
-                        className="h-9 rounded-lg border border-border px-3 text-sm"
-                      >
-                        <option value="manager">Керівник</option>
-                        <option value="clerk">Діловод</option>
-                        <option value="director">Директор</option>
-                      </select>
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
+                </SortableContext>
+              </DndContext>
             )}
           </div>
+        )}
+
+        {/* Flow tab */}
+        {tab === 'flow' && user?.role !== 'specialist' && (
+          <GlassCard className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-semibold">Послідовність погодження звітів</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">Налаштуйте хто і в якому порядку підписує: керівник → діловод → директор</p>
+              </div>
+              <Button onClick={saveFlow} disabled={savingFlow}>
+                {savingFlow ? 'Збереження...' : 'Зберегти маршрут'}
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {approvalSteps.map((step, idx) => (
+                <div key={idx} className="flex items-center gap-3 rounded-lg border border-border px-3 py-2">
+                  <span className="text-sm text-muted-foreground min-w-14 font-medium">Крок {step.order}</span>
+                  <select
+                    value={step.role}
+                    onChange={(e) => updateStepRole(idx, e.target.value as 'manager' | 'clerk' | 'director')}
+                    className="h-9 rounded-lg border border-border px-3 text-sm bg-background"
+                  >
+                    <option value="manager">Керівник відділу</option>
+                    <option value="clerk">Діловод</option>
+                    <option value="director">Директор</option>
+                  </select>
+                </div>
+              ))}
+            </div>
+          </GlassCard>
         )}
       </div>
     </DashboardLayout>
@@ -196,11 +206,7 @@ export default function LayoutBuilderPage() {
 
 function WidgetRow({ widget, onSpanChange }: { widget: UiWidgetConfig; onSpanChange: (id: string, col?: number, row?: number) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: widget.id })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  }
+  const style = { transform: CSS.Transform.toString(transform), transition }
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
@@ -210,24 +216,14 @@ function WidgetRow({ widget, onSpanChange }: { widget: UiWidgetConfig; onSpanCha
           <p className="text-xs text-muted-foreground">{widget.type}</p>
         </div>
         <div className="flex items-center gap-3">
-          <label className="text-xs text-muted-foreground">Col</label>
-          <input
-            type="number"
-            min={1}
-            max={12}
-            value={widget.span.col}
+          <label className="text-xs text-muted-foreground">Ширина</label>
+          <input type="number" min={1} max={12} value={widget.span.col}
             onChange={(e) => onSpanChange(widget.id, Number(e.target.value), undefined)}
-            className="w-16 rounded-lg bg-card/70 px-2 py-1 text-xs text-foreground dark:bg-slate-800 dark:text-slate-100"
-          />
-          <label className="text-xs text-muted-foreground">Row</label>
-          <input
-            type="number"
-            min={1}
-            max={6}
-            value={widget.span.row}
+            className="w-16 rounded-lg bg-card/70 px-2 py-1 text-xs text-foreground dark:bg-slate-800 dark:text-slate-100" />
+          <label className="text-xs text-muted-foreground">Висота</label>
+          <input type="number" min={1} max={6} value={widget.span.row}
             onChange={(e) => onSpanChange(widget.id, undefined, Number(e.target.value))}
-            className="w-16 rounded-lg bg-card/70 px-2 py-1 text-xs text-foreground dark:bg-slate-800 dark:text-slate-100"
-          />
+            className="w-16 rounded-lg bg-card/70 px-2 py-1 text-xs text-foreground dark:bg-slate-800 dark:text-slate-100" />
         </div>
       </GlassCard>
     </div>

@@ -773,6 +773,24 @@ export default function DepartmentsPage() {
     setActionSuccess('Управління та його склад збережено')
   }
 
+  const deleteDepartment = async (id: string, name: string) => {
+    if (!isAdmin || !accessToken) return
+    if (!window.confirm(`Видалити підрозділ "${name}"?\n\nУвага: видалення неможливе, якщо є прикріплені співробітники.`)) return
+    setActionError('')
+    const resp = await fetch(`/api/v1/departments/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (resp.ok) {
+      await loadDepartments()
+      if (selectedDepartmentId === id) setSelectedDepartmentId('')
+      setActionSuccess('Підрозділ видалено')
+    } else {
+      const err = await resp.json().catch(() => null)
+      setActionError(extractApiErrorMessage(resp.status, err, 'Не вдалося видалити підрозділ. Переконайтеся що у ньому немає співробітників.'))
+    }
+  }
+
   const deleteManagement = async () => {
     if (!accessToken || !selectedRootDepartmentId || !managementSourceTag || (!isAdmin && !isDirector)) return
     const ok = window.confirm(`Видалити управління "${managementSourceTag}"?`)
@@ -1058,24 +1076,35 @@ export default function DepartmentsPage() {
                 const children = childDepartmentsMap.get(department.id) || []
                 const expanded = expandedDepartmentIds.includes(department.id)
                 return (
-                  <div key={department.id} className="border-b border-border dark:border-slate-700">
-                    <button
-                      onClick={() => {
-                        setSelectedDepartmentId(department.id)
-                        setExpandedDepartmentIds((prev) =>
-                          prev.includes(department.id) ? prev.filter((id) => id !== department.id) : [...prev, department.id],
-                        )
-                      }}
-                      className={`w-full text-left px-4 py-3 text-sm ${selectedDepartmentId === department.id ? 'bg-secondary dark:bg-slate-800 font-medium' : ''}`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span>{department.nameUk || department.name}</span>
-                        <span className="text-xs text-muted-foreground">{expanded ? '▾' : '▸'}</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground dark:text-slate-400 mt-1">
-                        {department.code} • {department.usersCount} осіб • Департамент
-                      </div>
-                    </button>
+                  <div key={department.id} className="border-b border-border dark:border-slate-700 group">
+                    <div className={`flex items-center ${selectedDepartmentId === department.id ? 'bg-secondary dark:bg-slate-800' : ''}`}>
+                      <button
+                        onClick={() => {
+                          setSelectedDepartmentId(department.id)
+                          setExpandedDepartmentIds((prev) =>
+                            prev.includes(department.id) ? prev.filter((id) => id !== department.id) : [...prev, department.id],
+                          )
+                        }}
+                        className="flex-1 text-left px-4 py-3 text-sm"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={selectedDepartmentId === department.id ? 'font-medium' : ''}>{department.nameUk || department.name}</span>
+                          <span className="text-xs text-muted-foreground">{expanded ? '▾' : '▸'}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground dark:text-slate-400 mt-1">
+                          {department.code} • {department.usersCount} осіб • Департамент
+                        </div>
+                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteDepartment(department.id, department.nameUk || department.name) }}
+                          title="Видалити підрозділ"
+                          className="px-3 py-1 text-xs text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded transition-colors opacity-0 group-hover:opacity-100 mr-1"
+                        >
+                          🗑
+                        </button>
+                      )}
+                    </div>
                     {expanded && children.length > 0 && (
                       <div className="bg-secondary/70 dark:bg-slate-800/40">
                         {groupChildrenByDivision(children).map(({ tag, items }) => (

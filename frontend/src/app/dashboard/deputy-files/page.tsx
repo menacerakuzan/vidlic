@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type Department = { id: string; name: string; nameUk: string; parentId: string | null }
+type Department = { id: string; name: string; nameUk: string; parentId: string | null; divisionTag?: string | null }
 
 type TeamMember = {
   id: string; firstName: string; lastName: string; patronymic?: string
@@ -510,11 +510,27 @@ export default function DeputyFilesPage() {
 
   if (user?.role !== 'deputy_head') return null
 
+  // Group children by divisionTag for управління display
+  const groupByDivision = (children: Department[]): { tag: string | null; items: Department[] }[] => {
+    const groups = new Map<string, Department[]>()
+    for (const c of children) {
+      const key = c.divisionTag?.trim() || ''
+      groups.set(key, [...(groups.get(key) || []), c])
+    }
+    const tagged: { tag: string; items: Department[] }[] = []
+    for (const [tag, items] of groups.entries()) if (tag) tagged.push({ tag, items })
+    tagged.sort((a, b) => a.tag.localeCompare(b.tag, 'uk'))
+    const untagged = groups.get('') || []
+    return [...tagged, ...(untagged.length ? [{ tag: null, items: untagged }] : [])]
+  }
+
   const DeptNode = ({ dept, depth = 0 }: { dept: Department; depth?: number }) => {
     const isExpanded = expandedDepts.has(dept.id)
     const isSelected = selectedEntity?.id === dept.id && selectedEntity.type === 'department'
     const children = childMap[dept.id] || []
     const members = teamMap[dept.id] || []
+    const groups = groupByDivision(children)
+    const hasMultipleGroups = groups.some(g => g.tag !== null)
 
     const handleClick = async () => {
       await selectEntity('department', dept.id, dept.nameUk)
@@ -540,7 +556,19 @@ export default function DeputyFilesPage() {
         </div>
         {isExpanded && (
           <div>
-            {children.map(child => <DeptNode key={child.id} dept={child} depth={depth + 1} />)}
+            {hasMultipleGroups ? (
+              // Show управління groups
+              groups.map(({ tag, items }) => (
+                <DivisionGroup
+                  key={tag ?? '__none__'}
+                  tag={tag}
+                  depts={items}
+                  depth={depth}
+                />
+              ))
+            ) : (
+              children.map(child => <DeptNode key={child.id} dept={child} depth={depth + 1} />)
+            )}
             {members.map(m => (
               <button
                 key={m.id}
@@ -557,6 +585,32 @@ export default function DeputyFilesPage() {
             ))}
           </div>
         )}
+      </div>
+    )
+  }
+
+  // Management group — uses expandedDepts with `mgmt:${tag}` keys to avoid defining state inside
+  const DivisionGroup = ({ tag, depts, depth }: { tag: string | null; depts: Department[]; depth: number }) => {
+    const isOpen = tag ? !expandedDepts.has(`mgmt_collapsed:${tag}`) : true
+    if (!tag) return <div>{depts.map(d => <DeptNode key={d.id} dept={d} depth={depth + 1} />)}</div>
+    return (
+      <div>
+        <button
+          onClick={() => {
+            const key = `mgmt_collapsed:${tag}`
+            setExpandedDepts(prev => {
+              const next = new Set(prev)
+              next.has(key) ? next.delete(key) : next.add(key)
+              return next
+            })
+          }}
+          style={{ paddingLeft: depth * 14 + 8 }}
+          className="w-full text-left pr-2 py-1 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors"
+        >
+          <span style={{ display: 'inline-block', transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease', fontSize: 8 }}>▶</span>
+          <span>📂 {tag}</span>
+        </button>
+        {isOpen && depts.map(d => <DeptNode key={d.id} dept={d} depth={depth + 1} />)}
       </div>
     )
   }
@@ -630,11 +684,13 @@ export default function DeputyFilesPage() {
             <button onClick={() => setRemindersModal(true)} className="px-3 py-1.5 rounded-lg text-xs border border-border text-muted-foreground hover:bg-secondary transition-colors">
               ⏰{upcomingReminders.length > 0 && <span className="ml-1 text-amber-500 font-semibold">{upcomingReminders.length}</span>}
             </button>
-            {(selectedEntity || viewMode === 'all') && (
+            {selectedEntity ? (
               <button onClick={() => fileInputRef.current?.click()}
                 className="ml-auto px-4 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors shrink-0">
                 + Завантажити
               </button>
+            ) : viewMode === 'tree' ? null : (
+              <span className="ml-auto text-[11px] text-muted-foreground italic">Оберіть підрозділ у дереві</span>
             )}
             {/* Tag filter */}
             <div className="w-full flex gap-1.5 flex-wrap pt-0.5">
