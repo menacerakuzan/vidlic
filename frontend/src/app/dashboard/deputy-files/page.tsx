@@ -356,14 +356,24 @@ export default function DeputyFilesPage() {
 
   const handleCreateFolder = async () => {
     if (!token || !selectedEntity || !newFolderName.trim()) return
-    setCreatingFolder(false)
+    const name = newFolderName.trim()
     const r = await fetch('/api/v1/deputy-files/folders', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entityType: selectedEntity.type, entityId: selectedEntity.id, name: newFolderName.trim() }),
+      body: JSON.stringify({ entityType: selectedEntity.type, entityId: selectedEntity.id, name }),
     })
-    setNewFolderName('')
-    if (r.ok) { showToast('ok', 'Папку створено'); await loadFolders(selectedEntity.type, selectedEntity.id) }
+    if (r.ok) {
+      setNewFolderName('')
+      setCreatingFolder(false)
+      showToast('ok', 'Папку створено')
+      await loadFolders(selectedEntity.type, selectedEntity.id)
+    } else {
+      const err = await r.json().catch(() => null)
+      const msg = err?.message
+        ? (Array.isArray(err.message) ? err.message.join(', ') : err.message)
+        : `Не вдалося створити папку (${r.status})`
+      showToast('err', msg)
+    }
   }
 
   const handleRenameFolder = async (id: string) => {
