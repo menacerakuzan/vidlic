@@ -155,6 +155,7 @@ export class DepartmentsService {
         clerkId: dto.clerkId,
         directorId: isDirector ? actor.id : dto.directorId,
         divisionTag: dto.divisionTag ?? null,
+        managementId: (dto as any).managementId ?? null,
       },
     });
 
@@ -210,6 +211,7 @@ export class DepartmentsService {
         clerkId: dto.clerkId !== undefined ? dto.clerkId : department.clerkId,
         directorId: dto.directorId !== undefined ? dto.directorId : department.directorId,
         divisionTag: dto.divisionTag !== undefined ? (dto.divisionTag || null) : department.divisionTag,
+        managementId: (dto as any).managementId !== undefined ? ((dto as any).managementId || null) : (department as any).managementId,
       },
     });
 

@@ -48,6 +48,8 @@ type OrgUser = {
   role: string
   isActive: boolean
   departmentId: string | null
+  scopeDepartmentIds?: string[]
+  secondaryDepartmentIds?: string[]
   position?: { title: string; titleUk?: string } | null
 }
 
@@ -318,6 +320,26 @@ export default function DepartmentsPage() {
     else { const j = await r.json().catch(() => null); setError(extractApiErrorMessage(r.status, j, 'Помилка')) }
   }
 
+  // Toggle whether a deputy_head oversees a department (adds/removes from scopeDepartmentIds)
+  const toggleDeputyScope = async (deputyId: string, deptId: string) => {
+    const deputy = allUsers.find(u => u.id === deputyId)
+    if (!deputy) return
+    const current = Array.isArray(deputy.scopeDepartmentIds) ? deputy.scopeDepartmentIds : []
+    const next = current.includes(deptId) ? current.filter(id => id !== deptId) : [...current, deptId]
+    const r = await fetch(`/api/v1/users/${deputyId}`, {
+      method: 'PUT', headers: authHeaders,
+      body: JSON.stringify({ scopeDepartmentIds: next }),
+    })
+    if (r.ok) {
+      // optimistic local update
+      setAllUsers(prev => prev.map(u => u.id === deputyId ? { ...u, scopeDepartmentIds: next } : u))
+      setSuccess('Доступ заступника оновлено')
+    } else {
+      const j = await r.json().catch(() => null)
+      setError(extractApiErrorMessage(r.status, j, 'Помилка призначення заступника'))
+    }
+  }
+
   const moveSectionToManagement = async (sectionId: string, managementId: string | null) => {
     const r = await fetch(`/api/v1/departments/${sectionId}`, {
       method: 'PUT', headers: authHeaders,
@@ -452,6 +474,34 @@ export default function DepartmentsPage() {
             ))}
           </div>
         </div>
+
+        {/* Deputy head (замглава) scope assignment */}
+        {canManage && (() => {
+          const deputies = allUsers.filter(u => u.role === 'deputy_head')
+          if (deputies.length === 0) return null
+          return (
+            <div className="rounded-xl border border-border p-4 space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold">Заступники голови — доступ до файлів підрозділу</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Відмічені заступники бачать цей департамент (і його відділи) у своєму файловому менеджері</p>
+              </div>
+              <div className="space-y-2">
+                {deputies.map(d => {
+                  const covers = Array.isArray(d.scopeDepartmentIds) && d.scopeDepartmentIds.includes(dept.id)
+                  return (
+                    <label key={d.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border hover:bg-secondary/40 cursor-pointer transition-colors">
+                      <input type="checkbox" checked={covers} onChange={() => toggleDeputyScope(d.id, dept.id)} className="w-4 h-4 accent-primary" />
+                      <span className="text-sm flex-1">{d.lastName} {d.firstName}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${covers ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-secondary text-muted-foreground'}`}>
+                        {covers ? 'Має доступ' : 'Немає доступу'}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* Managements */}
         {deptManagements.length > 0 && (
@@ -696,12 +746,12 @@ export default function DepartmentsPage() {
     const isCreateUser = modal.type === 'create-user'
 
     let title = ''
-    let onSubmit = async () => {}
+    let onSubmit: () => void = () => {}
 
-    if (isCreateDept) { title = 'Новий департамент'; onSubmit = createDept }
-    if (isCreateMgmt) { title = 'Нове управління'; onSubmit = () => createManagement((modal as any).parentDeptId) }
-    if (isCreateSection) { title = 'Новий відділ'; onSubmit = () => createSection((modal as any).parentDeptId, (modal as any).managementId) }
-    if (isCreateUser) { title = 'Новий акаунт'; onSubmit = createUser }
+    if (isCreateDept) { title = 'Новий департамент'; onSubmit = () => { createDept() } }
+    if (isCreateMgmt) { title = 'Нове управління'; onSubmit = () => { createManagement((modal as any).parentDeptId) } }
+    if (isCreateSection) { title = 'Новий відділ'; onSubmit = () => { createSection((modal as any).parentDeptId, (modal as any).managementId) } }
+    if (isCreateUser) { title = 'Новий акаунт'; onSubmit = () => { createUser() } }
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">

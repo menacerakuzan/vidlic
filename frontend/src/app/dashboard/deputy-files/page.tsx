@@ -312,7 +312,11 @@ export default function DeputyFilesPage() {
         await refreshCurrentView()
         if (versionsModal) setVersions(await loadVersionsData(versionsModal.id))
       } else {
-        showToast('err', 'Помилка завантаження')
+        const err = await r.json().catch(() => null)
+        const msg = err?.message
+          ? (Array.isArray(err.message) ? err.message.join(', ') : err.message)
+          : `Помилка завантаження (${r.status})`
+        showToast('err', msg)
       }
     }
     reader.readAsDataURL(pendingFile)

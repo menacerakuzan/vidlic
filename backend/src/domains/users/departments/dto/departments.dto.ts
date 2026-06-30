@@ -38,6 +38,11 @@ export class CreateDepartmentDto {
   @IsOptional()
   @IsString()
   divisionTag?: string;
+
+  @ApiPropertyOptional({ description: 'Управління до якого належить відділ' })
+  @IsOptional()
+  @IsUUID()
+  managementId?: string;
 }
 
 export class UpdateDepartmentDto {
@@ -80,6 +85,11 @@ export class UpdateDepartmentDto {
   @IsOptional()
   @IsString()
   divisionTag?: string;
+
+  @ApiPropertyOptional({ description: 'Управління до якого належить відділ (null = відкріпити)' })
+  @IsOptional()
+  @IsUUID()
+  managementId?: string | null;
 }
 
 export class DepartmentTeamQueryDto {}

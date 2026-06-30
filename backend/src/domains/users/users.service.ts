@@ -337,6 +337,9 @@ export class UsersService {
       patronymic: user.patronymic,
       role: user.role,
       isActive: user.isActive,
+      scopeDepartmentIds: Array.isArray(user.scopeDepartmentIds) ? user.scopeDepartmentIds : [],
+      secondaryDepartmentIds: Array.isArray(user.secondaryDepartmentIds) ? user.secondaryDepartmentIds : [],
+      departmentId: user.departmentId ?? null,
       department: user.department ? {
         id: user.department.id,
         name: user.department.name,

@@ -15,23 +15,7 @@ import { ManagementsService } from './managements.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
-
-class CreateManagementDto {
-  name: string;
-  nameUk: string;
-  departmentId: string;
-  headId?: string;
-}
-
-class UpdateManagementDto {
-  name?: string;
-  nameUk?: string;
-  headId?: string | null;
-}
-
-class SectionIdsDto {
-  sectionIds: string[];
-}
+import { CreateManagementDto, UpdateManagementDto, SectionIdsDto } from './dto/managements.dto';
 
 @ApiTags('managements')
 @Controller('managements')
