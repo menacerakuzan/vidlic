@@ -67,7 +67,7 @@ export class DeputyFilesService {
   async upload(
     user: any,
     dto: {
-      entityType: 'department' | 'user';
+      entityType: 'department' | 'user' | 'management';
       entityId: string;
       folderId?: string | null;
       fileName: string;

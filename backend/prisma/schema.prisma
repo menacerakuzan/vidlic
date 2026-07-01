@@ -577,6 +577,7 @@ model SlaEscalationEvent {
 enum DeputyFileEntityType {
   department
   user
+  management
 }
 
 model DeputyFile {

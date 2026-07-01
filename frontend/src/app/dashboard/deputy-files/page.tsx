@@ -3,11 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useAuthStore } from '@/store/auth-store'
+import { authFetch } from '@/lib/auth-fetch'
 import { useRouter } from 'next/navigation'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type Department = { id: string; name: string; nameUk: string; parentId: string | null; divisionTag?: string | null }
+type EntityType = 'department' | 'user' | 'management'
+
+type Department = { id: string; name: string; nameUk: string; parentId: string | null; divisionTag?: string | null; managementId?: string | null }
+
+type Management = { id: string; name: string; nameUk: string; departmentId: string }
 
 type TeamMember = {
   id: string; firstName: string; lastName: string; patronymic?: string
@@ -19,7 +24,7 @@ type DeputyFolder = {
 }
 
 type DeputyFile = {
-  id: string; entityType: 'department' | 'user'; entityId: string
+  id: string; entityType: EntityType; entityId: string
   folderId: string | null
   fileName: string; mimeType: string; fileSize: number
   notes: string | null; reminderAt: string | null
@@ -82,7 +87,7 @@ function ImageThumb({ fileId, token }: { fileId: string; token: string }) {
     const obs = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting) return
       obs.disconnect()
-      fetch(`/api/v1/deputy-files/${fileId}/thumbnail`, { headers: { Authorization: `Bearer ${token}` } })
+      authFetch(`/api/v1/deputy-files/${fileId}/thumbnail`)
         .then(r => r.ok ? r.blob() : null)
         .then(blob => {
           if (!blob || blob.size === 0) return
@@ -119,7 +124,8 @@ export default function DeputyFilesPage() {
   const [departments, setDepartments] = useState<Department[]>([])
   const [teamMap, setTeamMap] = useState<Record<string, TeamMember[]>>({})
   const [expandedDepts, setExpandedDepts] = useState<Set<string>>(new Set())
-  const [selectedEntity, setSelectedEntity] = useState<{ type: 'department' | 'user'; id: string; label: string } | null>(null)
+  const [selectedEntity, setSelectedEntity] = useState<{ type: EntityType; id: string; label: string } | null>(null)
+  const [managementsMap, setManagementsMap] = useState<Record<string, Management[]>>({})
 
   // Files & folders
   const [filesMap, setFilesMap] = useState<Record<string, DeputyFile[]>>({})
@@ -185,32 +191,30 @@ export default function DeputyFilesPage() {
 
   useEffect(() => {
     if (!token) return
-    fetch('/api/v1/departments', { headers: { Authorization: `Bearer ${token}` } })
+    authFetch('/api/v1/departments')
       .then(r => r.json())
       .then(data => setDepartments(Array.isArray(data) ? data : data.data || []))
       .catch(() => {})
-    fetch('/api/v1/deputy-files/reminders', { headers: { Authorization: `Bearer ${token}` } })
+    authFetch('/api/v1/deputy-files/reminders')
       .then(r => r.json())
       .then(data => setReminders(Array.isArray(data) ? data : []))
       .catch(() => {})
   }, [token])
 
-  const loadFiles = useCallback(async (entityType: 'department' | 'user', entityId: string) => {
+  const loadFiles = useCallback(async (entityType: EntityType, entityId: string) => {
     if (!token) return
     const key = `${entityType}:${entityId}`
     let url = `/api/v1/deputy-files?entityType=${entityType}&entityId=${entityId}`
     if (showArchived) url += '&archived=true'
     if (selectedFolderId !== undefined) url += `&folderId=${selectedFolderId === null ? 'null' : selectedFolderId}`
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    const r = await authFetch(url)
     const data = await r.json()
     setFilesMap(prev => ({ ...prev, [key]: Array.isArray(data) ? data : [] }))
   }, [token, showArchived, selectedFolderId])
 
   const loadFolders = useCallback(async (entityType: string, entityId: string) => {
     if (!token) return
-    const r = await fetch(`/api/v1/deputy-files/folders?entityType=${entityType}&entityId=${entityId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const r = await authFetch(`/api/v1/deputy-files/folders?entityType=${entityType}&entityId=${entityId}`)
     const data = await r.json()
     setFolders(Array.isArray(data) ? data : [])
   }, [token])
@@ -218,14 +222,14 @@ export default function DeputyFilesPage() {
   const loadAllFiles = useCallback(async () => {
     if (!token) return
     const url = '/api/v1/deputy-files' + (showArchived ? '?archived=true' : '')
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    const r = await authFetch(url)
     const data = await r.json()
     setAllFiles(Array.isArray(data) ? data : [])
   }, [token, showArchived])
 
   const loadReminders = useCallback(async () => {
     if (!token) return
-    const r = await fetch('/api/v1/deputy-files/reminders', { headers: { Authorization: `Bearer ${token}` } })
+    const r = await authFetch('/api/v1/deputy-files/reminders')
     const data = await r.json()
     setReminders(Array.isArray(data) ? data : [])
   }, [token])
@@ -236,17 +240,24 @@ export default function DeputyFilesPage() {
 
   const loadTeam = useCallback(async (deptId: string) => {
     if (!token || teamMap[deptId] !== undefined) return
-    const r = await fetch(`/api/v1/departments/${deptId}/team`, { headers: { Authorization: `Bearer ${token}` } })
+    const r = await authFetch(`/api/v1/departments/${deptId}/team`)
     const data = await r.json()
     const members: TeamMember[] = Array.isArray(data) ? data : Array.isArray(data?.members) ? data.members : []
     setTeamMap(prev => ({ ...prev, [deptId]: members }))
   }, [token, teamMap])
 
-  const selectEntity = useCallback(async (type: 'department' | 'user', id: string, label: string) => {
+  const selectEntity = useCallback(async (type: EntityType, id: string, label: string) => {
     setSelectedEntity({ type, id, label })
     setSelectedFolderId(undefined)
     await Promise.all([loadFiles(type, id), loadFolders(type, id)])
   }, [loadFiles, loadFolders])
+
+  const loadManagements = useCallback(async (deptId: string) => {
+    if (!token || managementsMap[deptId] !== undefined) return
+    const r = await authFetch(`/api/v1/managements?departmentId=${deptId}`)
+    const data = await r.json().catch(() => [])
+    setManagementsMap(prev => ({ ...prev, [deptId]: Array.isArray(data) ? data : [] }))
+  }, [token, managementsMap])
 
   const toggleDept = useCallback(async (deptId: string) => {
     setExpandedDepts(prev => {
@@ -254,8 +265,8 @@ export default function DeputyFilesPage() {
       next.has(deptId) ? next.delete(deptId) : next.add(deptId)
       return next
     })
-    await loadTeam(deptId)
-  }, [loadTeam])
+    await Promise.all([loadTeam(deptId), loadManagements(deptId)])
+  }, [loadTeam, loadManagements])
 
   const refreshCurrentView = useCallback(async () => {
     if (viewMode === 'all') await loadAllFiles()
@@ -288,9 +299,9 @@ export default function DeputyFilesPage() {
       let thumbnailBase64: string | undefined
       if (pendingFile.type.startsWith('image/')) thumbnailBase64 = await generateThumbnail(contentBase64)
 
-      const r = await fetch('/api/v1/deputy-files', {
+      const r = await authFetch('/api/v1/deputy-files', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           entityType: entity.type,
           entityId: entity.id,
@@ -357,9 +368,9 @@ export default function DeputyFilesPage() {
   const handleCreateFolder = async () => {
     if (!token || !selectedEntity || !newFolderName.trim()) return
     const name = newFolderName.trim()
-    const r = await fetch('/api/v1/deputy-files/folders', {
+    const r = await authFetch('/api/v1/deputy-files/folders', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ entityType: selectedEntity.type, entityId: selectedEntity.id, name }),
     })
     if (r.ok) {
@@ -378,9 +389,9 @@ export default function DeputyFilesPage() {
 
   const handleRenameFolder = async (id: string) => {
     if (!token || !renameFolderName.trim()) return
-    await fetch(`/api/v1/deputy-files/folders/${id}`, {
+    await authFetch(`/api/v1/deputy-files/folders/${id}`, {
       method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: renameFolderName.trim() }),
     })
     setRenamingFolderId(null)
@@ -389,7 +400,7 @@ export default function DeputyFilesPage() {
 
   const handleDeleteFolder = async (id: string) => {
     if (!token) return
-    await fetch(`/api/v1/deputy-files/folders/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+    await authFetch(`/api/v1/deputy-files/folders/${id}`, { method: 'DELETE' })
     if (selectedFolderId === id) setSelectedFolderId(undefined)
     if (selectedEntity) await loadFolders(selectedEntity.type, selectedEntity.id)
     await refreshCurrentView()
@@ -400,7 +411,7 @@ export default function DeputyFilesPage() {
   const openViewer = async (file: DeputyFile) => {
     if (!token) return
     if (!isViewable(file.mimeType)) {
-      const r = await fetch(`/api/v1/deputy-files/${file.id}/content`, { headers: { Authorization: `Bearer ${token}` } })
+      const r = await authFetch(`/api/v1/deputy-files/${file.id}/content`)
       const blob = await r.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a'); a.href = url; a.download = file.fileName; a.click()
@@ -410,7 +421,7 @@ export default function DeputyFilesPage() {
     setZoom(1); setPan({ x: 0, y: 0 })
     setViewerNotes(file.notes || ''); setViewerReminder(file.reminderAt ? file.reminderAt.slice(0, 16) : '')
     setViewerTags(file.tags || []); setViewer({ ...file })
-    const r = await fetch(`/api/v1/deputy-files/${file.id}/content`, { headers: { Authorization: `Bearer ${token}` } })
+    const r = await authFetch(`/api/v1/deputy-files/${file.id}/content`)
     const blob = await r.blob()
     setViewer(v => v ? { ...v, blobUrl: URL.createObjectURL(blob) } : null)
   }
@@ -420,9 +431,9 @@ export default function DeputyFilesPage() {
   const saveViewerNote = async () => {
     if (!viewer || !token) return
     setSavingViewerNote(true)
-    const r = await fetch(`/api/v1/deputy-files/${viewer.id}/notes`, {
+    const r = await authFetch(`/api/v1/deputy-files/${viewer.id}/notes`, {
       method: 'PUT',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ notes: viewerNotes || null, reminderAt: viewerReminder || null, tags: viewerTags }),
     })
     setSavingViewerNote(false)
@@ -431,9 +442,9 @@ export default function DeputyFilesPage() {
 
   const handleRenameFile = async () => {
     if (!token || !renamingFileId || !renameFileName.trim()) return
-    const r = await fetch(`/api/v1/deputy-files/${renamingFileId}/rename`, {
+    const r = await authFetch(`/api/v1/deputy-files/${renamingFileId}/rename`, {
       method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fileName: renameFileName.trim() }),
     })
     setRenamingFileId(null)
@@ -442,26 +453,26 @@ export default function DeputyFilesPage() {
 
   const toggleFilePin = async (id: string) => {
     if (!token) return
-    await fetch(`/api/v1/deputy-files/${id}/pin`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+    await authFetch(`/api/v1/deputy-files/${id}/pin`, { method: 'POST' })
     await refreshCurrentView()
   }
 
   const toggleFileArchive = async (id: string) => {
     if (!token) return
-    await fetch(`/api/v1/deputy-files/${id}/archive`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+    await authFetch(`/api/v1/deputy-files/${id}/archive`, { method: 'POST' })
     showToast('ok', 'Архів оновлено'); await refreshCurrentView()
   }
 
   const handleDelete = async (id: string) => {
     if (!token) return
-    const r = await fetch(`/api/v1/deputy-files/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+    const r = await authFetch(`/api/v1/deputy-files/${id}`, { method: 'DELETE' })
     if (r.ok) { showToast('ok', 'Файл видалено'); setConfirmDeleteId(null); await refreshCurrentView() }
     else showToast('err', 'Помилка видалення')
   }
 
   const loadVersionsData = useCallback(async (id: string): Promise<DeputyFile[]> => {
     if (!token) return []
-    const r = await fetch(`/api/v1/deputy-files/${id}/versions`, { headers: { Authorization: `Bearer ${token}` } })
+    const r = await authFetch(`/api/v1/deputy-files/${id}/versions`)
     const data = await r.json()
     return Array.isArray(data) ? data : []
   }, [token])
@@ -524,27 +535,47 @@ export default function DeputyFilesPage() {
 
   if (user?.role !== 'deputy_head') return null
 
-  // Group children by divisionTag for управління display
-  const groupByDivision = (children: Department[]): { tag: string | null; items: Department[] }[] => {
-    const groups = new Map<string, Department[]>()
-    for (const c of children) {
-      const key = c.divisionTag?.trim() || ''
-      groups.set(key, [...(groups.get(key) || []), c])
-    }
-    const tagged: { tag: string; items: Department[] }[] = []
-    for (const [tag, items] of groups.entries()) if (tag) tagged.push({ tag, items })
-    tagged.sort((a, b) => a.tag.localeCompare(b.tag, 'uk'))
-    const untagged = groups.get('') || []
-    return [...tagged, ...(untagged.length ? [{ tag: null, items: untagged }] : [])]
+  const isEntitySelected = (type: EntityType, id: string) => selectedEntity?.type === type && selectedEntity.id === id
+
+  // Management node — selectable (own files/folders) and expandable to its sections
+  const ManagementNode = ({ mgmt, depth }: { mgmt: Management; depth: number }) => {
+    const key = `mgmt:${mgmt.id}`
+    const isOpen = expandedDepts.has(key)
+    const isSelected = isEntitySelected('management', mgmt.id)
+    const sections = (childMap[mgmt.departmentId] || []).filter(d => d.managementId === mgmt.id)
+
+    return (
+      <div>
+        <div className="flex items-center" style={{ paddingLeft: depth * 14 }}>
+          <button
+            onClick={() => setExpandedDepts(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })}
+            className="w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-foreground shrink-0"
+            style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}
+          >
+            <span className="text-[9px]">▶</span>
+          </button>
+          <button
+            onClick={() => { selectEntity('management', mgmt.id, mgmt.nameUk || mgmt.name); if (!isOpen) setExpandedDepts(prev => new Set(prev).add(key)) }}
+            className={`flex-1 text-left px-2 py-1.5 rounded-lg truncate text-[12px] transition-colors ${isSelected ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground hover:bg-secondary'}`}
+          >
+            📂 {mgmt.nameUk || mgmt.name}
+          </button>
+        </div>
+        {isOpen && sections.map(s => <DeptNode key={s.id} dept={s} depth={depth + 1} />)}
+      </div>
+    )
   }
 
   const DeptNode = ({ dept, depth = 0 }: { dept: Department; depth?: number }) => {
     const isExpanded = expandedDepts.has(dept.id)
-    const isSelected = selectedEntity?.id === dept.id && selectedEntity.type === 'department'
+    const isSelected = isEntitySelected('department', dept.id)
+    const managements = managementsMap[dept.id] || []
+    // Children that belong to a management are shown under the management node;
+    // the rest (plain sections) are shown directly.
+    const mgmtIds = new Set(managements.map(m => m.id))
     const children = childMap[dept.id] || []
+    const looseChildren = children.filter(c => !c.managementId || !mgmtIds.has(c.managementId))
     const members = teamMap[dept.id] || []
-    const groups = groupByDivision(children)
-    const hasMultipleGroups = groups.some(g => g.tag !== null)
 
     const handleClick = async () => {
       await selectEntity('department', dept.id, dept.nameUk)
@@ -570,26 +601,15 @@ export default function DeputyFilesPage() {
         </div>
         {isExpanded && (
           <div>
-            {hasMultipleGroups ? (
-              // Show управління groups
-              groups.map(({ tag, items }) => (
-                <DivisionGroup
-                  key={tag ?? '__none__'}
-                  tag={tag}
-                  depts={items}
-                  depth={depth}
-                />
-              ))
-            ) : (
-              children.map(child => <DeptNode key={child.id} dept={child} depth={depth + 1} />)
-            )}
+            {managements.map(m => <ManagementNode key={m.id} mgmt={m} depth={depth + 1} />)}
+            {looseChildren.map(child => <DeptNode key={child.id} dept={child} depth={depth + 1} />)}
             {members.map(m => (
               <button
                 key={m.id}
                 onClick={() => selectEntity('user', m.id, `${m.lastName} ${m.firstName}`)}
                 style={{ paddingLeft: depth * 14 + 28 }}
                 className={`w-full text-left pr-2 py-1.5 rounded-lg text-[11px] truncate transition-colors ${
-                  selectedEntity?.id === m.id && selectedEntity.type === 'user'
+                  isEntitySelected('user', m.id)
                     ? 'bg-primary/10 text-primary font-medium'
                     : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
                 }`}
@@ -599,32 +619,6 @@ export default function DeputyFilesPage() {
             ))}
           </div>
         )}
-      </div>
-    )
-  }
-
-  // Management group — uses expandedDepts with `mgmt:${tag}` keys to avoid defining state inside
-  const DivisionGroup = ({ tag, depts, depth }: { tag: string | null; depts: Department[]; depth: number }) => {
-    const isOpen = tag ? !expandedDepts.has(`mgmt_collapsed:${tag}`) : true
-    if (!tag) return <div>{depts.map(d => <DeptNode key={d.id} dept={d} depth={depth + 1} />)}</div>
-    return (
-      <div>
-        <button
-          onClick={() => {
-            const key = `mgmt_collapsed:${tag}`
-            setExpandedDepts(prev => {
-              const next = new Set(prev)
-              next.has(key) ? next.delete(key) : next.add(key)
-              return next
-            })
-          }}
-          style={{ paddingLeft: depth * 14 + 8 }}
-          className="w-full text-left pr-2 py-1 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors"
-        >
-          <span style={{ display: 'inline-block', transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease', fontSize: 8 }}>▶</span>
-          <span>📂 {tag}</span>
-        </button>
-        {isOpen && depts.map(d => <DeptNode key={d.id} dept={d} depth={depth + 1} />)}
       </div>
     )
   }
@@ -726,7 +720,7 @@ export default function DeputyFilesPage() {
             <div className="border-b border-border bg-card/50">
               <div className="px-4 py-2 flex items-center gap-2">
                 <span className="text-sm font-medium text-foreground truncate">
-                  {selectedEntity.type === 'department' ? '📁' : '👤'} {selectedEntity.label}
+                  {selectedEntity.type === 'department' ? '📁' : selectedEntity.type === 'management' ? '📂' : '👤'} {selectedEntity.label}
                 </span>
                 <span className="text-xs text-muted-foreground ml-auto">{currentFiles.length} файлів</span>
               </div>
@@ -803,9 +797,9 @@ export default function DeputyFilesPage() {
                     onRename={() => { setRenamingFileId(file.id); setRenameFileName(file.fileName) }}
                     onMove={async (folderId) => {
                       if (!token) return
-                      await fetch(`/api/v1/deputy-files/${file.id}/move`, {
+                      await authFetch(`/api/v1/deputy-files/${file.id}/move`, {
                         method: 'PATCH',
-                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ folderId }),
                       })
                       await refreshCurrentView()
